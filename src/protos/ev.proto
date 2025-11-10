@@ -1,0 +1,113 @@
+syntax = "proto3";
+
+message Unk1Unk2 {
+  uint64 u1 = 1;
+}
+
+message Unk1 {
+  // Missing field 1
+  Unk1Unk2 u2 = 2;
+  Unk1Unk2 u3 = 3;
+  Unk1Unk2 u4 = 4;
+  // Missing field 5
+  float u6 = 6;
+  float u7 = 7;
+}
+
+message Unk2Unk1 {
+  float u1 = 1;
+}
+
+message Unk2 {
+  Unk2Unk1 u1 = 1;
+  Unk2Unk1 u2 = 2;
+  Unk2Unk1 u3 = 3;
+}
+
+message Unk3Unk7Unk2Unk2 {
+  uint64 u1 = 1;
+}
+
+message Unk3Unk7Unk2 {
+  optional uint64 u1 = 1;
+  Unk3Unk7Unk2Unk2 u2 = 2;
+}
+
+message Unk3Unk7 {
+  optional float u1 = 1;
+  repeated Unk3Unk7Unk2 u2 = 2;
+}
+
+message Unk3 {
+  // Missing fields 1,2,3,4,5,6
+  repeated Unk3Unk7 u7 = 7;
+}
+
+message Unk4Unk1 {
+  uint64 u1 = 1;
+  uint64 u2 = 2;
+}
+
+message Unk4 {
+  repeated Unk4Unk1 u1 = 1;
+}
+
+message Unk5Unk4Unk2 {
+  uint64 u1 = 1;
+}
+
+message Unk5Unk4 {
+  uint64 u1 = 1;
+  Unk5Unk4Unk2 u2 = 2;
+}
+
+message Unk5 {
+  // Missing fields 1,2,3
+  repeated Unk5Unk4 u4 = 4;
+}
+
+message Unk7Unk4 {
+  uint64 u1 = 1;
+}
+
+message Unk7 {
+  float u1 = 1;
+  bytes u2 = 2;
+  bytes u3 = 3;
+  Unk7Unk4 u4 = 4;
+}
+
+message Unk8Unk1Unk2 {
+  optional uint64 u1 = 1;
+  optional uint64 u2 = 2;
+}
+
+message Unk8Unk1 {
+  uint64 u1 = 1;
+  repeated Unk8Unk1Unk2 u2 = 2;
+}
+
+message Unk8 {
+  repeated Unk8Unk1 u1 = 1;
+}
+
+message Unk9 {
+  // Missing field 1
+  bytes u2 = 2;
+}
+
+message EnergyModelControl {
+  Unk1 u1 = 1;
+  Unk2 u2 = 2;
+  Unk3 u3 = 3;
+  Unk4 u4 = 4;
+  Unk5 u5 = 5;
+  // Missing field 6
+  repeated Unk7 u7 = 7;
+  Unk8 u8 = 8;
+  Unk9 u9 = 9;
+}
+
+message SensorData {
+  EnergyModelControl energy_model_control = 23;
+}
