@@ -2,7 +2,7 @@
 name = "aa-mirror-rs"
 authors = ['Mariusz Białończyk']
 version = "0.1.0"
-edition = "2025"
+edition = "2021"
 license = 'GPL-2.0'
 description = 'AndroidAuto wired/wireless screen mirror'
 documentation = 'https://github.com/FlorinBD/aa-mirror-rs'
