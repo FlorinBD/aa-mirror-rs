@@ -3,7 +3,7 @@
 # Start aa-mirror-rs daemon
 #
 # For documentation and command line parameters go to:
-# https://github.com/manio/aa-mirror-rs
+# https://github.com/FlorinBD/aa-mirror-rs
 
 DAEMON="aa-mirror-rs"
 PIDFILE="/var/run/$DAEMON.pid"
