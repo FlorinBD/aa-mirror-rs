@@ -3,9 +3,8 @@
 [![Discord](https://img.shields.io/discord/1358047273434615968?style=for-the-badge&logo=discord&logoColor=white&label=Discord&labelColor=%235865F2&color=%231825A2)](https://discord.gg/c7JKdwHyZu)
 
 ## About
-This project is a DIY proxy tool that bridges a wireless Android phone with a USB-connected car head unit to enable the use of Android Auto.
-Originally derived from the [WirelessAndroidAutoDongle](https://github.com/nisargjhaveri/WirelessAndroidAutoDongle) project (specifically as
-a replacement for its `aawgd` component), it has since evolved into an independent and self-contained solution with its own development direction.
+This project is a DIY AA mirror tool that bridges a wireless Android phone with a USB-connected car head unit to enable the use of Android Auto.
+Originally derived from the [aa-proxy-rs](https://github.com/aa-proxy/aa-proxy-rs) it has since evolved into an independent and self-contained solution with its own development direction.
 
 The project initially focused on supporting the Raspberry Pi, but has since grown to include other platforms as well.
 
@@ -318,7 +317,7 @@ in a loop (ignoring all **bluetoothd** cached devices).
 ## Building
 
 If you'd like to build the SD card images yourself, head over to our Buildroot repository:<br>
-**https://github.com/aa-proxy/buildroot**
+**https://github.com/FlorinBD/rpi_radxa_buildroot**
 
 There you’ll find all the necessary tools and instructions to generate custom images tailored to your hardware or specific needs.
 
