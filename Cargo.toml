@@ -1,6 +1,6 @@
 [package]
 name = "aa-mirror-rs"
-authors = ['Mariusz Białończyk']
+authors = ['FBD']
 version = "0.1.0"
 edition = "2021"
 license = 'GPL-2.0'
