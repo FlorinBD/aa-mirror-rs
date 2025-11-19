@@ -819,7 +819,6 @@ fn ssl_check_failure<T>(res: std::result::Result<T, openssl::ssl::Error>) -> Res
 
 /// main thread doing all packet processing of an endpoint/device
 pub async fn proxy<A: Endpoint<A> + 'static>(
-    dev_type: DeviceType,
     mut device: IoDevice<A>,
     bytes_written: Arc<AtomicUsize>,
     tx: Sender<Packet>,
