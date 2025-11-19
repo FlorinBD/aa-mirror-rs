@@ -819,7 +819,7 @@ fn ssl_check_failure<T>(res: std::result::Result<T, openssl::ssl::Error>) -> Res
 
 /// main thread doing all packet processing of an endpoint/device
 pub async fn proxy<A: Endpoint<A> + 'static>(
-    proxy_type: ProxyType,
+    dev_type: DeviceType,
     mut device: IoDevice<A>,
     bytes_written: Arc<AtomicUsize>,
     tx: Sender<Packet>,
@@ -842,7 +842,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
 
     // initial phase: passing version and doing SSL handshake
     // for both HU and MD
-    if proxy_type == ProxyType::HeadUnit {
+    if dev_type == DeviceType::HeadUnit {
         // waiting for initial version frame (HU is starting transmission)
         let pkt = rxr.recv().await.ok_or("reader channel hung up")?;
         let _ = pkt_debug(
@@ -889,7 +889,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
                 .await
                 .with_context(|| format!("proxy/{}: transmit failed", get_name(proxy_type)))?;
         }
-    } else if proxy_type == ProxyType::MobileDevice {
+    } else if dev_type == DeviceType::MobileDevice {
         // expecting version request from the HU here...
         let pkt = rx.recv().await.ok_or("rx channel hung up")?;
         // sending to the MD
