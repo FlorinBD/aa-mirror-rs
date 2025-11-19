@@ -845,13 +845,12 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
             HexdumpLevel::DecryptedInput, // the packet is not encrypted
             hex_requested,
             &pkt,
-        )
-        .await;
+        ).await;
         
         // build version response for HU
         let pkt_rsp = Packet {
         channel: 0,
-        flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+        flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
         final_length: None,
         payload: payload,
         };
@@ -896,44 +895,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     };
     loop {
         tokio::select! {
-        // handling data from opposite device's thread, which needs to be transmitted
-        Some(mut pkt) = rx.recv() => {
-            let handled = pkt_modify_hook(
-                proxy_type,
-                &mut pkt,
-                &mut ctx,
-                sensor_channel.clone(),
-                &cfg,
-                &mut config,
-            )
-            .await?;
-            let _ = pkt_debug(
-                proxy_type,
-                HexdumpLevel::DecryptedOutput,
-                hex_requested,
-                &pkt,
-            )
-            .await;
-
-            if handled {
-                debug!(
-                    "{} pkt_modify_hook: message has been handled, sending reply packet only...",
-                    get_name(proxy_type)
-                );
-                tx.send(pkt).await?;
-            } else {
-                pkt.encrypt_payload(&mut mem_buf, &mut server).await?;
-                let _ = pkt_debug(proxy_type, HexdumpLevel::RawOutput, hex_requested, &pkt).await;
-                pkt.transmit(&mut device)
-                    .await
-                    .with_context(|| format!("proxy/{}: transmit failed", get_name(proxy_type)))?;
-
-                // Increment byte counters for statistics
-                // fixme: compute final_len for precise stats
-                bytes_written.fetch_add(HEADER_LENGTH + pkt.payload.len(), Ordering::Relaxed);
-            }
-        }
-
+        
         // handling input data from the reader thread
         Some(mut pkt) = rxr.recv() => {
             let _ = pkt_debug(proxy_type, HexdumpLevel::RawInput, hex_requested, &pkt).await;
