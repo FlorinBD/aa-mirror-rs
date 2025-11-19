@@ -39,10 +39,10 @@ use crate::config::{Action, SharedConfig};
 use crate::config::{TCP_DHU_PORT, TCP_SERVER_PORT};
 use crate::ev::spawn_ev_client_task;
 use crate::ev::EvTaskCommand;
-use crate::mitm::endpoint_reader;
-use crate::mitm::proxy;
-use crate::mitm::Packet;
-use crate::mitm::ProxyType;
+use crate::channel_manager::endpoint_reader;
+use crate::channel_manager::proxy;
+use crate::channel_manager::Packet;
+use crate::channel_manager::ProxyType;
 use crate::usb_stream;
 use crate::usb_stream::{UsbStreamRead, UsbStreamWrite};
 
