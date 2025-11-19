@@ -17,15 +17,15 @@ use tokio_uring::buf::BoundedBuf;
 
 // protobuf stuff:
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
-use crate::mitm::protos::navigation_maneuver::NavigationType::*;
-use crate::mitm::protos::Config as AudioConfig;
-use crate::mitm::protos::*;
-use crate::mitm::sensor_source_service::Sensor;
-use crate::mitm::AudioStreamType::*;
-use crate::mitm::ByeByeReason::USER_SELECTION;
-use crate::mitm::MediaMessageId::*;
-use crate::mitm::SensorMessageId::*;
-use crate::mitm::SensorType::*;
+use crate::channel_manager::protos::navigation_maneuver::NavigationType::*;
+use crate::channel_manager::protos::Config as AudioConfig;
+use crate::channel_manager::protos::*;
+use crate::channel_manager::sensor_source_service::Sensor;
+use crate::channel_manager::AudioStreamType::*;
+use crate::channel_manager::ByeByeReason::USER_SELECTION;
+use crate::channel_manager::MediaMessageId::*;
+use crate::channel_manager::SensorMessageId::*;
+use crate::channel_manager::SensorType::*;
 use protobuf::text_format::print_to_string_pretty;
 use protobuf::{Enum, EnumOrUnknown, Message, MessageDyn};
 use protos::ControlMessageType::{self, *};
