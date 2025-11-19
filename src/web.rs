@@ -6,7 +6,7 @@ use crate::config::SharedConfigJson;
 use crate::ev::send_ev_data;
 use crate::ev::BatteryData;
 use crate::ev::EV_MODEL_FILE;
-use crate::mitm::Packet;
+use crate::channel_manager::Packet;
 use axum::{
     body::Body,
     extract::{Query, RawBody, State},
