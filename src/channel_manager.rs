@@ -69,7 +69,7 @@ pub struct ModifyContext {
 }
 
 #[derive(PartialEq, Copy, Clone, Debug)]
-pub enum ProxyType {
+pub enum DeviceType {
     HeadUnit,
     MobileDevice,
 }
