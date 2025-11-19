@@ -6,7 +6,7 @@ pub mod config_types;
 pub mod ev;
 pub mod io_uring;
 pub mod led;
-pub mod mitm;
+pub mod channel_manager;
 pub mod usb_gadget;
 pub mod usb_stream;
 pub mod web;
