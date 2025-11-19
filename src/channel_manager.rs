@@ -830,31 +830,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     ev_tx: Sender<EvTaskCommand>,
 ) -> Result<()> {
     let cfg = config.read().await.clone();
-    let passthrough = !cfg.mitm;
     let hex_requested = cfg.hexdump_level;
-
-    // in full_frames/passthrough mode we only directly pass packets from one endpoint to the other
-    if passthrough {
-        loop {
-            tokio::select! {
-            // handling data from opposite device's thread, which needs to be transmitted
-            Some(pkt) = rx.recv() => {
-                pkt.transmit(&mut device)
-                    .await
-                    .with_context(|| format!("proxy/{}: transmit failed", get_name(proxy_type)))?;
-
-                // Increment byte counters for statistics
-                // fixme: compute final_len for precise stats
-                bytes_written.fetch_add(HEADER_LENGTH + pkt.payload.len(), Ordering::Relaxed);
-            }
-
-            // handling input data from the reader thread
-            Some(pkt) = rxr.recv() => {
-                tx.send(pkt).await?;
-            }
-            }
-        }
-    }
 
     let ssl = ssl_builder(proxy_type).await?;
 
