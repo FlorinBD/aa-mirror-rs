@@ -6,7 +6,7 @@ use aa_mirror_rs::config::{Action, AppConfig};
 use aa_mirror_rs::config::{DEFAULT_WLAN_ADDR, TCP_SERVER_PORT};
 use aa_mirror_rs::io_uring::io_loop;
 use aa_mirror_rs::led::{LedColor, LedManager, LedMode};
-use aa_mirror_rs::mitm::Packet;
+use aa_mirror_rs::channel_manager::Packet;
 use aa_mirror_rs::usb_gadget::uevent_listener;
 use aa_mirror_rs::usb_gadget::UsbGadgetState;
 use aa_mirror_rs::web;
