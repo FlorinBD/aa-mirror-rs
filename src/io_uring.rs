@@ -415,40 +415,17 @@ pub async fn io_loop(
         let mut from_file;
         let mut from_stream;
         let mut reader_hu;
-        let mut reader_md;
         // these will be used for cleanup
-        let mut md_tcp_stream = None;
         let mut hu_tcp_stream = None;
 
-        // MITM/proxy mpsc channels:
-        let (tx_hu, rx_md): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
-        let (tx_md, rx_hu): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
-        let (txr_hu, rxr_md): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
-        let (txr_md, rxr_hu): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
-
+        // mpsc channels:
+        let (txr_hu, rxr_hu): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
+        
         // selecting I/O device for reading and writing
         // and creating desired objects for proxy functions
         let hu_r;
-        let md_r;
         let hu_w;
-        let md_w;
-        let mut usb_dev = None;
-        // MD transfer device
-        if let Some(md) = md_usb {
-            // MD over wired USB
-            let (dev, usb_r, usb_w) = md;
-            usb_dev = Some(dev);
-            let usb_r = Rc::new(RefCell::new(usb_r));
-            let usb_w = Rc::new(RefCell::new(usb_w));
-            md_r = IoDevice::UsbReader(usb_r, PhantomData::<TcpStream>);
-            md_w = IoDevice::UsbWriter(usb_w, PhantomData::<TcpStream>);
-        } else {
-            // MD using TCP stream (wireless)
-            let md = Rc::new(md_tcp.unwrap());
-            md_r = IoDevice::EndpointIo(md.clone());
-            md_w = IoDevice::EndpointIo(md.clone());
-            md_tcp_stream = Some(md.clone());
-        }
+        
         // HU transfer device
         if let Some(hu) = hu_usb {
             // HU connected directly via USB
@@ -471,34 +448,21 @@ pub async fn io_loop(
 
         // dedicated reading threads:
         reader_hu = tokio_uring::spawn(endpoint_reader(hu_r, txr_hu));
-        reader_md = tokio_uring::spawn(endpoint_reader(md_r, txr_md));
+        
         // main processing threads:
         from_file = tokio_uring::spawn(proxy(
             hu_w,
             file_bytes.clone(),
-            tx_hu.clone(),
-            rx_hu,
-            rxr_md,
-            shared_config.clone(),
-            sensor_channel.clone(),
-            ev_tx.clone(),
-        ));
-        from_stream = tokio_uring::spawn(proxy(
-            md_w,
-            stream_bytes.clone(),
-            tx_md,
-            rx_md,
             rxr_hu,
             shared_config.clone(),
             sensor_channel.clone(),
             ev_tx.clone(),
         ));
-
+        
         // Thread for monitoring transfer
         let mut monitor = tokio::spawn(transfer_monitor(
             stats_interval,
             file_bytes,
-            stream_bytes,
             read_timeout,
             shared_config.clone(),
         ));
@@ -506,9 +470,7 @@ pub async fn io_loop(
         // Stop as soon as one of them errors
         let res = tokio::try_join!(
             flatten(&mut reader_hu),
-            flatten(&mut reader_md),
             flatten(&mut from_file),
-            flatten(&mut from_stream),
             flatten(&mut monitor)
         );
         if let Err(e) = res {
