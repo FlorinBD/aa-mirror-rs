@@ -13,8 +13,8 @@ use tokio::time::{sleep, Duration};
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use crate::ev::protos::*;
 use crate::ev::SensorMessageId::*;
-use crate::mitm::Packet;
-use crate::mitm::{ENCRYPTED, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
+use crate::channel_manager::Packet;
+use crate::channel_manager::{ENCRYPTED, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
 use protobuf::Message;
 
 use serde::Deserialize;
