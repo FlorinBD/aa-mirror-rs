@@ -42,7 +42,7 @@ use crate::ev::EvTaskCommand;
 use crate::channel_manager::endpoint_reader;
 use crate::channel_manager::proxy;
 use crate::channel_manager::Packet;
-use crate::channel_manager::ProxyType;
+use crate::channel_manager::DeviceType;
 use crate::usb_stream;
 use crate::usb_stream::{UsbStreamRead, UsbStreamWrite};
 
@@ -474,7 +474,7 @@ pub async fn io_loop(
         reader_md = tokio_uring::spawn(endpoint_reader(md_r, txr_md));
         // main processing threads:
         from_file = tokio_uring::spawn(proxy(
-            ProxyType::HeadUnit,
+            DeviceType::HeadUnit,
             hu_w,
             file_bytes.clone(),
             tx_hu.clone(),
@@ -485,7 +485,7 @@ pub async fn io_loop(
             ev_tx.clone(),
         ));
         from_stream = tokio_uring::spawn(proxy(
-            ProxyType::MobileDevice,
+            DeviceType::MobileDevice,
             md_w,
             stream_bytes.clone(),
             tx_md,
