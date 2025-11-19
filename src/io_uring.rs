@@ -440,12 +440,6 @@ pub async fn io_loop(
             hu_tcp_stream = Some(hu.clone());
         }
 
-        // handling battery in JSON
-        if config.mitm && config.ev {
-            let mut tx_lock = tx.lock().await;
-            *tx_lock = Some(tx_hu.clone());
-        }
-
         // dedicated reading threads:
         reader_hu = tokio_uring::spawn(endpoint_reader(hu_r, txr_hu));
         
@@ -473,26 +467,15 @@ pub async fn io_loop(
             flatten(&mut from_file),
             flatten(&mut monitor)
         );
-        if let Err(e) = res {
-            error!("{} 🔴 Connection error: {}", NAME, e);
-            if let Some(dev) = usb_dev {
-                info!("{} 🔌 Resetting USB device for next try...", NAME);
-                let _ = dev.reset().await;
-            }
-        }
+        
         // Make sure the reference count drops to zero and the socket is
         // freed by aborting both tasks (which both hold a `Rc<TcpStream>`
         // for each direction)
         reader_hu.abort();
-        reader_md.abort();
         from_file.abort();
-        from_stream.abort();
         monitor.abort();
 
         // make sure TCP connections are closed before next connection attempts
-        if let Some(stream) = md_tcp_stream {
-            let _ = stream.shutdown(std::net::Shutdown::Both);
-        }
         if let Some(stream) = hu_tcp_stream {
             let _ = stream.shutdown(std::net::Shutdown::Both);
         }
