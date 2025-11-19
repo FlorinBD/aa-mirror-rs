@@ -1,5 +1,5 @@
-use crate::mitm;
-use crate::mitm::protos::EvConnectorType;
+use crate::channel_manager;
+use crate::channel_manager::protos::EvConnectorType;
 use bluer::Address;
 use serde::{
     de::{self, Visitor},
