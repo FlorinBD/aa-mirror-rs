@@ -83,7 +83,7 @@ impl std::str::FromStr for EvConnectorType {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        <mitm::protos::EvConnectorType as protobuf::Enum>::from_str(s.trim())
+        <channel_manager::protos::EvConnectorType as protobuf::Enum>::from_str(s.trim())
             .ok_or_else(|| format!("Unknown EV connector type: {}", s))
     }
 }
