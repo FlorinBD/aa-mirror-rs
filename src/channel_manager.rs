@@ -836,8 +836,8 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         payload.insert(3, (1 as u8));
         payload.insert(4, (0 as u8));
         payload.insert(5, (7 as u8));
-        payload.insert(6, ((STATUS_SUCCESS  as u16) >> 8) as u8);
-        payload.insert(7, ((STATUS_SUCCESS  as u16) & 0xff) as u8);
+        payload.insert(6, ((MessageStatus::STATUS_SUCCESS  as u16) >> 8) as u8);
+        payload.insert(7, ((MessageStatus::STATUS_SUCCESS  as u16) & 0xff) as u8);
         let pkt_rsp = Packet {
         channel: 0,
         flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
