@@ -827,6 +827,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         ).await;
         
         // build version response for HU
+       
         let pkt_rsp = Packet {
         channel: 0,
         flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
