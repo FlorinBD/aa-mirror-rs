@@ -319,8 +319,6 @@ pub async fn io_loop(
         };
         let read_timeout = Duration::from_secs(config.timeout_secs.into());
 
-        let mut md_tcp = None;
-        let mut md_usb = None;
         let mut hu_tcp = None;
         let mut hu_usb = None;
         if config.wired.is_some() {
@@ -344,20 +342,6 @@ pub async fn io_loop(
         } else {
             info!("{} 💤 waiting for bluetooth handshake...", NAME);
             tcp_start.notified().await;
-
-            info!(
-                "{} 🛰️ MD TCP server: listening for phone connection...",
-                NAME
-            );
-            if let Ok(s) = tcp_wait_for_connection(&mut md_listener.as_mut().unwrap()).await {
-                md_tcp = Some(s);
-            } else {
-                // notify main loop to restart
-                if !profile_connected.load(Ordering::Relaxed) {
-                    let _ = need_restart.send(None);
-                }
-                continue;
-            }
         }
 
         if config.dhu {
