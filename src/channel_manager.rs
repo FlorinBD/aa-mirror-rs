@@ -38,12 +38,9 @@ use crate::io_uring::IoDevice;
 use crate::io_uring::BUFFER_LEN;
 
 // module name for logging engine
-fn get_name(proxy_type: ProxyType) -> String {
-    let proxy = match proxy_type {
-        ProxyType::HeadUnit => "HU",
-        ProxyType::MobileDevice => "MD",
-    };
-    format!("<i><bright-black> mitm/{}: </>", proxy)
+fn get_name() -> String {
+    let dev = "HU";
+    format!("<i><bright-black> aa-mirror/{}: </>", dev)
 }
 
 // Just a generic Result type to ease error handling for us. Errors in multithreaded
@@ -220,7 +217,6 @@ impl fmt::Display for Packet {
 
 /// shows packet/message contents as pretty string for debug
 pub async fn pkt_debug(
-    proxy_type: ProxyType,
     hexdump: HexdumpLevel,
     hex_requested: HexdumpLevel,
     pkt: &Packet,
@@ -241,7 +237,7 @@ pub async fn pkt_debug(
     let control = protos::ControlMessageType::from_i32(message_id);
     debug!("message_id = {:04X}, {:?}", message_id, control);
     if hex_requested >= hexdump {
-        debug!("{} {:?} {}", get_name(proxy_type), hexdump, pkt);
+        debug!("{} {:?} {}", get_name(), hexdump, pkt);
     }
 
     // parsing data
@@ -269,7 +265,6 @@ pub async fn pkt_debug(
 
 /// packet modification hook
 pub async fn pkt_modify_hook(
-    proxy_type: ProxyType,
     pkt: &mut Packet,
     ctx: &mut ModifyContext,
     sensor_channel: Arc<tokio::sync::Mutex<Option<u8>>>,
@@ -348,7 +343,6 @@ pub async fn pkt_modify_hook(
     if let Some(ch) = ctx.nav_channel {
         // check for channel and a specific packet header only
         if ch == pkt.channel
-            && proxy_type == ProxyType::HeadUnit
             && pkt.payload[0] == 0x80
             && pkt.payload[1] == 0x06
             && pkt.payload[2] == 0x0A
@@ -362,7 +356,7 @@ pub async fn pkt_modify_hook(
                         .set_type(U_TURN_RIGHT);
                     info!(
                         "{} swapped U_TURN_LEFT to U_TURN_RIGHT",
-                        get_name(proxy_type)
+                        get_name()
                     );
 
                     // rewrite payload to new message contents
@@ -381,7 +375,6 @@ pub async fn pkt_modify_hook(
     // if configured, override max_unacked for matching audio channels
     if cfg.audio_max_unacked > 0
         && ctx.audio_channels.contains(&pkt.channel)
-        && proxy_type == ProxyType::HeadUnit
     {
         match protos::MediaMessageId::from_i32(message_id).unwrap_or(MEDIA_MESSAGE_DATA) {
             m @ MEDIA_MESSAGE_CONFIG => {
@@ -393,7 +386,7 @@ pub async fn pkt_modify_hook(
 
                     info!(
                         "{} <yellow>{:?}</>: overriding max audio unacked from <b>{}</> to <b>{}</> for channel: <b>{:#04x}</>",
-                        get_name(proxy_type),
+                        get_name(),
                         m,
                         prev_val,
                         cfg.audio_max_unacked,
@@ -420,20 +413,17 @@ pub async fn pkt_modify_hook(
     }
     // trying to obtain an Enum from message_id
     let control = protos::ControlMessageType::from_i32(message_id);
-    debug!(
-        "message_id = {:04X}, {:?}, proxy_type: {:?}",
-        message_id, control, proxy_type
-    );
+    debug!("message_id = {:04X}, {:?}", message_id, control);
 
     // parsing data
     match control.unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) {
         MESSAGE_BYEBYE_REQUEST => {
-            if cfg.stop_on_disconnect && proxy_type == ProxyType::MobileDevice {
+            if cfg.stop_on_disconnect {
                 if let Ok(msg) = ByeByeRequest::parse_from_bytes(data) {
                     if msg.reason.unwrap_or_default() == USER_SELECTION.into() {
                         info!(
                         "{} <bold><blue>Disconnect</> option selected in Android Auto; auto-connect temporarily disabled",
-                        get_name(proxy_type),
+                        get_name(),
                     );
                         config.write().await.action_requested = Some(Stop);
                     }
@@ -442,14 +432,12 @@ pub async fn pkt_modify_hook(
         }
         MESSAGE_SERVICE_DISCOVERY_RESPONSE => {
             // rewrite HeadUnit message only, exit if it is MobileDevice
-            if proxy_type == ProxyType::MobileDevice {
-                return Ok(false);
-            }
+           
             let mut msg = match ServiceDiscoveryResponse::parse_from_bytes(data) {
                 Err(e) => {
                     error!(
                         "{} error parsing SDR: {}, ignored!",
-                        get_name(proxy_type),
+                        get_name(),
                         e
                     );
                     return Ok(false);
@@ -471,7 +459,7 @@ pub async fn pkt_modify_hook(
                         .set_density(cfg.dpi.into());
                     info!(
                         "{} <yellow>{:?}</>: replacing DPI value: from <b>{}</> to <b>{}</>",
-                        get_name(proxy_type),
+                        get_name(),
                         control.unwrap(),
                         prev_val,
                         cfg.dpi
@@ -492,7 +480,7 @@ pub async fn pkt_modify_hook(
                 }
                 info!(
                     "{} <yellow>{:?}</>: TTS sink disabled",
-                    get_name(proxy_type),
+                    get_name(),
                     control.unwrap(),
                 );
             }
@@ -503,7 +491,7 @@ pub async fn pkt_modify_hook(
                     .retain(|svc| svc.media_sink_service.audio_type() != AUDIO_STREAM_MEDIA);
                 info!(
                     "{} <yellow>{:?}</>: media sink disabled",
-                    get_name(proxy_type),
+                    get_name(),
                     control.unwrap(),
                 );
             }
@@ -519,7 +507,7 @@ pub async fn pkt_modify_hook(
                 }
                 info!(
                     "{} <blue>media_sink_service:</> channels: <b>{:02x?}</>",
-                    get_name(proxy_type),
+                    get_name(),
                     ctx.audio_channels
                 );
             }
@@ -539,7 +527,7 @@ pub async fn pkt_modify_hook(
 
                     info!(
                         "{} <blue>sensor_source_service</> channel is: <b>{:#04x}</>",
-                        get_name(proxy_type),
+                        get_name(),
                         svc.id() as u8
                     );
                 }
@@ -557,7 +545,7 @@ pub async fn pkt_modify_hook(
 
                     info!(
                         "{} <blue>navigation_status_service</> channel is: <b>{:#04x}</>",
-                        get_name(proxy_type),
+                        get_name(),
                         svc.id() as u8
                     );
                 }
@@ -584,7 +572,7 @@ pub async fn pkt_modify_hook(
                 msg.set_model("Desktop Head Unit".into());
                 info!(
                     "{} <yellow>{:?}</>: enabling developer mode",
-                    get_name(proxy_type),
+                    get_name(),
                     control.unwrap(),
                 );
             }
@@ -607,7 +595,7 @@ pub async fn pkt_modify_hook(
                 {
                     info!(
                         "{} <yellow>{:?}</>: adding <b><green>EV</> features...",
-                        get_name(proxy_type),
+                        get_name(),
                         control.unwrap(),
                     );
 
@@ -636,7 +624,7 @@ pub async fn pkt_modify_hook(
                         };
                     info!(
                         "{} <yellow>{:?}</>: EV connectors: {:?}",
-                        get_name(proxy_type),
+                        get_name(),
                         control.unwrap(),
                         connectors,
                     );
@@ -649,7 +637,7 @@ pub async fn pkt_modify_hook(
 
             debug!(
                 "{} SDR after changes: {}",
-                get_name(proxy_type),
+                get_name(),
                 protobuf::text_format::print_to_string_pretty(&msg)
             );
 
@@ -821,7 +809,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     let cfg = config.read().await.clone();
     let hex_requested = cfg.hexdump_level;
 
-    let ssl = ssl_builder(proxy_type).await?;
+    let ssl = ssl_builder().await?;
 
     let mut mem_buf = SslMemBuf {
         client_stream: Arc::new(Mutex::new(VecDeque::new())),
