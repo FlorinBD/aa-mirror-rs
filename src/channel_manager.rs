@@ -5,7 +5,7 @@ use simplelog::*;
 use std::collections::VecDeque;
 use std::fmt;
 use std::io::{Read, Write};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
