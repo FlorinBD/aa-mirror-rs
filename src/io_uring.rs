@@ -42,7 +42,6 @@ use crate::ev::EvTaskCommand;
 use crate::channel_manager::endpoint_reader;
 use crate::channel_manager::proxy;
 use crate::channel_manager::Packet;
-use crate::channel_manager::DeviceType;
 use crate::usb_stream;
 use crate::usb_stream::{UsbStreamRead, UsbStreamWrite};
 
@@ -413,7 +412,6 @@ pub async fn io_loop(
         let stream_bytes = Arc::new(AtomicUsize::new(0));
 
         let mut from_file;
-        let mut from_stream;
         let mut reader_hu;
         // these will be used for cleanup
         let mut hu_tcp_stream = None;
