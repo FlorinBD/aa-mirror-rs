@@ -896,7 +896,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
                         &pkt,
                     )
                     .await;
-                    tx.send(pkt).await?;
+                    pkt.transmit(&mut device).await.with_context(|| format!("proxy/{}: transmit failed", get_name()))?;
                 }
                 Err(e) => error!("decrypt_payload: {:?}", e),
             }
