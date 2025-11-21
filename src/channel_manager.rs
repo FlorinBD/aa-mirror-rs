@@ -827,7 +827,13 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         ).await;
         
         // build version response for HU
-       
+       let mut response = SensorResponse::new();
+        response.set_status(MessageStatus::STATUS_SUCCESS);
+
+        let mut payload: Vec<u8> = response.write_to_bytes()?;
+        payload.insert(0, ((SENSOR_MESSAGE_RESPONSE as u16) >> 8) as u8);
+        payload.insert(1, ((SENSOR_MESSAGE_RESPONSE as u16) & 0xff) as u8);
+    
         let pkt_rsp = Packet {
         channel: 0,
         flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
