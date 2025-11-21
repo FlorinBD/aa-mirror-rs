@@ -832,10 +832,10 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         let mut payload: Vec<u8>::new();
         payload.insert(0, ((MESSAGE_VERSION_RESPONSE as u16) >> 8) as u8);
         payload.insert(1, ((MESSAGE_VERSION_RESPONSE as u16) & 0xff) as u8);
-        payload.insert(2, (0 as u8);
-        payload.insert(3, (1 as u8);
-        payload.insert(4, (0 as u8);
-        payload.insert(5, (7 as u8);
+        payload.insert(2, (0 as u8));
+        payload.insert(3, (1 as u8));
+        payload.insert(4, (0 as u8));
+        payload.insert(5, (7 as u8));
         payload.insert(6, ((STATUS_SUCCESS  as u16) >> 8) as u8);
         payload.insert(7, ((STATUS_SUCCESS  as u16) & 0xff) as u8);
         let pkt_rsp = Packet {
