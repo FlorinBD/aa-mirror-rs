@@ -42,7 +42,6 @@ use crate::ev::EvTaskCommand;
 use crate::channel_manager::endpoint_reader;
 use crate::channel_manager::proxy;
 use crate::channel_manager::Packet;
-use crate::usb_stream;
 use crate::usb_stream::{UsbStreamRead, UsbStreamWrite};
 
 // tokio_uring::fs::File and tokio_uring::net::TcpStream are using different
