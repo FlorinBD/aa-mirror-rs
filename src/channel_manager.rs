@@ -827,8 +827,8 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         ).await;
         
         // build version response for HU
-       let mut response = SensorResponse::new();
-        response.set_status(MessageStatus::STATUS_SUCCESS);
+       let mut response = VersionResponse::new();
+        response.set_Major(1);
 
         let mut payload: Vec<u8> = response.write_to_bytes()?;
         payload.insert(0, ((MESSAGE_VERSION_RESPONSE as u16) >> 8) as u8);
