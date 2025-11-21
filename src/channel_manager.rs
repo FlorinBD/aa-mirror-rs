@@ -821,7 +821,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
    // waiting for initial version frame (HU is starting transmission)
         let pkt = rxr.recv().await.ok_or("reader channel hung up")?;
         let _ = pkt_debug(
-            proxy_type,
+            DeviceType::HeadUnit,
             HexdumpLevel::DecryptedInput, // the packet is not encrypted
             hex_requested,
             &pkt,
@@ -835,19 +835,19 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         payload: payload,
         };
         // sending reply back to the HU
-        let _ = pkt_debug(proxy_type, HexdumpLevel::RawOutput, hex_requested, &pkt_rsp).await;
-        pkt_rsp.transmit(&mut device).await.with_context(|| format!("proxy/{}: transmit failed", get_name(proxy_type)))?;
+        let _ = pkt_debug(DeviceType::HeadUnit, HexdumpLevel::RawOutput, hex_requested, &pkt_rsp).await;
+        pkt_rsp.transmit(&mut device).await.with_context(|| format!("proxy/{}: transmit failed", get_name()))?;
 
         // doing SSL handshake
         const STEPS: u8 = 2;
         for i in 1..=STEPS {
             let pkt = rxr.recv().await.ok_or("reader channel hung up")?;
-            let _ = pkt_debug(proxy_type, HexdumpLevel::RawInput, hex_requested, &pkt).await;
+            let _ = pkt_debug(DeviceType::HeadUnit, HexdumpLevel::RawInput, hex_requested, &pkt).await;
             pkt.ssl_decapsulate_write(&mut mem_buf).await?;
             ssl_check_failure(server.accept())?;
             info!(
                 "{} 🔒 stage #{} of {}: SSL handshake: {}",
-                get_name(proxy_type),
+                get_name(),
                 i,
                 STEPS,
                 server.ssl().state_string_long(),
@@ -855,15 +855,15 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
             if server.ssl().is_init_finished() {
                 info!(
                     "{} 🔒 SSL init complete, negotiated cipher: <b><blue>{}</>",
-                    get_name(proxy_type),
+                    get_name(),
                     server.ssl().current_cipher().unwrap().name(),
                 );
             }
             let pkt = ssl_encapsulate(mem_buf.clone()).await?;
-            let _ = pkt_debug(proxy_type, HexdumpLevel::RawOutput, hex_requested, &pkt).await;
+            let _ = pkt_debug(DeviceType::HeadUnit, HexdumpLevel::RawOutput, hex_requested, &pkt).await;
             pkt.transmit(&mut device)
                 .await
-                .with_context(|| format!("proxy/{}: transmit failed", get_name(proxy_type)))?;
+                .with_context(|| format!("proxy/{}: transmit failed", get_name()))?;
         }
 
     // main data processing/transfer loop
@@ -878,11 +878,10 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         
         // handling input data from the reader thread
         Some(mut pkt) = rxr.recv() => {
-            let _ = pkt_debug(proxy_type, HexdumpLevel::RawInput, hex_requested, &pkt).await;
+            let _ = pkt_debug(DeviceType::HeadUnit, HexdumpLevel::RawInput, hex_requested, &pkt).await;
             match pkt.decrypt_payload(&mut mem_buf, &mut server).await {
                 Ok(_) => {
                     let _ = pkt_modify_hook(
-                        proxy_type,
                         &mut pkt,
                         &mut ctx,
                         sensor_channel.clone(),
@@ -891,7 +890,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
                     )
                     .await?;
                     let _ = pkt_debug(
-                        proxy_type,
+                        DeviceType::HeadUnit,
                         HexdumpLevel::DecryptedInput,
                         hex_requested,
                         &pkt,
