@@ -684,15 +684,12 @@ async fn ssl_encapsulate(mut mem_buf: SslMemBuf) -> Result<Packet> {
 }
 
 /// creates Ssl for HeadUnit (SSL server) and MobileDevice (SSL client)
-async fn ssl_builder(proxy_type: ProxyType) -> Result<Ssl> {
+async fn ssl_builder() -> Result<Ssl> {
     let mut ctx_builder = SslContextBuilder::new(SslMethod::tls())?;
 
     // for HU/headunit we need to act as a MD/mobiledevice, so load "md" key and cert
     // and vice versa
-    let prefix = match proxy_type {
-        ProxyType::HeadUnit => "md",
-        ProxyType::MobileDevice => "hu",
-    };
+    let prefix = "hu";
     ctx_builder.set_certificate_file(format!("{KEYS_PATH}/{prefix}_cert.pem"), SslFiletype::PEM)?;
     ctx_builder.set_private_key_file(format!("{KEYS_PATH}/{prefix}_key.pem"), SslFiletype::PEM)?;
     ctx_builder.check_private_key()?;
@@ -704,12 +701,7 @@ async fn ssl_builder(proxy_type: ProxyType) -> Result<Ssl> {
 
     let openssl_ctx = ctx_builder.build();
     let mut ssl = Ssl::new(&openssl_ctx)?;
-    if proxy_type == ProxyType::HeadUnit {
-        ssl.set_accept_state(); // SSL server
-    } else if proxy_type == ProxyType::MobileDevice {
-        ssl.set_connect_state(); // SSL client
-    }
-
+    ssl.set_accept_state(); // SSL server
     Ok(ssl)
 }
 
