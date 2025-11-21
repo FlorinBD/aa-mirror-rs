@@ -321,28 +321,6 @@ pub async fn io_loop(
 
         let mut hu_tcp = None;
         let mut hu_usb = None;
-        if config.wired.is_some() {
-            info!(
-                "{} 💤 trying to enable Android Auto mode on USB port...",
-                NAME
-            );
-            match usb_stream::new(config.wired.clone()).await {
-                Err(e) => {
-                    error!("{} 🔴 Enabling Android Auto: {}", NAME, e);
-                    // notify main loop to restart
-                    if !profile_connected.load(Ordering::Relaxed) {
-                        let _ = need_restart.send(None);
-                    }
-                    continue;
-                }
-                Ok(s) => {
-                    md_usb = Some(s);
-                }
-            }
-        } else {
-            info!("{} 💤 waiting for bluetooth handshake...", NAME);
-            tcp_start.notified().await;
-        }
 
         if config.dhu {
             info!(
