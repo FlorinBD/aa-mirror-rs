@@ -88,7 +88,7 @@ fn linkify_git_info(git_date: &str, git_hash: &str) -> String {
         let clean_hash = git_hash.trim_end_matches("-dirty");
         let url = format!(
             "<a href=\"{}/commit/{}\" target=\"_blank\">{}</a>{}",
-            aa_mirror_rs_URL,
+            AA_MIRROR_RS_URL,
             clean_hash,
             clean_hash,
             {
@@ -103,7 +103,7 @@ fn linkify_git_info(git_date: &str, git_hash: &str) -> String {
     } else if git_hash.starts_with("br#") {
         let url_aamirror = format!(
             "<a href=\"{}/commit/{}\" target=\"_blank\">{}</a>",
-            aa_mirror_rs_URL, git_date, git_date,
+            AA_MIRROR_RS_URL, git_date, git_date,
         );
 
         let clean_hash = git_date.trim_start_matches("br#");
