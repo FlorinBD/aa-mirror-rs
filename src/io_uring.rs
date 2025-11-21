@@ -457,6 +457,7 @@ pub async fn io_loop(
         let mut monitor = tokio::spawn(transfer_monitor(
             stats_interval,
             file_bytes,
+            stream_bytes,
             read_timeout,
             shared_config.clone(),
         ));
