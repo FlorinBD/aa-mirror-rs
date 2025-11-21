@@ -7,7 +7,7 @@ message PhoneInfo {
 }
 
 message VersionResponse {
-  required uint32 Version = 0;//2bytes Major, 2 bytes Minor version
+  required uint32 Version = 1;//2bytes Major, 2 bytes Minor version
 }
 message HeadUnitInfo {
   optional string make = 1;
