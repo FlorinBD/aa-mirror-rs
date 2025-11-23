@@ -11,6 +11,7 @@ RUN rustup target add arm-unknown-linux-gnueabihf
 WORKDIR /usr/src/app
 RUN echo "Cloning branch: ${GH_BRANCH}"
 RUN git clone --branch ${GH_BRANCH} --single-branch https://github.com/FlorinBD/aa-mirror-rs .
+RUN cargo update -w --locked
 RUN cargo build --release
 RUN arm-linux-gnueabihf-strip target/arm-unknown-linux-gnueabihf/release/aa-mirror-rs
 # Pi Zero W needs special linking/building (https://github.com/manio/aa-mirror-rs/issues/3)
