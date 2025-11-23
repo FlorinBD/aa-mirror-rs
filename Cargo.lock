@@ -522,9 +522,9 @@ dependencies = [
 
 [[package]]
 name = "core-foundation"
-version = "0.10.1"
+version = "0.9.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b2a6cd9ae233e7f62ba4e9353e81a88df7fc8a5987b8d445b4d90c879bd156f6"
+checksum = "91e195e091a93c46f7102ec7818a2aa394e1e1771c3ab4825963fa03e45afb8f"
 dependencies = [
  "core-foundation-sys",
  "libc",
@@ -1477,8 +1477,8 @@ checksum = "830b246a0e5f20af87141b25c173cd1b609bd7779a4617d6ec582abaf90870f3"
 
 [[package]]
 name = "nusb"
-version = "0.2.1"
-source = "git+https://github.com/kevinmehall/nusb#318244fa5151f6edd114c1456a0187c194abda4e"
+version = "0.2.0-beta.1"
+source = "git+https://github.com/kevinmehall/nusb#f1f4bec4a119511fddacd9c81fd473de18e5b7e9"
 dependencies = [
  "core-foundation",
  "core-foundation-sys",
@@ -1489,7 +1489,7 @@ dependencies = [
  "once_cell",
  "rustix 1.0.7",
  "slab",
- "windows-sys 0.60.2",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
