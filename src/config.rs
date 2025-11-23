@@ -221,7 +221,7 @@ impl Default for AppConfig {
         Self {
             advertise: true,
             dongle_mode: false,
-            debug: false,
+            debug: true,
             hexdump_level: HexdumpLevel::Disabled,
             disable_console_debug: false,
             legacy: true,
@@ -256,7 +256,7 @@ impl Default for AppConfig {
             action_requested: None,
             ev_connector_types: EvConnectorTypes::default(),
             enable_ssh: true,
-            usb_serial_console: false,
+            usb_serial_console: true,
             wifi_version: get_latest_wifi_version().unwrap_or(1),
             band: {
                 if supports_5ghz_wifi().unwrap_or(false) {
