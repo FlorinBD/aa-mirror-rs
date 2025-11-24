@@ -235,7 +235,7 @@ impl Default for AppConfig {
             btalias: None,
             timeout_secs: 10,
             webserver: webserver_default_bind(),
-            bt_timeout_secs: 120,
+            bt_timeout_secs: 0,
             mitm: false,
             dpi: 0,
             audio_max_unacked: 0,
@@ -256,7 +256,7 @@ impl Default for AppConfig {
             action_requested: None,
             ev_connector_types: EvConnectorTypes::default(),
             enable_ssh: true,
-            usb_serial_console: true,
+            usb_serial_console: false,
             wifi_version: get_latest_wifi_version().unwrap_or(1),
             band: {
                 if supports_5ghz_wifi().unwrap_or(false) {
