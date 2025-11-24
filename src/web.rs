@@ -45,7 +45,7 @@ use tokio_util::io::ReaderStream;
 const TEMPLATE: &str = include_str!("../static/index.html");
 const PICO_CSS: &str = include_str!("../static/pico.min.css");
 const AA_MIRROR_RS_URL: &str = "https://github.com/FlorinBD/aa-mirror-rs";
-const BUILDROOT_URL: &str = "https://github.com/FlorinBD/aaproxy_buildroot";
+const BUILDROOT_URL: &str = "https://github.com/FlorinBD/aa-mirror-br";
 pub const CERT_DEST_DIR: &str = "/etc/aa-mirror-rs/";
 const CERT_SHA_FILENAME: &str = "cert-bundle.sha";
 
