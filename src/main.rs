@@ -295,31 +295,7 @@ async fn tokio_main(
             enable_usb_if_present(&mut usb, accessory_started.clone()).await;
         }
 
-        // run only if not handling this in handshake task
-        if !(cfg.quick_reconnect && profile_connected.load(Ordering::Relaxed))
-            || cfg.action_requested == Some(Action::Stop)
-        {
-            // bluetooth handshake
-            if let Err(e) = bluetooth
-                .aa_handshake(
-                    cfg.dongle_mode,
-                    cfg.connect.clone(),
-                    wifi_conf.clone().unwrap(),
-                    tcp_start.clone(),
-                    Duration::from_secs(cfg.bt_timeout_secs.into()),
-                    cfg.action_requested == Some(Action::Stop),
-                    cfg.quick_reconnect,
-                    restart_tx.subscribe(),
-                    profile_connected.clone(),
-                )
-                .await
-            {
-                error!("{} bluetooth AA handshake error: {}", NAME, e);
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                continue;
-            }
-        }
-
+        
         if !change_usb_order {
             enable_usb_if_present(&mut usb, accessory_started.clone()).await;
         }
