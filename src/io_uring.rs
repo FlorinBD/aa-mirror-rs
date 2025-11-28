@@ -288,7 +288,7 @@ pub async fn io_loop(
     config: SharedConfig,
     tx: Arc<Mutex<Option<Sender<Packet>>>>,
     sensor_channel: Arc<Mutex<Option<u8>>>,
-    profile_connected: Arc<AtomicBool>,
+    md_connected: Arc<AtomicBool>,
 ) -> Result<()> {
     let shared_config = config.clone();
     #[allow(unused_variables)]
