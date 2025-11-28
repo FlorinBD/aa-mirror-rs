@@ -827,7 +827,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
             hex_requested,
             &pkt,
         ).await;
-        
+        info!( "HU version request recieved, sending VersionResponse back...");
         // build version response for HU
         //let mut response = VersionResponse::new();
         //let mut payload: Vec<u8> = response.write_to_bytes()?;
