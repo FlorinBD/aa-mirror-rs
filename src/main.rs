@@ -257,26 +257,7 @@ async fn tokio_main(
         }
     });
 
-    // initial bluetooth setup
-    let mut bluetooth;
-    loop {
-        match bluetooth::init(cfg.btalias.clone(), cfg.advertise, cfg.dongle_mode).await {
-            Ok(result) => {
-                bluetooth = result;
-                break;
-            }
-            Err(e) => {
-                error!("{} Fatal error in Bluetooth setup: {}", NAME, e);
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                continue;
-            }
-        }
-    }
-    if cfg.advertise {
-        if let Err(e) = bluetooth.start_ble(state.clone(), true).await {
-            warn!("{} Error starting BLE: {}", NAME, e);
-        }
-    }
+    
 
     // main connection loop
     let change_usb_order = cfg.change_usb_order;
