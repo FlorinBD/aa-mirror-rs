@@ -243,6 +243,7 @@ pub async fn pkt_debug(
     // parsing data
     let data = &pkt.payload[2..]; // start of message data
     let message: &dyn MessageDyn = match control.unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) {
+        MESSAGE_VERSION_REQUEST => &VersionRequest::parse_from_bytes(data)?,
         MESSAGE_BYEBYE_REQUEST => &ByeByeRequest::parse_from_bytes(data)?,
         MESSAGE_BYEBYE_RESPONSE => &ByeByeResponse::parse_from_bytes(data)?,
         MESSAGE_AUTH_COMPLETE => &AuthResponse::parse_from_bytes(data)?,
