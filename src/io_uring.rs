@@ -330,9 +330,7 @@ pub async fn io_loop(
                 hu_tcp = Some(s);
             } else {
                 // notify main loop to restart
-                if !profile_connected.load(Ordering::Relaxed) {
-                    let _ = need_restart.send(None);
-                }
+                let _ = need_restart.send(None);
                 continue;
             }
         } else {
