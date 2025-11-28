@@ -295,10 +295,10 @@ pub async fn io_loop(
     let (client_handler, ev_tx) = spawn_ev_client_task().await;
 
     // prepare/bind needed TCP listeners
-    info!("{} 🛰️ Starting TCP server for MD...", NAME);
+    /*info!("{} 🛰️ Starting TCP server for MD...", NAME);
     let bind_addr = format!("0.0.0.0:{}", TCP_SERVER_PORT).parse().unwrap();
     let mut md_listener = Some(TcpListener::bind(bind_addr).unwrap());
-    info!("{} 🛰️ MD TCP server bound to: <u>{}</u>", NAME, bind_addr);
+    info!("{} 🛰️ MD TCP server bound to: <u>{}</u>", NAME, bind_addr);*/
     info!("{} 🛰️ Starting TCP server for DHU...", NAME);
     let bind_addr = format!("0.0.0.0:{}", TCP_DHU_PORT).parse().unwrap();
     let mut dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
