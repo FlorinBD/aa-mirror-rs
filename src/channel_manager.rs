@@ -819,6 +819,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
 
     // initial phase: passing version and doing SSL handshake
    // waiting for initial version frame (HU is starting transmission)
+    info!( "Waiting for HU version request...");
         let pkt = rxr.recv().await.ok_or("reader channel hung up")?;
         let _ = pkt_debug(
             HexdumpLevel::DecryptedInput, // the packet is not encrypted
