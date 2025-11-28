@@ -349,9 +349,7 @@ pub async fn io_loop(
                 Err(e) => {
                     error!("{} 🔴 Error opening USB accessory: {}", NAME, e);
                     // notify main loop to restart
-                    if !profile_connected.load(Ordering::Relaxed) {
-                        let _ = need_restart.send(None);
-                    }
+                    let _ = need_restart.send(None);
                     continue;
                 }
             }
