@@ -6,6 +6,10 @@ message PhoneInfo {
   optional string connectivity_lifetime_id = 2;
 }
 
+message VersionRequest {
+  required uint32 Version = 1;//2bytes Major, 2 bytes Minor version
+}
+
 message VersionResponse {
   required uint32 Version = 1;//2bytes Major, 2 bytes Minor version
 }
