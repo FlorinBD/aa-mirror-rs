@@ -771,7 +771,7 @@ pub async fn endpoint_reader<A: Endpoint<A>>(
                         final_length,
                         payload: frame,
                     };
-                    info!("Channel {} recieved {} bytes from HU", channel ,final_length);
+                    info!("Channel {} recieved {} bytes from HU", channel ,u32::from(final_length));
                     // send packet to main thread for further process
                     tx.send(pkt).await?;
                     // check if we have another packet
