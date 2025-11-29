@@ -380,7 +380,7 @@ pub async fn io_loop(
         // and creating desired objects for proxy functions
         let hu_r;
         let hu_w;
-        
+
         // HU transfer device
         if let Some(hu) = hu_usb {
             // HU connected directly via USB
@@ -426,10 +426,6 @@ pub async fn io_loop(
 
         if let Err(e) = res {
             error!("{} 🔴 Connection error: {}", NAME, e);
-            if let Some(dev) = usb_dev {
-                info!("{} 🔌 Resetting USB device for next try...", NAME);
-                let _ = dev.reset().await;
-            }
         }
         
         // Make sure the reference count drops to zero and the socket is
