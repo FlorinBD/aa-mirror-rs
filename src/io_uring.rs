@@ -368,8 +368,8 @@ pub async fn io_loop(
         let file_bytes = Arc::new(AtomicUsize::new(0));
         let stream_bytes = Arc::new(AtomicUsize::new(0));
 
-        let mut from_file;
-        let mut reader_hu;
+        let mut tsk_io_proxy;
+        let mut tsk_hu_read;
         // these will be used for cleanup
         let mut hu_tcp_stream = None;
 
@@ -396,10 +396,10 @@ pub async fn io_loop(
         }
 
         // dedicated reading threads:
-        reader_hu = tokio_uring::spawn(endpoint_reader(hu_r, txr_hu));
+        tsk_hu_read = tokio_uring::spawn(endpoint_reader(hu_r, txr_hu));
         
         // main processing threads:
-        from_file = tokio_uring::spawn(proxy(
+        tsk_io_proxy = tokio_uring::spawn(proxy(
             hu_w,
             file_bytes.clone(),
             rxr_hu,
@@ -409,7 +409,7 @@ pub async fn io_loop(
         ));
         
         // Thread for monitoring transfer
-        let mut monitor = tokio::spawn(transfer_monitor(
+        let mut tsk_monitor = tokio::spawn(transfer_monitor(
             stats_interval,
             file_bytes,
             stream_bytes,
@@ -419,9 +419,9 @@ pub async fn io_loop(
 
         // Stop as soon as one of them errors
         let res = tokio::try_join!(
-            flatten(&mut reader_hu),
-            flatten(&mut from_file),
-            flatten(&mut monitor)
+            flatten(&mut tsk_hu_read),
+            flatten(&mut tsk_io_proxy),
+            flatten(&mut tsk_monitor)
         );
 
         if let Err(e) = res {
@@ -431,9 +431,9 @@ pub async fn io_loop(
         // Make sure the reference count drops to zero and the socket is
         // freed by aborting both tasks (which both hold a `Rc<TcpStream>`
         // for each direction)
-        reader_hu.abort();
-        from_file.abort();
-        monitor.abort();
+        tsk_hu_read.abort();
+        tsk_io_proxy.abort();
+        tsk_monitor.abort();
 
         // make sure TCP connections are closed before next connection attempts
         if let Some(stream) = hu_tcp_stream {
