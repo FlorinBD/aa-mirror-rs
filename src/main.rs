@@ -287,7 +287,7 @@ async fn tokio_main(
         }
         // wait for restart notification
         let _ = need_restart.recv().await;
-        if !(cfg.quick_reconnect && profile_connected.load(Ordering::Relaxed)) {
+        if !(cfg.quick_reconnect) {
             info!(
                 "{} 📵 TCP/USB connection closed or not started, trying again...",
                 NAME
