@@ -423,6 +423,14 @@ pub async fn io_loop(
             flatten(&mut from_file),
             flatten(&mut monitor)
         );
+
+        if let Err(e) = res {
+            error!("{} 🔴 Connection error: {}", NAME, e);
+            if let Some(dev) = usb_dev {
+                info!("{} 🔌 Resetting USB device for next try...", NAME);
+                let _ = dev.reset().await;
+            }
+        }
         
         // Make sure the reference count drops to zero and the socket is
         // freed by aborting both tasks (which both hold a `Rc<TcpStream>`

@@ -1,4 +1,4 @@
-use aa_mirror_rs::bluetooth;
+//use aa_mirror_rs::bluetooth;
 use aa_mirror_rs::config::SharedConfig;
 use aa_mirror_rs::config::SharedConfigJson;
 use aa_mirror_rs::config::WifiConfig;
@@ -232,7 +232,7 @@ async fn tokio_main(
         }
     }
 
-    let wifi_conf = {
+    let _ = {
         if !cfg.wired.is_some() {
             Some(init_wifi_config(&cfg))
         } else {

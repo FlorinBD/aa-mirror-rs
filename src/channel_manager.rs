@@ -5,7 +5,7 @@ use simplelog::*;
 use std::collections::VecDeque;
 use std::fmt;
 use std::io::{Read, Write};
-use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -808,6 +808,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     sensor_channel: Arc<tokio::sync::Mutex<Option<u8>>>,
     ev_tx: Sender<EvTaskCommand>,
 ) -> Result<()> {
+    info!( "{} Entering channel manager",get_name());
     let cfg = config.read().await.clone();
     let hex_requested = cfg.hexdump_level;
 
@@ -821,7 +822,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
 
     // initial phase: passing version and doing SSL handshake
    // waiting for initial version frame (HU is starting transmission)
-    info!( "Waiting for HU version request...");
+    info!( "{} Waiting for HU version request...",get_name());
         let pkt = rxr.recv().await.ok_or("reader channel hung up")?;
         let _ = pkt_debug(
             HexdumpLevel::DecryptedInput, // the packet is not encrypted
@@ -850,7 +851,9 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         // sending reply back to the HU
         let _ = pkt_debug(HexdumpLevel::RawOutput, hex_requested, &pkt_rsp).await;
         pkt_rsp.transmit(&mut device).await.with_context(|| format!("proxy/{}: transmit failed", get_name()))?;
-
+        // Increment byte counters for statistics
+        // fixme: compute final_len for precise stats
+        bytes_written.fetch_add(HEADER_LENGTH + pkt.payload.len(), Ordering::Relaxed);
         // doing SSL handshake
         const STEPS: u8 = 2;
         for i in 1..=STEPS {
