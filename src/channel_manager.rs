@@ -678,7 +678,7 @@ async fn ssl_builder() -> Result<Ssl> {
 
     // for HU/headunit we need to act as a MD/mobiledevice, so load "md" key and cert
     // and vice versa
-    let prefix = "hu";
+    let prefix = "md";
     ctx_builder.set_certificate_file(format!("{KEYS_PATH}/{prefix}_cert.pem"), SslFiletype::PEM)?;
     ctx_builder.set_private_key_file(format!("{KEYS_PATH}/{prefix}_key.pem"), SslFiletype::PEM)?;
     ctx_builder.check_private_key()?;
