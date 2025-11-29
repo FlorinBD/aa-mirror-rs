@@ -260,7 +260,7 @@ async fn tcp_wait_for_connection(listener: &mut TcpListener) -> Result<TcpStream
 
     // this is creating a reverse tcp bridge for Android
     // direct connection to the device side is not allowed
-    /*tokio::spawn(async move {
+    tokio::spawn(async move {
         info!(
             "{} starting TCP reverse connection, Android IP: {}",
             NAME,
@@ -273,7 +273,7 @@ async fn tcp_wait_for_connection(listener: &mut TcpListener) -> Result<TcpStream
             "127.0.0.1:80",
         )
         .await;
-    });*/
+    });
 
     // disable Nagle algorithm, so segments are always sent as soon as possible,
     // even if there is only a small amount of data
