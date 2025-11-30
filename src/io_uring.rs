@@ -261,7 +261,6 @@ async fn tcp_wait_for_connection(listener: &mut TcpListener) -> Result<TcpStream
     // disable Nagle algorithm, so segments are always sent as soon as possible,
     // even if there is only a small amount of data
     stream.set_nodelay(true)?;
-
     Ok(stream)
 }
 
@@ -275,7 +274,7 @@ pub async fn io_loop(
 ) -> Result<()> {
     let shared_config = config.clone();
     #[allow(unused_variables)]
-    let (client_handler, ev_tx) = spawn_ev_client_task().await;
+    //let (client_handler, ev_tx) = spawn_ev_client_task().await;
 
     // prepare/bind needed TCP listeners
     /*info!("{} 🛰️ Starting TCP server for MD...", NAME);
@@ -285,7 +284,6 @@ pub async fn io_loop(
     info!("{} 🛰️ Starting TCP server for DHU...", NAME);
     let bind_addr = format!("0.0.0.0:{}", TCP_DHU_PORT).parse().unwrap();
     let mut dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
-
     info!("{} 🛰️ DHU TCP server bound to: <u>{}</u>", NAME, bind_addr);
 
     loop {
@@ -421,9 +419,10 @@ pub async fn io_loop(
 
         // make sure TCP connections are closed before next connection attempts
         if let Some(stream) = hu_tcp_stream {
+            info!("{} 🛰️ DHU TCP server: closing client connection...", NAME );
             let _ = stream.shutdown(std::net::Shutdown::Both);
-        }
 
+        }
         // set webserver context EV stuff to None
         let mut tx_lock = tx.lock().await;
         *tx_lock = None;
@@ -443,10 +442,6 @@ pub async fn io_loop(
         let action = shared_config.read().await.action_requested.clone();
         // stream(s) closed, notify main loop to restart
         let _ = need_restart.send(action);
+        break;
     }
-
-    #[allow(unreachable_code)]
-    // terminate ev client handler
-    ev_tx.send(EvTaskCommand::Terminate).await?;
-    client_handler.await?;
 }
