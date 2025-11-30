@@ -834,14 +834,14 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         //let mut response = VersionResponse::new();
         //let mut payload: Vec<u8> = response.write_to_bytes()?;
         let mut payload: Vec<u8>=Vec::new();
-        payload.insert(0, ((MESSAGE_VERSION_RESPONSE as u16) >> 8) as u8);
-        payload.insert(1, ((MESSAGE_VERSION_RESPONSE as u16) & 0xff) as u8);
-        payload.insert(2, 0 as u8);
-        payload.insert(3, 1 as u8);
-        payload.insert(4, 0 as u8);
-        payload.insert(5, 7 as u8);
-        payload.insert(6, ((MessageStatus::STATUS_SUCCESS  as u16) >> 8) as u8);
-        payload.insert(7, ((MessageStatus::STATUS_SUCCESS  as u16) & 0xff) as u8);
+        payload.push(((MESSAGE_VERSION_RESPONSE as u16) >> 8) as u8);
+        payload.push( ((MESSAGE_VERSION_RESPONSE as u16) & 0xff) as u8);
+        payload.push( pkt.payload[2]);//send back same version as requested
+        payload.push( pkt.payload[3]);
+        payload.push( pkt.payload[4]);
+        payload.push( pkt.payload[5]);
+        payload.push( ((MessageStatus::STATUS_SUCCESS  as u16) >> 8) as u8);
+        payload.push( ((MessageStatus::STATUS_SUCCESS  as u16) & 0xff) as u8);
         let pkt_rsp = Packet {
         channel: 0,
         flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
