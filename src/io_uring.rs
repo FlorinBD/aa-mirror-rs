@@ -387,7 +387,6 @@ pub async fn io_loop(
             rxr_hu,
             shared_config.clone(),
             sensor_channel.clone(),
-            ev_tx.clone(),
         ));
         
         // Thread for monitoring transfer
@@ -428,10 +427,6 @@ pub async fn io_loop(
         *tx_lock = None;
         let mut sc_lock = sensor_channel.lock().await;
         *sc_lock = None;
-        // stop EV battery logger if neded
-        if config.ev_battery_logger.is_some() {
-            ev_tx.send(EvTaskCommand::Stop).await?;
-        }
 
         info!(
             "{} ⌛ session time: {}",

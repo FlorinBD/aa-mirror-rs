@@ -62,7 +62,6 @@ pub struct ModifyContext {
     sensor_channel: Option<u8>,
     nav_channel: Option<u8>,
     audio_channels: Vec<u8>,
-    ev_tx: Sender<EvTaskCommand>,
 }
 
 #[derive(PartialEq, Copy, Clone, Debug)]
@@ -306,14 +305,7 @@ pub async fn pkt_modify_hook(
                                 payload: payload,
                             };
                             *pkt = reply;
-
-                            // start EV battery logger if neded
-                            if let Some(path) = &cfg.ev_battery_logger {
-                                ctx.ev_tx
-                                    .send(EvTaskCommand::Start(path.to_string()))
-                                    .await?;
-                            }
-
+                            
                             // return true => send own reply without processing
                             return Ok(true);
                         }
@@ -806,7 +798,6 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     mut rxr: Receiver<Packet>,
     mut config: SharedConfig,
     sensor_channel: Arc<tokio::sync::Mutex<Option<u8>>>,
-    ev_tx: Sender<EvTaskCommand>,
 ) -> Result<()> {
     info!( "{} Entering channel manager",get_name());
     let cfg = config.read().await.clone();
@@ -887,7 +878,6 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         sensor_channel: None,
         nav_channel: None,
         audio_channels: vec![],
-        ev_tx,
     };
     loop {
         tokio::select! {
