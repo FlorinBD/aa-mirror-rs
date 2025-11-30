@@ -24,7 +24,7 @@ use tokio_uring::BufResult;
 use tokio_uring::UnsubmittedWrite;
 
 // module name for logging engine
-const NAME: &str = "<i><bright-black> proxy: </>";
+const NAME: &str = "<i><bright-black> io_uring: </>";
 
 // Just a generic Result type to ease error handling for us. Errors in multithreaded
 // async contexts needs some extra restrictions

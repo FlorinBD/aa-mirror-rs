@@ -39,7 +39,7 @@ use crate::io_uring::BUFFER_LEN;
 
 // module name for logging engine
 fn get_name() -> String {
-    let dev = "HU";
+    let dev = "CH Manager";
     format!("<i><bright-black> aa-mirror/{}: </>", dev)
 }
 
@@ -850,7 +850,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         };
         // sending reply back to the HU
         let _ = pkt_debug(HexdumpLevel::RawOutput, hex_requested, &pkt_rsp).await;
-        pkt_rsp.transmit(&mut device).await.with_context(|| format!("proxy/{}: transmit failed", get_name()))?;
+        pkt_rsp.transmit(&mut device).await.with_context(|| format!("{}: transmit failed", get_name()))?;
         // Increment byte counters for statistics
         // fixme: compute final_len for precise stats
         bytes_written.fetch_add(HEADER_LENGTH + pkt.payload.len(), Ordering::Relaxed);
@@ -879,7 +879,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
             let _ = pkt_debug(HexdumpLevel::RawOutput, hex_requested, &pkt).await;
             pkt.transmit(&mut device)
                 .await
-                .with_context(|| format!("proxy/{}: transmit failed", get_name()))?;
+                .with_context(|| format!("{}: transmit failed", get_name()))?;
         }
 
     // main data processing/transfer loop
@@ -911,7 +911,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
                         &pkt,
                     )
                     .await;
-                    pkt.transmit(&mut device).await.with_context(|| format!("proxy/{}: transmit failed", get_name()))?;
+                    pkt.transmit(&mut device).await.with_context(|| format!("{}: transmit failed", get_name()))?;
                 }
                 Err(e) => error!("decrypt_payload: {:?}", e),
             }
