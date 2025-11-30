@@ -258,23 +258,6 @@ async fn tcp_wait_for_connection(listener: &mut TcpListener) -> Result<TcpStream
         NAME, addr
     );
 
-    // this is creating a reverse tcp bridge for Android
-    // direct connection to the device side is not allowed
-    /*tokio::spawn(async move {
-        info!(
-            "{} starting TCP reverse connection, Android IP: {}",
-            NAME,
-            addr.ip()
-        );
-        // FIXME use port configured by user for webserver
-        // or ignore when webserver disabled...
-        tcp_bridge(
-            &format!("{}:{}", addr.ip(), COMP_APP_TCP_PORT),
-            "127.0.0.1:80",
-        )
-        .await;
-    });*/
-
     // disable Nagle algorithm, so segments are always sent as soon as possible,
     // even if there is only a small amount of data
     stream.set_nodelay(true)?;
@@ -302,6 +285,7 @@ pub async fn io_loop(
     info!("{} 🛰️ Starting TCP server for DHU...", NAME);
     let bind_addr = format!("0.0.0.0:{}", TCP_DHU_PORT).parse().unwrap();
     let mut dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
+
     info!("{} 🛰️ DHU TCP server bound to: <u>{}</u>", NAME, bind_addr);
 
     loop {
@@ -327,10 +311,8 @@ pub async fn io_loop(
                 NAME
             );
             if let Ok(s) = tcp_wait_for_connection(&mut dhu_listener.as_mut().unwrap()).await {
-                info!("{} 📳 TCP server: new client connected!", NAME);
                 hu_tcp = Some(s);
             } else {
-                info!("{} 📳 TCP server: client timeout!", NAME);
                 // notify main loop to restart
                 let _ = need_restart.send(None);
                 continue;
