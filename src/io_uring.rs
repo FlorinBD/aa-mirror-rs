@@ -442,6 +442,5 @@ pub async fn io_loop(
         let action = shared_config.read().await.action_requested.clone();
         // stream(s) closed, notify main loop to restart
         let _ = need_restart.send(action);
-        break;
     }
 }
