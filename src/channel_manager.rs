@@ -940,13 +940,10 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     let icon32 = std::fs::read(format!("{}{}", RES_PATH, "/AndroidIcon32.png"));
     let icon64 = std::fs::read(format!("{}{}", RES_PATH, "/AndroidIcon64.png"));
     let icon128 = std::fs::read(format!("{}{}", RES_PATH, "/AndroidIcon128.png"));
-    //let icon32_buf = BufReader::new(File::open(format!("{}{}", RES_PATH, "/AndroidIcon32.png")).unwrap());
-    //let icon64_buf = BufReader::new(File::open(format!("{}{}",RES_PATH , "/AndroidIcon64.png")).unwrap());
-    //let icon128_buf = BufReader::new(File::open(format!("{}{}",RES_PATH , "/AndroidIcon128.png")).unwrap());
     let mut sdreq= ServiceDiscoveryRequest::new();
-    sdreq.set_small_icon(icon32);
-    sdreq.set_medium_icon(icon64);
-    sdreq.set_large_icon(icon128);
+    sdreq.set_small_icon(icon32.unwrap());
+    sdreq.set_medium_icon(icon64.unwrap());
+    sdreq.set_large_icon(icon128.unwrap());
     sdreq.set_label_text("aa-mirror-rs".to_owned());
     sdreq.set_device_name("aa-mirror-os".to_owned());
     let mut payload: Vec<u8>=sdreq.write_to_bytes()?;
