@@ -20,6 +20,7 @@ use tokio_uring::buf::BoundedBuf;
 // protobuf stuff:
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use crate::channel_manager::protos::navigation_maneuver::NavigationType::*;
+use crate::channel_manager::protos::AuthResponse::Status::*;
 use crate::channel_manager::protos::Config as AudioConfig;
 use crate::channel_manager::protos::*;
 use crate::channel_manager::sensor_source_service::Sensor;
@@ -805,12 +806,12 @@ fn check_control_msg_id<T>(expected: protos::ControlMessageType, pkt: &Packet) -
     {
         expected => {Ok(())}
         _ => {
-            Err(Box::new("Wrong message id")).expect(expected);
+            Err(Box::new("Wrong message id")).expect("ControlMessageType");
         }
     }
 }
 ///Send a message to HU
-async fn hu_send_msg<T>(mut device: &mut IoDevice<A>, flags: u8, payload: Vec<u8>, statistics: Arc<AtomicUsize>, dmp_level:HexdumpLevel) -> Result<()> {
+async fn hu_send_msg<A>(mut device: IoDevice<A>, flags: u8, payload: Vec<u8>, statistics: Arc<AtomicUsize>, dmp_level:HexdumpLevel) -> Result<()> {
     let pkt_rsp = Packet {
         channel: 0,
         flags: flags,
@@ -926,9 +927,9 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     }
     let data = &pkt.payload[2..]; // start of message data, without message_id
     if let Ok(mut msg) = AuthResponse::parse_from_bytes(&data) {
-        if(msg.status.type_() !=  OK)
+        if(msg.status_() !=  AuthResponse::Status::OK)
         {
-            error!( "{} AuthResponse status is not OK, got {}",get_name(), msg.status.type_());
+            error!( "{} AuthResponse status is not OK, got {}",get_name(), msg.status);
             return Err(Box::new("AuthResponse status is not OK")).expect("OK");
         }
     }
@@ -938,9 +939,9 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     }
 
     info!( "{} Sending ServiceDiscovery request...",get_name());
-    let icon32_buf = BufReader::new(File::open(RES_PATH + "/AndroidIcon32.png").unwrap());
-    let icon64_buf = BufReader::new(File::open(RES_PATH + "/AndroidIcon64.png").unwrap());
-    let icon128_buf = BufReader::new(File::open(RES_PATH + "/AndroidIcon128.png").unwrap());
+    let icon32_buf = BufReader::new(File::open(format!("{}{}", RES_PATH, "/AndroidIcon32.png")).unwrap());
+    let icon64_buf = BufReader::new(File::open(format!("{}{}",RES_PATH , "/AndroidIcon64.png")).unwrap());
+    let icon128_buf = BufReader::new(File::open(format!("{}{}",RES_PATH , "/AndroidIcon128.png")).unwrap());
     let mut sdreq= ServiceDiscoveryRequest.new();
     sdreq.set_small_icon(icon32_buf.bytes());
     sdreq.set_medium_icon(icon64_buf.bytes());
@@ -974,7 +975,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         return Err(Box::new("ServiceDiscoveryResponse couldn't be parsed")).expect("ServiceDiscoveryResponse");
     }
     info!( "{} ServiceDiscoveryResponse received, TODO more",get_name());
-    return Ok(()).expect("TODO: main loop");
+    return Ok(Ok(()).expect("TODO: main loop"));
     // main data processing/transfer loop
     let mut ctx = ModifyContext {
         sensor_channel: None,
