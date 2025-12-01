@@ -33,7 +33,6 @@ use protos::ControlMessageType::{self, *};
 
 use crate::config::{Action::Stop, AppConfig, SharedConfig};
 use crate::config_types::HexdumpLevel;
-use crate::ev::EvTaskCommand;
 use crate::io_uring::Endpoint;
 use crate::io_uring::IoDevice;
 use crate::io_uring::BUFFER_LEN;
@@ -803,6 +802,7 @@ fn check_control_msg_id(expected: protos::ControlMessageType, pkt: &Packet) -> R
     if protos::ControlMessageType::from_i32(message_id).unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) != expected {
         Err(Box::new("Wrong message id")).expect("ControlMessageType")
     }
+    Ok(())
     /*match protos::ControlMessageType::from_i32(message_id).unwrap_or(MESSAGE_UNEXPECTED_MESSAGE)
     {
         expected => {Ok(())}
@@ -812,7 +812,7 @@ fn check_control_msg_id(expected: protos::ControlMessageType, pkt: &Packet) -> R
     }*/
 }
 ///Send a message to HU
-async fn hu_send_msg<A: Endpoint<A>>(mut device: IoDevice<A>, flags: u8, payload: Vec<u8>, statistics: Arc<AtomicUsize>, dmp_level:HexdumpLevel) -> Result<()> {
+async fn hu_send_msg<A: Endpoint<A>>(device: &mut IoDevice<A>, flags: u8, payload: Vec<u8>, statistics: Arc<AtomicUsize>, dmp_level:HexdumpLevel) -> Result<()> {
     let pkt_rsp = Packet {
         channel: 0,
         flags: flags,
@@ -821,7 +821,7 @@ async fn hu_send_msg<A: Endpoint<A>>(mut device: IoDevice<A>, flags: u8, payload
     };
     // sending reply back to the HU
     let _ = pkt_debug(HexdumpLevel::RawOutput, dmp_level, &pkt_rsp).await;
-    pkt_rsp.transmit(&mut device).await.with_context(|| format!("{}: transmit failed", get_name()))?;
+    pkt_rsp.transmit(device).await.with_context(|| format!("{}: transmit failed", get_name()))?;
     // Increment byte counters for statistics
     // fixme: compute final_len for precise stats
     statistics.fetch_add(HEADER_LENGTH + pkt_rsp.payload.len(), Ordering::Relaxed);
@@ -859,7 +859,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     ).await;
     let chk = check_control_msg_id(MESSAGE_VERSION_REQUEST,&pkt);
     match chk {
-        Ok(v) => info!( "{} HU version request received, sending VersionResponse back...",get_name()),
+        Ok(_v) => info!( "{} HU version request received, sending VersionResponse back...",get_name()),
         Err(e) => {error!( "{} HU sent unexpected channel message", get_name()); return Err(e)},
     }
         // build version response for HU
@@ -874,7 +874,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         payload.push( pkt.payload[5]);
         payload.push( ((MessageStatus::STATUS_SUCCESS  as u16) >> 8) as u8);
         payload.push( ((MessageStatus::STATUS_SUCCESS  as u16) & 0xff) as u8);
-        hu_send_msg(device,FRAME_TYPE_FIRST | FRAME_TYPE_LAST, payload,bytes_written,hex_requested).await;
+        hu_send_msg(&mut device,FRAME_TYPE_FIRST | FRAME_TYPE_LAST, payload,bytes_written.clone(),hex_requested).await;
         /*let pkt_rsp = Packet {
         channel: 0,
         flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
@@ -928,7 +928,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     }
     let data = &pkt.payload[2..]; // start of message data, without message_id
     if let Ok(mut msg) = AuthResponse::parse_from_bytes(&data) {
-        if(msg.status() !=  OK)
+        if msg.status() !=  OK
         {
             error!( "{} AuthResponse status is not OK, got {:?}",get_name(), msg.status);
             return Err(Box::new("AuthResponse status is not OK")).expect("AuthResponse.OK");
@@ -952,7 +952,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     let mut payload: Vec<u8>=sdreq.write_to_bytes()?;
     payload.insert(0,((MESSAGE_SERVICE_DISCOVERY_REQUEST as u16) >> 8) as u8);
     payload.insert( 1,((MESSAGE_SERVICE_DISCOVERY_REQUEST as u16) & 0xff) as u8);
-    hu_send_msg(device,ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST, payload,bytes_written,hex_requested).await;
+    hu_send_msg(&mut device,ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST, payload,bytes_written.clone(),hex_requested).await;
 
     info!( "{} Waiting for HU MESSAGE_SERVICE_DISCOVERY_RESPONSE...",get_name());
     let pkt = rxr.recv().await.ok_or("reader channel hung up")?;
