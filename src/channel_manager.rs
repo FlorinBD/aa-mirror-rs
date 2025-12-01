@@ -313,7 +313,7 @@ pub async fn pkt_modify_hook(
                     }
                 }
                 SENSOR_MESSAGE_BATCH => {
-                    if let Ok(mut msg) = SensorBatch::parse_from_bytes(data) {
+                    if let Ok(msg) = SensorBatch::parse_from_bytes(data) {
                         if cfg.video_in_motion {
                             if !msg.driving_status_data.is_empty() {
                                 // forcing status to 0 value
@@ -341,7 +341,7 @@ pub async fn pkt_modify_hook(
             && pkt.payload[1] == 0x06
             && pkt.payload[2] == 0x0A
         {
-            if let Ok(mut msg) = NavigationState::parse_from_bytes(&data) {
+            if let Ok(msg) = NavigationState::parse_from_bytes(&data) {
                 if msg.steps[0].maneuver.type_() == U_TURN_LEFT {
                     msg.steps[0]
                         .maneuver
@@ -372,7 +372,7 @@ pub async fn pkt_modify_hook(
     {
         match protos::MediaMessageId::from_i32(message_id).unwrap_or(MEDIA_MESSAGE_DATA) {
             m @ MEDIA_MESSAGE_CONFIG => {
-                if let Ok(mut msg) = AudioConfig::parse_from_bytes(&data) {
+                if let Ok(msg) = AudioConfig::parse_from_bytes(&data) {
                     // get previous/original value
                     let prev_val = msg.max_unacked();
                     // set new value
@@ -874,7 +874,11 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         payload.push( pkt.payload[5]);
         payload.push( ((MessageStatus::STATUS_SUCCESS  as u16) >> 8) as u8);
         payload.push( ((MessageStatus::STATUS_SUCCESS  as u16) & 0xff) as u8);
-        hu_send_msg(&mut device,FRAME_TYPE_FIRST | FRAME_TYPE_LAST, payload,bytes_written.clone(),hex_requested).await;
+        let wr = hu_send_msg(&mut device,FRAME_TYPE_FIRST | FRAME_TYPE_LAST, payload,bytes_written.clone(),hex_requested).await;
+        match wr {
+            Ok(..)=>(),
+            Err(e) => {error!( "{} Error sending message to HU", get_name()); return Err(e)},
+        }
         /*let pkt_rsp = Packet {
         channel: 0,
         flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
@@ -927,7 +931,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         Err(e) => {error!( "{} HU sent unexpected channel message", get_name()); return Err(e)},
     }
     let data = &pkt.payload[2..]; // start of message data, without message_id
-    if let Ok(mut msg) = AuthResponse::parse_from_bytes(&data) {
+    if let Ok(msg) = AuthResponse::parse_from_bytes(&data) {
         if msg.status() !=  OK
         {
             error!( "{} AuthResponse status is not OK, got {:?}",get_name(), msg.status);
@@ -952,8 +956,11 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     let mut payload: Vec<u8>=sdreq.write_to_bytes()?;
     payload.insert(0,((MESSAGE_SERVICE_DISCOVERY_REQUEST as u16) >> 8) as u8);
     payload.insert( 1,((MESSAGE_SERVICE_DISCOVERY_REQUEST as u16) & 0xff) as u8);
-    hu_send_msg(&mut device,ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST, payload,bytes_written.clone(),hex_requested).await;
-
+    let wr=hu_send_msg(&mut device,ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST, payload,bytes_written.clone(),hex_requested).await;
+    match wr {
+        Ok(..)=>(),
+        Err(e) => {error!( "{} Error sending message to HU", get_name()); return Err(e)},
+    }
     info!( "{} Waiting for HU MESSAGE_SERVICE_DISCOVERY_RESPONSE...",get_name());
     let pkt = rxr.recv().await.ok_or("reader channel hung up")?;
     let _ = pkt_debug(
@@ -968,7 +975,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     }
 
     let data = &pkt.payload[2..]; // start of message data, without message_id
-    if let Ok(mut msg) = ServiceDiscoveryResponse::parse_from_bytes(&data) {
+    if let Ok(msg) = ServiceDiscoveryResponse::parse_from_bytes(&data) {
 
     }
     else {
