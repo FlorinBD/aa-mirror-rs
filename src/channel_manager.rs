@@ -793,7 +793,7 @@ fn ssl_check_failure<T>(res: std::result::Result<T, openssl::ssl::Error>) -> Res
     }
 }
 ///Check if recieved pkt.message_id is expected
-fn check_control_msg_id<T>(expected: protos::ControlMessageType, pkt: &Packet) -> Result<()> {
+fn check_control_msg_id(expected: protos::ControlMessageType, pkt: &Packet) -> Result<()> {
     if pkt.channel != 0
     {
         Err(Box::new("Wrong channel number")).expect("Expected 0")
@@ -801,7 +801,7 @@ fn check_control_msg_id<T>(expected: protos::ControlMessageType, pkt: &Packet) -
     // message_id is the first 2 bytes of payload
     let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
     if protos::ControlMessageType::from_i32(message_id).unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) != expected {
-        Err(Box::new("Wrong message id")).expect("ControlMessageType");
+        Err(Box::new("Wrong message id")).expect("ControlMessageType")
     }
     /*match protos::ControlMessageType::from_i32(message_id).unwrap_or(MESSAGE_UNEXPECTED_MESSAGE)
     {
