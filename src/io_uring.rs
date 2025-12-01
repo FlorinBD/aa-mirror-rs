@@ -302,8 +302,9 @@ pub async fn io_loop(
 
         let mut hu_tcp = None;
         let mut hu_usb = None;
-        let mut dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
+        let mut dhu_listener = None;
         if config.dhu {
+            dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
             info!(
                 "{} 🛰️ DHU TCP server: listening for `Desktop Head Unit` connection...",
                 NAME
@@ -422,6 +423,7 @@ pub async fn io_loop(
             let _ = stream.shutdown(std::net::Shutdown::Both);
 
         }
+
         // set webserver context EV stuff to None
         let mut tx_lock = tx.lock().await;
         *tx_lock = None;

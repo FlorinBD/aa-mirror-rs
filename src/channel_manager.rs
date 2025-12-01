@@ -9,6 +9,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
+use std::fs::File;
+use std::io::BufReader;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -57,6 +59,7 @@ pub const ENCRYPTED: u8 = 1 << 3;
 
 // location for hu_/md_ private keys and certificates:
 const KEYS_PATH: &str = "/etc/aa-mirror-rs";
+const RES_PATH: &str = "/etc/aa-mirror-rs/res";
 
 pub struct ModifyContext {
     sensor_channel: Option<u8>,
@@ -305,7 +308,7 @@ pub async fn pkt_modify_hook(
                                 payload: payload,
                             };
                             *pkt = reply;
-                            
+
                             // return true => send own reply without processing
                             return Ok(true);
                         }
@@ -790,6 +793,38 @@ fn ssl_check_failure<T>(res: std::result::Result<T, openssl::ssl::Error>) -> Res
         Ok(())
     }
 }
+///Check if recieved pkt.message_id is expected
+fn check_control_msg_id<T>(expected: protos::ControlMessageType, pkt: &Packet) -> Result<()> {
+    if pkt.channel != 0
+    {
+        Err(Box::new("Wrong channel number")).expect("Expected 0")
+    }
+    // message_id is the first 2 bytes of payload
+    let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+    match protos::ControlMessageType::from_i32(message_id).unwrap_or(MESSAGE_UNEXPECTED_MESSAGE)
+    {
+        expected => {Ok(())}
+        _ => {
+            Err(Box::new("Wrong message id")).expect(expected);
+        }
+    }
+}
+///Send a message to HU
+async fn hu_send_msg<T>(mut device: &mut IoDevice<A>, flags: u8, payload: Vec<u8>, statistics: Arc<AtomicUsize>, dmp_level:HexdumpLevel) -> Result<()> {
+    let pkt_rsp = Packet {
+        channel: 0,
+        flags: flags,
+        final_length: None,
+        payload: payload,
+    };
+    // sending reply back to the HU
+    let _ = pkt_debug(HexdumpLevel::RawOutput, dmp_level, &pkt_rsp).await;
+    pkt_rsp.transmit(&mut device).await.with_context(|| format!("{}: transmit failed", get_name()))?;
+    // Increment byte counters for statistics
+    // fixme: compute final_len for precise stats
+    statistics.fetch_add(HEADER_LENGTH + pkt_rsp.payload.len(), Ordering::Relaxed);
+    Ok(())
+}
 
 /// main thread doing all packet processing of an endpoint/device
 pub async fn proxy<A: Endpoint<A> + 'static>(
@@ -814,13 +849,17 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     // initial phase: passing version and doing SSL handshake
    // waiting for initial version frame (HU is starting transmission)
     info!( "{} Waiting for HU version request...",get_name());
-        let pkt = rxr.recv().await.ok_or("reader channel hung up")?;
-        let _ = pkt_debug(
-            HexdumpLevel::DecryptedInput, // the packet is not encrypted
-            hex_requested,
-            &pkt,
-        ).await;
-        info!( "{} HU version request recieved, sending VersionResponse back...", get_name());
+    let pkt = rxr.recv().await.ok_or("reader channel hung up")?;
+    let _ = pkt_debug(
+        HexdumpLevel::DecryptedInput, // the packet is not encrypted
+        hex_requested,
+        &pkt,
+    ).await;
+    let chk = check_control_msg_id(MESSAGE_VERSION_REQUEST,&pkt);
+    match chk {
+        Ok(v) => info!( "{} HU version request received, sending VersionResponse back...",get_name()),
+        Err(e) => {error!( "{} HU sent unexpected channel message", get_name()); return Err(e)},
+    }
         // build version response for HU
         //let mut response = VersionResponse::new();
         //let mut payload: Vec<u8> = response.write_to_bytes()?;
@@ -833,7 +872,8 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         payload.push( pkt.payload[5]);
         payload.push( ((MessageStatus::STATUS_SUCCESS  as u16) >> 8) as u8);
         payload.push( ((MessageStatus::STATUS_SUCCESS  as u16) & 0xff) as u8);
-        let pkt_rsp = Packet {
+        hu_send_msg(&mut device,FRAME_TYPE_FIRST | FRAME_TYPE_LAST, payload,bytes_written,hex_requested).await;
+        /*let pkt_rsp = Packet {
         channel: 0,
         flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
         final_length: None,
@@ -844,7 +884,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         pkt_rsp.transmit(&mut device).await.with_context(|| format!("{}: transmit failed", get_name()))?;
         // Increment byte counters for statistics
         // fixme: compute final_len for precise stats
-        bytes_written.fetch_add(HEADER_LENGTH + pkt.payload.len(), Ordering::Relaxed);
+        bytes_written.fetch_add(HEADER_LENGTH + pkt.payload.len(), Ordering::Relaxed);*/
         // doing SSL handshake
         const STEPS: u8 = 2;
         for i in 1..=STEPS {
@@ -872,7 +912,69 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
                 .await
                 .with_context(|| format!("{}: transmit failed", get_name()))?;
         }
+    info!( "{} Waiting for HU MESSAGE_AUTH_COMPLETE...",get_name());
+    let pkt = rxr.recv().await.ok_or("reader channel hung up")?;
+    let _ = pkt_debug(
+        HexdumpLevel::RawInput,
+        hex_requested,
+        &pkt,
+    ).await;
+    let chk = check_control_msg_id(MESSAGE_AUTH_COMPLETE,&pkt);
+    match chk {
+        Ok(v) => info!( "{} MESSAGE_AUTH_COMPLETE received",get_name()),
+        Err(e) => {error!( "{} HU sent unexpected channel message", get_name()); return Err(e)},
+    }
+    let data = &pkt.payload[2..]; // start of message data, without message_id
+    if let Ok(mut msg) = AuthResponse::parse_from_bytes(&data) {
+        if(msg.status.type_() !=  OK)
+        {
+            error!( "{} AuthResponse status is not OK, got {}",get_name(), msg.status.type_());
+            return Err(Box::new("AuthResponse status is not OK")).expect("OK");
+        }
+    }
+    else {
+        error!( "{} AuthResponse couldn't be parsed",get_name());
+        return Err(Box::new("AuthResponse couldn't be parsed")).expect("AuthResponse");
+    }
 
+    info!( "{} Sending ServiceDiscovery request...",get_name());
+    let icon32_buf = BufReader::new(File::open(RES_PATH + "/AndroidIcon32.png").unwrap());
+    let icon64_buf = BufReader::new(File::open(RES_PATH + "/AndroidIcon64.png").unwrap());
+    let icon128_buf = BufReader::new(File::open(RES_PATH + "/AndroidIcon128.png").unwrap());
+    let mut sdreq= ServiceDiscoveryRequest.new();
+    sdreq.set_small_icon(icon32_buf.bytes());
+    sdreq.set_medium_icon(icon64_buf.bytes());
+    sdreq.set_large_icon(icon128_buf.bytes());
+    sdreq.set_label_text("aa-mirror-rs");
+    sdreq.set_device_name("aa-mirror-os");
+    let mut payload: Vec<u8>=sdreq.write_to_bytes()?;
+    payload.insert(0,((MESSAGE_SERVICE_DISCOVERY_REQUEST as u16) >> 8) as u8);
+    payload.insert( 1,((MESSAGE_SERVICE_DISCOVERY_REQUEST as u16) & 0xff) as u8);
+    hu_send_msg(&mut device,ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST, payload,bytes_written,hex_requested).await;
+
+    info!( "{} Waiting for HU MESSAGE_SERVICE_DISCOVERY_RESPONSE...",get_name());
+    let pkt = rxr.recv().await.ok_or("reader channel hung up")?;
+    let _ = pkt_debug(
+        HexdumpLevel::RawInput,
+        hex_requested,
+        &pkt,
+    ).await;
+    let chk = check_control_msg_id(MESSAGE_SERVICE_DISCOVERY_RESPONSE,&pkt);
+    match chk {
+        Ok(v) => info!( "{} MESSAGE_SERVICE_DISCOVERY_RESPONSE received",get_name()),
+        Err(e) => {error!( "{} HU sent unexpected channel message", get_name()); return Err(e)},
+    }
+
+    let data = &pkt.payload[2..]; // start of message data, without message_id
+    if let Ok(mut msg) = ServiceDiscoveryResponse::parse_from_bytes(&data) {
+
+    }
+    else {
+        error!( "{} ServiceDiscoveryResponse couldn't be parsed",get_name());
+        return Err(Box::new("ServiceDiscoveryResponse couldn't be parsed")).expect("ServiceDiscoveryResponse");
+    }
+    info!( "{} ServiceDiscoveryResponse received, TODO more",get_name());
+    return Ok(()).expect("TODO: main loop");
     // main data processing/transfer loop
     let mut ctx = ModifyContext {
         sensor_channel: None,

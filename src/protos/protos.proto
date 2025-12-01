@@ -30,7 +30,13 @@ message VersionResponseOptions {
   optional ConnectionConfiguration connection_configuration = 1;
 }
 
-message AuthResponse { required int32 status = 1; }
+message AuthResponse {
+required Status status = 1;
+  enum Status {
+    OK = 0;
+    FAIL = 1;
+  }
+ }
 
 message ServiceDiscoveryRequest {
   optional bytes small_icon = 1;
