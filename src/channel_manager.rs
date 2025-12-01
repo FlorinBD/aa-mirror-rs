@@ -20,7 +20,7 @@ use tokio_uring::buf::BoundedBuf;
 // protobuf stuff:
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use crate::channel_manager::protos::navigation_maneuver::NavigationType::*;
-use crate::channel_manager::protos::AuthResponse::Status::*;
+use crate::channel_manager::protos::Auth_Response::Status::*;
 use crate::channel_manager::protos::Config as AudioConfig;
 use crate::channel_manager::protos::*;
 use crate::channel_manager::sensor_source_service::Sensor;
@@ -806,7 +806,7 @@ fn check_control_msg_id<T>(expected: protos::ControlMessageType, pkt: &Packet) -
     {
         expected => {Ok(())}
         _ => {
-            Err(Box::new("Wrong message id")).expect("ControlMessageType");
+            Err(Box::new("Wrong message id")).expect("ControlMessageType")
         }
     }
 }
@@ -929,7 +929,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     if let Ok(mut msg) = AuthResponse::parse_from_bytes(&data) {
         if(msg.status() !=  OK)
         {
-            error!( "{} AuthResponse status is not OK, got {}",get_name(), msg.status);
+            error!( "{} AuthResponse status is not OK, got {:?}",get_name(), msg.status);
             return Err(Box::new("AuthResponse status is not OK")).expect("AuthResponse.OK");
         }
     }
@@ -942,7 +942,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     let icon32_buf = BufReader::new(File::open(format!("{}{}", RES_PATH, "/AndroidIcon32.png")).unwrap());
     let icon64_buf = BufReader::new(File::open(format!("{}{}",RES_PATH , "/AndroidIcon64.png")).unwrap());
     let icon128_buf = BufReader::new(File::open(format!("{}{}",RES_PATH , "/AndroidIcon128.png")).unwrap());
-    let mut sdreq= ServiceDiscoveryRequest.new();
+    let mut sdreq= ServiceDiscoveryRequest::new();
     sdreq.set_small_icon(icon32_buf.bytes());
     sdreq.set_medium_icon(icon64_buf.bytes());
     sdreq.set_large_icon(icon128_buf.bytes());
