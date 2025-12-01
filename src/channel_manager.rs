@@ -313,7 +313,7 @@ pub async fn pkt_modify_hook(
                     }
                 }
                 SENSOR_MESSAGE_BATCH => {
-                    if let Ok(msg) = SensorBatch::parse_from_bytes(data) {
+                    if let Ok(mut msg) = SensorBatch::parse_from_bytes(data) {
                         if cfg.video_in_motion {
                             if !msg.driving_status_data.is_empty() {
                                 // forcing status to 0 value
@@ -341,7 +341,7 @@ pub async fn pkt_modify_hook(
             && pkt.payload[1] == 0x06
             && pkt.payload[2] == 0x0A
         {
-            if let Ok(msg) = NavigationState::parse_from_bytes(&data) {
+            if let Ok(mut msg) = NavigationState::parse_from_bytes(&data) {
                 if msg.steps[0].maneuver.type_() == U_TURN_LEFT {
                     msg.steps[0]
                         .maneuver
@@ -372,7 +372,7 @@ pub async fn pkt_modify_hook(
     {
         match protos::MediaMessageId::from_i32(message_id).unwrap_or(MEDIA_MESSAGE_DATA) {
             m @ MEDIA_MESSAGE_CONFIG => {
-                if let Ok(msg) = AudioConfig::parse_from_bytes(&data) {
+                if let Ok(mut msg) = AudioConfig::parse_from_bytes(&data) {
                     // get previous/original value
                     let prev_val = msg.max_unacked();
                     // set new value
