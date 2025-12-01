@@ -20,7 +20,7 @@ use tokio_uring::buf::BoundedBuf;
 // protobuf stuff:
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use crate::channel_manager::protos::navigation_maneuver::NavigationType::*;
-use crate::channel_manager::protos::Auth_Response::Status::*;
+use crate::channel_manager::protos::auth_response::Status::*;
 use crate::channel_manager::protos::Config as AudioConfig;
 use crate::channel_manager::protos::*;
 use crate::channel_manager::sensor_source_service::Sensor;
@@ -943,11 +943,11 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     let icon64_buf = BufReader::new(File::open(format!("{}{}",RES_PATH , "/AndroidIcon64.png")).unwrap());
     let icon128_buf = BufReader::new(File::open(format!("{}{}",RES_PATH , "/AndroidIcon128.png")).unwrap());
     let mut sdreq= ServiceDiscoveryRequest::new();
-    sdreq.set_small_icon(icon32_buf.bytes());
-    sdreq.set_medium_icon(icon64_buf.bytes());
-    sdreq.set_large_icon(icon128_buf.bytes());
-    sdreq.set_label_text("aa-mirror-rs");
-    sdreq.set_device_name("aa-mirror-os");
+    sdreq.set_small_icon(icon32_buf.buffer());
+    sdreq.set_medium_icon(icon64_buf.buffer());
+    sdreq.set_large_icon(icon128_buf.buffer());
+    sdreq.set_label_text("aa-mirror-rs".to_owned());
+    sdreq.set_device_name("aa-mirror-os".to_owned());
     let mut payload: Vec<u8>=sdreq.write_to_bytes()?;
     payload.insert(0,((MESSAGE_SERVICE_DISCOVERY_REQUEST as u16) >> 8) as u8);
     payload.insert( 1,((MESSAGE_SERVICE_DISCOVERY_REQUEST as u16) & 0xff) as u8);
