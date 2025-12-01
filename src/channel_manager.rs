@@ -800,13 +800,16 @@ fn check_control_msg_id<T>(expected: protos::ControlMessageType, pkt: &Packet) -
     }
     // message_id is the first 2 bytes of payload
     let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-    match protos::ControlMessageType::from_i32(message_id).unwrap_or(MESSAGE_UNEXPECTED_MESSAGE)
+    if protos::ControlMessageType::from_i32(message_id).unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) != expected {
+        Err(Box::new("Wrong message id")).expect("ControlMessageType");
+    }
+    /*match protos::ControlMessageType::from_i32(message_id).unwrap_or(MESSAGE_UNEXPECTED_MESSAGE)
     {
         expected => {Ok(())}
         _ => {
             Err(Box::new("Wrong message id")).expect("ControlMessageType")
         }
-    }
+    }*/
 }
 ///Send a message to HU
 async fn hu_send_msg<A: Endpoint<A>>(mut device: IoDevice<A>, flags: u8, payload: Vec<u8>, statistics: Arc<AtomicUsize>, dmp_level:HexdumpLevel) -> Result<()> {
@@ -973,7 +976,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         return Err(Box::new("ServiceDiscoveryResponse couldn't be parsed")).expect("ServiceDiscoveryResponse");
     }
     info!( "{} ServiceDiscoveryResponse received, TODO more",get_name());
-    return Ok(Ok(()).expect("TODO: main loop"));
+    return Err(Box::new("proxy main loop ended ok")).expect("TODO");
     // main data processing/transfer loop
     let mut ctx = ModifyContext {
         sensor_channel: None,
