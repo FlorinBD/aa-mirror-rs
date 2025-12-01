@@ -811,7 +811,7 @@ fn check_control_msg_id<T>(expected: protos::ControlMessageType, pkt: &Packet) -
     }
 }
 ///Send a message to HU
-async fn hu_send_msg<A>(mut device: IoDevice<A>, flags: u8, payload: Vec<u8>, statistics: Arc<AtomicUsize>, dmp_level:HexdumpLevel) -> Result<()> {
+async fn hu_send_msg<A: Endpoint<A>>(mut device: IoDevice<A>, flags: u8, payload: Vec<u8>, statistics: Arc<AtomicUsize>, dmp_level:HexdumpLevel) -> Result<()> {
     let pkt_rsp = Packet {
         channel: 0,
         flags: flags,
@@ -873,7 +873,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         payload.push( pkt.payload[5]);
         payload.push( ((MessageStatus::STATUS_SUCCESS  as u16) >> 8) as u8);
         payload.push( ((MessageStatus::STATUS_SUCCESS  as u16) & 0xff) as u8);
-        hu_send_msg(&mut device,FRAME_TYPE_FIRST | FRAME_TYPE_LAST, payload,bytes_written,hex_requested).await;
+        hu_send_msg(device,FRAME_TYPE_FIRST | FRAME_TYPE_LAST, payload,bytes_written,hex_requested).await;
         /*let pkt_rsp = Packet {
         channel: 0,
         flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
@@ -927,10 +927,10 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     }
     let data = &pkt.payload[2..]; // start of message data, without message_id
     if let Ok(mut msg) = AuthResponse::parse_from_bytes(&data) {
-        if(msg.status_() !=  AuthResponse::Status::OK)
+        if(msg.status() !=  OK)
         {
             error!( "{} AuthResponse status is not OK, got {}",get_name(), msg.status);
-            return Err(Box::new("AuthResponse status is not OK")).expect("OK");
+            return Err(Box::new("AuthResponse status is not OK")).expect("AuthResponse.OK");
         }
     }
     else {
@@ -951,7 +951,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     let mut payload: Vec<u8>=sdreq.write_to_bytes()?;
     payload.insert(0,((MESSAGE_SERVICE_DISCOVERY_REQUEST as u16) >> 8) as u8);
     payload.insert( 1,((MESSAGE_SERVICE_DISCOVERY_REQUEST as u16) & 0xff) as u8);
-    hu_send_msg(&mut device,ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST, payload,bytes_written,hex_requested).await;
+    hu_send_msg(device,ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST, payload,bytes_written,hex_requested).await;
 
     info!( "{} Waiting for HU MESSAGE_SERVICE_DISCOVERY_RESPONSE...",get_name());
     let pkt = rxr.recv().await.ok_or("reader channel hung up")?;
