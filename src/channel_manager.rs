@@ -679,7 +679,7 @@ async fn ssl_builder() -> Result<Ssl> {
     ctx_builder.set_ca_file(format!("{KEYS_PATH}/galroot_cert.pem"))?;
 
     ctx_builder.set_min_proto_version(Some(openssl::ssl::SslVersion::TLS1_2))?;
-    ctx_builder.set_options(openssl::ssl::SslOptions::NO_TLSV1_3);
+    ctx_builder.set_options(openssl::ssl::SslOptions::NO_TLSV1_3 | openssl::ssl::SslOptions::NO_SSLV2 | openssl::ssl::SslOptions::NO_SSLV3);
 
     let openssl_ctx = ctx_builder.build();
     let mut ssl = Ssl::new(&openssl_ctx)?;
