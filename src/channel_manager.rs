@@ -935,22 +935,12 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     let icon32 = std::fs::read(format!("{}{}", RES_PATH, "/AndroidIcon32.png"));
     let icon64 = std::fs::read(format!("{}{}", RES_PATH, "/AndroidIcon64.png"));
     let icon128 = std::fs::read(format!("{}{}", RES_PATH, "/AndroidIcon128.png"));
-    //OLD WAY
-    /*let mut sdreq= ServiceDiscoveryRequest::new();
+    let mut sdreq= ServiceDiscoveryRequest::new();
     sdreq.set_small_icon(icon32.unwrap());
     sdreq.set_medium_icon(icon64.unwrap());
     sdreq.set_large_icon(icon128.unwrap());
     sdreq.set_label_text("aa-mirror-rs".to_owned());
-    sdreq.set_device_name("aa-mirror-os".to_owned());*/
-    //NEW WAY:
-    let mut sdreq= protos!(ServiceDiscoveryRequest
-    {
-        small_icon = icon32.unwrap(),
-        medium_icon = icon64.unwrap(),
-        large_icon = icon128.unwrap(),
-        label_text = "aa-mirror-rs".to_owned(),
-        device_name = "aa-mirror-os".to_owned(),
-    });
+    sdreq.set_device_name("aa-mirror-os".to_owned());
     let mut payload: Vec<u8>=sdreq.write_to_bytes()?;
     payload.insert(0,((MESSAGE_SERVICE_DISCOVERY_REQUEST as u16) >> 8) as u8);
     payload.insert( 1,((MESSAGE_SERVICE_DISCOVERY_REQUEST as u16) & 0xff) as u8);
