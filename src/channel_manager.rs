@@ -943,7 +943,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     sdreq.set_label_text("aa-mirror-rs".to_owned());
     sdreq.set_device_name("aa-mirror-os".to_owned());*/
     //NEW WAY:
-    let mut sdreq= proto!(ServiceDiscoveryRequest
+    let mut sdreq= protos!(ServiceDiscoveryRequest
     {
         small_icon = icon32.unwrap(),
         medium_icon = icon64.unwrap(),
