@@ -31,6 +31,7 @@ use protobuf::text_format::print_to_string_pretty;
 use protobuf::{Enum, EnumOrUnknown, Message, MessageDyn};
 use protos::ControlMessageType::{self, *};
 use crate::aa_services;
+use crate::aa_services::{MediaSinkService, MediaSourceService, IService, ServiceType};
 use crate::config::{Action::Stop, AppConfig, SharedConfig};
 use crate::config_types::HexdumpLevel;
 use crate::io_uring::Endpoint;
@@ -979,9 +980,10 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     if let Ok(msg) = ServiceDiscoveryResponse::parse_from_bytes(&data) {
         //msg.services.len();
         for (idx,proto_srv) in msg.services.iter().enumerate() {
-            let mut srv:aa_services::MediaSinkService(aa_services::ServiceType::MediaSink);
+            let mut srv = MediaSinkService{sid:ServiceType::MediaSink};
             aa_sids.insert(idx,srv);
         }
+        aa_sids[0].handle_hu_msg("plm");
     }
     else {
         error!( "{} ServiceDiscoveryResponse couldn't be parsed",get_name());

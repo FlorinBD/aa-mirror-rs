@@ -46,7 +46,7 @@ pub trait IService {
 }
 
 pub struct MediaSinkService {
-    pub(crate) sid: ServiceType,
+    pub sid: ServiceType,
 }
 
 impl IService for MediaSinkService {
