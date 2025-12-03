@@ -32,6 +32,7 @@ use protobuf::{Enum, EnumOrUnknown, Message, MessageDyn};
 use protos::ControlMessageType::{self, *};
 use crate::aoa::AccessoryDeviceInfo;
 
+#[derive(Copy, Clone)]
 pub enum ServiceType
 {
     InputSource,
@@ -74,6 +75,6 @@ impl IService for MediaSourceService {
 
     fn get_service_type(&self)->ServiceType
     {
-        return Self.sid;
+        return self.sid;
     }
 }

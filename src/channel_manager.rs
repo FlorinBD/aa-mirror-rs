@@ -1007,14 +1007,31 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         {
 
         }
-        else {
+        else { //Default channel messages
             let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-            match message_id {
-                i32::from(MESSAGE_PING_REQUEST)=>{
+            let control = protos::ControlMessageType::from_i32(message_id);
+            match control.unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) {
+                MESSAGE_PING_REQUEST =>{
+                    let data = &pkt.payload[2..]; // start of message data, without message_id
+                    if let Ok(msg) = PingRequest::parse_from_bytes(&data) {
+                        let mut pingrsp= PingResponse::new();
+                        pingrsp.set_timestamp(msg.timestamp());
+                        let mut payload: Vec<u8>=pingrsp.write_to_bytes()?;
+                        payload.insert(0,((MESSAGE_PING_RESPONSE as u16) >> 8) as u8);
+                        payload.insert( 1,((MESSAGE_PING_RESPONSE as u16) & 0xff) as u8);
+                        let wr=hu_send_msg(&mut device,ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST, payload, &mut mem_buf, &mut server, bytes_written.clone(),hex_requested).await;
+                        match wr {
+                            Ok(..)=>(),
+                            Err(e) => {error!( "{} Error sending message to HU", get_name()); return Err(e)},
+                        }
+                    }
+                    else {
+                        error!( "{} PingRequest couldn't be parsed",get_name());
+                    }
 
                 }
                 _ =>{ info!( "{} Unknown message ID: {} received for default channel",get_name(), message_id);}
-            }
+            };
         }
 
     }
