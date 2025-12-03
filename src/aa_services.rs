@@ -96,6 +96,6 @@ impl IService for MediaSourceService {
     }
     fn get_service_type(&self)->ServiceType
     {
-        return self.id.sid;
+        return Self.id.sid;
     }
 }
