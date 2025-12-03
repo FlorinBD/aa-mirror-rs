@@ -30,10 +30,7 @@ use crate::channel_manager::SensorType::*;
 use protobuf::text_format::print_to_string_pretty;
 use protobuf::{Enum, EnumOrUnknown, Message, MessageDyn};
 use protos::ControlMessageType::{self, *};
-
-use crate::aa_services::{
-    MediaSinkService,MediaSourceService,ServiceType,IService,
-};
+use crate::aa_services;
 use crate::config::{Action::Stop, AppConfig, SharedConfig};
 use crate::config_types::HexdumpLevel;
 use crate::io_uring::Endpoint;
@@ -980,9 +977,10 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     let mut aa_sids:Vec<dyn IService> = Vec::new();
     let data = &pkt.payload[2..]; // start of message data, without message_id
     if let Ok(msg) = ServiceDiscoveryResponse::parse_from_bytes(&data) {
-        msg.services.len();
-        for (idx,srv) in msg.services.iter().enumerate() {
-            aa_sids.insert(idx,srv.id);
+        //msg.services.len();
+        for (idx,proto_srv) in msg.services.iter().enumerate() {
+            let mut srv:aa_services::MediaSinkService(aa_services::ServiceType::MediaSink);
+            aa_sids.insert(idx,srv);
         }
     }
     else {
