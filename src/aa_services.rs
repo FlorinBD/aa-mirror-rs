@@ -45,7 +45,7 @@ pub trait IService {
     fn handle_hu_msg(&self, a: &str);
     fn get_service_type(&self)->ServiceType;
 }
-
+#[derive(Copy, Clone)]
 pub struct MediaSinkService {
     pub sid: ServiceType,
 }
@@ -62,7 +62,7 @@ impl IService for MediaSinkService {
         return self.sid;
     }
 }
-
+#[derive(Copy, Clone)]
 pub struct MediaSourceService {
     pub(crate) sid: ServiceType,
 }
