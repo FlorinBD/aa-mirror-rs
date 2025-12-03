@@ -41,8 +41,8 @@ pub enum ServiceType
     SensorSource,
     VendorExtension,
 }
-pub trait IService {
-    fn handle_hu_msg(&self, a: &str);
+pub trait IService: Sized{
+    fn handle_hu_msg(&self, a: i32);
     fn get_service_type(&self)->ServiceType;
 }
 #[derive(Copy, Clone)]
@@ -51,7 +51,6 @@ pub struct MediaSinkService {
 }
 
 impl IService for MediaSinkService {
-
     fn handle_hu_msg(&self, a: &str)
     {
 

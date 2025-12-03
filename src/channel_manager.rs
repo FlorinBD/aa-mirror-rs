@@ -980,10 +980,13 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     if let Ok(msg) = ServiceDiscoveryResponse::parse_from_bytes(&data) {
         //msg.services.len();
         for (idx,proto_srv) in msg.services.iter().enumerate() {
-            let mut srv = MediaSinkService{sid:ServiceType::MediaSink};
-            aa_sids.insert(idx,srv.cloned());
+            let mut srv :MediaSinkService;
+            aa_sids.insert(idx,srv);
         }
-        aa_sids[0].handle_hu_msg("plm");
+        //aa_sids[0].handle_hu_msg(4);
+        if let Some(ch) = aa_sids[0] {
+            ch.handle_hu_msg(4);
+        }
     }
     else {
         error!( "{} ServiceDiscoveryResponse couldn't be parsed",get_name());
