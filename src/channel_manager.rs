@@ -960,61 +960,63 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         Err(e) => {error!( "{} Error sending message to HU", get_name()); return Err(e)},
     }
     info!( "{} Waiting for HU MESSAGE_SERVICE_DISCOVERY_RESPONSE...",get_name());
-    let pkt = rxr.recv().await.ok_or("reader channel hung up")?;
-    let _ = pkt_debug(
-        HexdumpLevel::RawInput,
-        hex_requested,
-        &pkt,
-    ).await;
+    let mut pkt = rxr.recv().await.ok_or("reader channel hung up")?;
+    match pkt.decrypt_payload(&mut mem_buf, &mut server).await {
+        Ok(_) => {
+            let _ = pkt_debug(
+                HexdumpLevel::DecryptedInput,
+                hex_requested,
+                &pkt,
+            ).await;
+
+        }
+        Err(e) => {error!( "{} decrypt_payload error: {:?}", get_name(), e); return Err(e)},
+    }
     let chk = check_control_msg_id(MESSAGE_SERVICE_DISCOVERY_RESPONSE,&pkt);
     match chk {
         Ok(v) => info!( "{} MESSAGE_SERVICE_DISCOVERY_RESPONSE received",get_name()),
         Err(e) => {error!( "{} HU sent unexpected channel message", get_name()); return Err(e)},
     }
-
+    let mut aa_sids = Vec::new();
     let data = &pkt.payload[2..]; // start of message data, without message_id
     if let Ok(msg) = ServiceDiscoveryResponse::parse_from_bytes(&data) {
-
+        msg.services.len();
+        for srv in msg.services.iter() {
+            aa_sids.insert()
+        }
     }
     else {
         error!( "{} ServiceDiscoveryResponse couldn't be parsed",get_name());
         return Err(Box::new("ServiceDiscoveryResponse couldn't be parsed")).expect("ServiceDiscoveryResponse");
     }
-    info!( "{} ServiceDiscoveryResponse received, TODO more",get_name());
-    return Err(Box::new("proxy main loop ended ok")).expect("TODO");
-    // main data processing/transfer loop
-    let mut ctx = ModifyContext {
-        sensor_channel: None,
-        nav_channel: None,
-        audio_channels: vec![],
-    };
+    info!( "{} ServiceDiscoveryResponse , starting AA Mirror loop",get_name());
     loop {
-        tokio::select! {
-        
-        // handling input data from the reader thread
-        Some(mut pkt) = rxr.recv() => {
-            let _ = pkt_debug(HexdumpLevel::RawInput, hex_requested, &pkt).await;
-            match pkt.decrypt_payload(&mut mem_buf, &mut server).await {
-                Ok(_) => {
-                    let _ = pkt_modify_hook(
-                        &mut pkt,
-                        &mut ctx,
-                        sensor_channel.clone(),
-                        &cfg,
-                        &mut config,
-                    )
-                    .await?;
-                    let _ = pkt_debug(
-                        HexdumpLevel::DecryptedInput,
-                        hex_requested,
-                        &pkt,
-                    )
-                    .await;
-                    pkt.transmit(&mut device).await.with_context(|| format!("{}: transmit failed", get_name()))?;
+        let mut pkt = rxr.recv().await.ok_or("reader channel hung up")?;
+        match pkt.decrypt_payload(&mut mem_buf, &mut server).await {
+            Ok(_) => {
+                let _ = pkt_debug(
+                    HexdumpLevel::DecryptedInput,
+                    hex_requested,
+                    &pkt,
+                ).await;
+
+            }
+            Err(e) => {error!( "{} decrypt_payload error: {:?}", get_name(), e); return Err(e)},
+        }
+        if pkt.channel !=0
+        {
+
+        }
+        else {
+            let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+            match message_id {
+                MESSAGE_PING_REQUEST=>{
+
                 }
-                Err(e) => error!("decrypt_payload: {:?}", e),
+                _ =>{ info!( "{} Unknown message ID: {} received for default channel",get_name(), message_id);}
             }
         }
-        }
+
     }
+    return Err(Box::new("proxy main loop ended ok")).expect("TODO");
 }

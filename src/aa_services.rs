@@ -41,17 +41,61 @@ pub enum ServiceType
     VendorExtension,
 }
 pub trait IService {
+    fn new(tp:ServiceType) -> Self;
     fn handle_hu_msg(&self, a: &str);
+    fn get_channel_id(&self)->u8;
+    fn get_service_type(&self)->ServiceType;
 }
 
-pub struct ServiceChannel {
+pub struct ServiceProps {
     pub(crate) channel_id: u8,
     pub(crate) sid: ServiceType,
 }
 
-impl IService for ServiceChannel {
+pub struct MediaSinkService {
+    id: ServiceProps,
+}
+
+impl IService for MediaSinkService {
+    fn new(tp: ServiceType) -> Self {
+        Self.id.sid=tp;
+        !()
+    }
+
     fn handle_hu_msg(&self, a: &str)
     {
 
+    }
+    fn get_channel_id(&self)->u8
+    {
+        return self.id.channel_id;
+    }
+
+    fn get_service_type(&self)->ServiceType
+    {
+        return self.id.sid;
+    }
+}
+
+pub struct MediaSourceService {
+    pub(crate) id: ServiceProps,
+}
+
+impl IService for MediaSourceService {
+    fn new(tp: ServiceType) -> Self {
+        Self.id.sid=tp;
+        !()
+    }
+    fn handle_hu_msg(&self, a: &str)
+    {
+
+    }
+    fn get_channel_id(&self)->u8
+    {
+        return self.id.channel_id;
+    }
+    fn get_service_type(&self)->ServiceType
+    {
+        return self.id.sid;
     }
 }
