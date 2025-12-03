@@ -32,7 +32,7 @@ use protobuf::{Enum, EnumOrUnknown, Message, MessageDyn};
 use protos::ControlMessageType::{self, *};
 
 use crate::aa_services::{
-    ServiceChannel,ServiceType,
+    MediaSinkService,MediaSourceService,ServiceType,IService,
 };
 use crate::config::{Action::Stop, AppConfig, SharedConfig};
 use crate::config_types::HexdumpLevel;
@@ -977,7 +977,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         Ok(v) => info!( "{} MESSAGE_SERVICE_DISCOVERY_RESPONSE received",get_name()),
         Err(e) => {error!( "{} HU sent unexpected channel message", get_name()); return Err(e)},
     }
-    let mut aa_sids:Vec<Box<dyn A>> = Vec::new();
+    let mut aa_sids:Vec<Box<dyn IService>> = Vec::new();
     let data = &pkt.payload[2..]; // start of message data, without message_id
     if let Ok(msg) = ServiceDiscoveryResponse::parse_from_bytes(&data) {
         msg.services.len();
