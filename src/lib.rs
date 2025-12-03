@@ -1,4 +1,5 @@
 pub mod aoa;
+pub mod aa_services;
 pub mod bluetooth;
 pub mod btle;
 pub mod config;

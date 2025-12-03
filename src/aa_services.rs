@@ -1,3 +1,4 @@
+//! This crate provides service implementation for  [Android Open Accessory Protocol 1.0](https://source.android.com/devices/accessories/aoa)
 use log::log_enabled;
 use simplelog::*;
 use std::collections::VecDeque;
@@ -7,6 +8,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
+use nusb::DeviceInfo;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -28,7 +30,28 @@ use crate::aa_services::SensorType::*;
 use protobuf::text_format::print_to_string_pretty;
 use protobuf::{Enum, EnumOrUnknown, Message, MessageDyn};
 use protos::ControlMessageType::{self, *};
+use crate::aoa::AccessoryDeviceInfo;
 
-trait IService {
+pub enum ServiceType
+{
+    InputSource,
+    MediaSink,
+    MediaSource,
+    SensorSource,
+    VendorExtension,
+}
+pub trait IService {
     fn handle_hu_msg(&self, a: &str);
+}
+
+pub struct ServiceChannel {
+    pub(crate) channel_id: u8,
+    pub(crate) sid: ServiceType,
+}
+
+impl IService for ServiceChannel {
+    fn handle_hu_msg(&self, a: &str)
+    {
+
+    }
 }

@@ -31,6 +31,9 @@ use protobuf::text_format::print_to_string_pretty;
 use protobuf::{Enum, EnumOrUnknown, Message, MessageDyn};
 use protos::ControlMessageType::{self, *};
 
+use crate::aa_services::{
+    ServiceChannel,ServiceType,
+};
 use crate::config::{Action::Stop, AppConfig, SharedConfig};
 use crate::config_types::HexdumpLevel;
 use crate::io_uring::Endpoint;
@@ -679,7 +682,7 @@ async fn ssl_builder() -> Result<Ssl> {
     ctx_builder.set_ca_file(format!("{KEYS_PATH}/galroot_cert.pem"))?;
 
     ctx_builder.set_min_proto_version(Some(openssl::ssl::SslVersion::TLS1_2))?;
-    ctx_builder.set_options(openssl::ssl::SslOptions::NO_TLSV1_3 | openssl::ssl::SslOptions::NO_SSLV2 | openssl::ssl::SslOptions::NO_SSLV3);
+    ctx_builder.set_options(openssl::ssl::SslOptions::NO_TLSV1_3);
 
     let openssl_ctx = ctx_builder.build();
     let mut ssl = Ssl::new(&openssl_ctx)?;
@@ -812,13 +815,20 @@ fn check_control_msg_id(expected: protos::ControlMessageType, pkt: &Packet) -> R
     }*/
 }
 ///Send a message to HU
-async fn hu_send_msg<A: Endpoint<A>>(device: &mut IoDevice<A>, flags: u8, payload: Vec<u8>, statistics: Arc<AtomicUsize>, dmp_level:HexdumpLevel) -> Result<()> {
-    let pkt_rsp = Packet {
+async fn hu_send_msg<A: Endpoint<A>>(device: &mut IoDevice<A>, flags: u8, payload: Vec<u8>, ssl_buf: &mut SslMemBuf, ssl_stream: &mut openssl::ssl::SslStream<SslMemBuf>, statistics: Arc<AtomicUsize>, dmp_level:HexdumpLevel) -> Result<()> {
+    let mut pkt_rsp = Packet {
         channel: 0,
         flags: flags,
         final_length: None,
         payload: payload,
     };
+    if flags & ENCRYPTED !=0
+    {
+        pkt_rsp.encrypt_payload(ssl_buf, ssl_stream).await?;
+    }
+    else {
+
+    }
     // sending reply back to the HU
     let _ = pkt_debug(HexdumpLevel::RawOutput, dmp_level, &pkt_rsp).await;
     pkt_rsp.transmit(device).await.with_context(|| format!("{}: transmit failed", get_name()))?;
@@ -874,7 +884,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         payload.push( pkt.payload[5]);
         payload.push( ((MessageStatus::STATUS_SUCCESS  as u16) >> 8) as u8);
         payload.push( ((MessageStatus::STATUS_SUCCESS  as u16) & 0xff) as u8);
-        let wr = hu_send_msg(&mut device,FRAME_TYPE_FIRST | FRAME_TYPE_LAST, payload,bytes_written.clone(),hex_requested).await;
+        let wr = hu_send_msg(&mut device,FRAME_TYPE_FIRST | FRAME_TYPE_LAST, payload, &mut mem_buf, &mut server, bytes_written.clone(),hex_requested).await;
         match wr {
             Ok(..)=>(),
             Err(e) => {error!( "{} Error sending message to HU", get_name()); return Err(e)},
@@ -944,7 +954,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     let mut payload: Vec<u8>=sdreq.write_to_bytes()?;
     payload.insert(0,((MESSAGE_SERVICE_DISCOVERY_REQUEST as u16) >> 8) as u8);
     payload.insert( 1,((MESSAGE_SERVICE_DISCOVERY_REQUEST as u16) & 0xff) as u8);
-    let wr=hu_send_msg(&mut device,ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST, payload,bytes_written.clone(),hex_requested).await;
+    let wr=hu_send_msg(&mut device,ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST, payload, &mut mem_buf, &mut server, bytes_written.clone(),hex_requested).await;
     match wr {
         Ok(..)=>(),
         Err(e) => {error!( "{} Error sending message to HU", get_name()); return Err(e)},
