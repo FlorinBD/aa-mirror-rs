@@ -33,7 +33,7 @@ use protos::ControlMessageType::{self, *};
 use crate::aoa::AccessoryDeviceInfo;
 use crate::channel_manager::Packet;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub enum ServiceType
 {
     InputSource,
@@ -99,14 +99,19 @@ impl MediaSinkService {
 impl IService for MediaSinkService {
     fn handle_hu_msg(&self, pkt: &Packet)
     {
-        let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].into().expect("Error converting")).into();
-        let control = protos::MediaMessageId::from_i32(message_id);
-        match control.unwrap() {
-            MEDIA_MESSAGE_VIDEO_FOCUS_NOTIFICATION => {
-                info!("{} Received {} message", self.sid.to_string(), control);
+        if let Ok(id)=pkt.payload[0..=1].try_into()
+        {
+            let message_id: i32 = u16::from_be_bytes(id).into();
+
+            let control = protos::MediaMessageId::from_i32(message_id);
+            match control.unwrap() {
+                MEDIA_MESSAGE_VIDEO_FOCUS_NOTIFICATION => {
+                    info!("{} Received {} message", self.sid.to_string(), control.to_string());
+                }
+                _ =>{ error!( "{} Unhandled message ID: {} received",self.sid.to_string(), control.to_string());}
             }
-            _ =>{ error!( "{} Unhandled message ID: {} received",self.sid.to_string(), control);}
         }
+
     }
 
     fn get_service_type(&self)->ServiceType
