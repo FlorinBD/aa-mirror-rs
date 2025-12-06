@@ -184,7 +184,7 @@ async fn flatten<T>(handle: &mut JoinHandle<Result<T>>, dbg_info:String) -> Resu
     match handle.await {
         Ok(Ok(result)) => Ok(result),
         Ok(Err(err)) => Err(err),
-        Err(_) => Err(("handling failed for {}",dbg_info).into()),
+        Err(_) => Err(format!("handling failed for {}", dbg_info).into()),
     }
 }
 
@@ -402,7 +402,7 @@ pub async fn io_loop(
         // Stop as soon as one of them errors
         let res = tokio::try_join!(
             flatten(&mut tsk_hu_read, "tsk_hu_read".into()),
-            flatten(&mut tsk_io_proxy, "tsk_io_proxy".itno()),
+            flatten(&mut tsk_io_proxy, "tsk_io_proxy".into()),
             flatten(&mut tsk_monitor,"tsk_monitor".into())
         );
 
