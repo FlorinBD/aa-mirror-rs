@@ -980,7 +980,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     if let Ok(msg) = ServiceDiscoveryResponse::parse_from_bytes(&data) {
         //msg.services.len();
         for (idx,proto_srv) in msg.services.iter().enumerate() {
-            if proto_srv.hasMediaSinkService()
+            if !proto_srv.media_sink_service.is_empty()
             {
                 let mut srv =MediaSinkService::new();
                 aa_sids.insert(idx,Some(Box::new(srv)));
