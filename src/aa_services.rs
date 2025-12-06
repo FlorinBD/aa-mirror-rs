@@ -52,14 +52,23 @@ impl fmt::Display for ServiceType {
 
 impl fmt::Display for protos::MediaMessageId {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self)
-        /*match *self {
-            protos::MediaMessageId::Monday => write!(f, "Monday"),
-            protos::MediaMessageId::Tuesday => write!(f, "Tuesday"),
-            protos::MediaMessageId::Wednesday => write!(f, "Wednesday"),
-            protos::MediaMessageId::Thursday => write!(f, "Thursday"),
-            protos::MediaMessageId::Friday => write!(f, "Friday"),
-        }*/
+        match *self {
+            protos::MediaMessageId::MEDIA_MESSAGE_DATA => write!(f, "MEDIA_MESSAGE_DATA"),
+            protos::MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG => write!(f, "MEDIA_MESSAGE_CODEC_CONFIG"),
+            protos::MediaMessageId::MEDIA_MESSAGE_SETUP => write!(f, "MEDIA_MESSAGE_SETUP"),
+            protos::MediaMessageId::MEDIA_MESSAGE_START => write!(f, "MEDIA_MESSAGE_START"),
+            protos::MediaMessageId::MEDIA_MESSAGE_STOP => write!(f, "MEDIA_MESSAGE_STOP"),
+            protos::MediaMessageId::MEDIA_MESSAGE_CONFIG => write!(f, "MEDIA_MESSAGE_CONFIG"),
+            protos::MediaMessageId::MEDIA_MESSAGE_ACK => write!(f, "MEDIA_MESSAGE_ACK"),
+            protos::MediaMessageId::MEDIA_MESSAGE_MICROPHONE_REQUEST => write!(f, "MEDIA_MESSAGE_MICROPHONE_REQUEST"),
+            protos::MediaMessageId::MEDIA_MESSAGE_MICROPHONE_RESPONSE => write!(f, "MEDIA_MESSAGE_MICROPHONE_RESPONSE"),
+            protos::MediaMessageId::MEDIA_MESSAGE_VIDEO_FOCUS_REQUEST => write!(f, "MEDIA_MESSAGE_VIDEO_FOCUS_REQUEST"),
+            protos::MediaMessageId::MEDIA_MESSAGE_VIDEO_FOCUS_NOTIFICATION => write!(f, "MEDIA_MESSAGE_VIDEO_FOCUS_NOTIFICATION"),
+            protos::MediaMessageId::MEDIA_MESSAGE_UPDATE_UI_CONFIG_REQUEST => write!(f, "MEDIA_MESSAGE_UPDATE_UI_CONFIG_REQUEST"),
+            protos::MediaMessageId::MEDIA_MESSAGE_UPDATE_UI_CONFIG_REPLY => write!(f, "MEDIA_MESSAGE_UPDATE_UI_CONFIG_REPLY"),
+            protos::MediaMessageId::MEDIA_MESSAGE_AUDIO_UNDERFLOW_NOTIFICATION => write!(f, "MEDIA_MESSAGE_AUDIO_UNDERFLOW_NOTIFICATION"),
+            _ => write!(f, "Unknown_MediaMessageId"),
+        }
     }
 }
 pub trait IService{
@@ -90,7 +99,7 @@ impl MediaSinkService {
 impl IService for MediaSinkService {
     fn handle_hu_msg(&self, pkt: &Packet)
     {
-        let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].into()).into();
+        let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].into().expect("Error converting")).into();
         let control = protos::MediaMessageId::from_i32(message_id);
         match control.unwrap() {
             MEDIA_MESSAGE_VIDEO_FOCUS_NOTIFICATION => {
