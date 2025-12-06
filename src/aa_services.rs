@@ -41,17 +41,33 @@ pub enum ServiceType
     SensorSource,
     VendorExtension,
 }
-pub trait IService: Sized{
+pub trait IService{
     fn handle_hu_msg(&self, a: i32);
     fn get_service_type(&self)->ServiceType;
 }
 #[derive(Copy, Clone)]
 pub struct MediaSinkService {
-    pub sid: ServiceType,
+    sid: ServiceType,
+}
+
+impl Clone for MediaSinkService {
+    fn clone(&self) -> Self {
+        MediaSinkService {
+            sid: self.sid.clone()
+        }
+    }
+}
+
+impl MediaSinkService {
+    pub fn new() -> Self {
+        Self{
+            sid:ServiceType::MediaSink,
+        }
+    }
 }
 
 impl IService for MediaSinkService {
-    fn handle_hu_msg(&self, a: &str)
+    fn handle_hu_msg(&self, a: i32)
     {
 
     }
@@ -67,7 +83,7 @@ pub struct MediaSourceService {
 }
 
 impl IService for MediaSourceService {
-    fn handle_hu_msg(&self, a: &str)
+    fn handle_hu_msg(&self, a: i32)
     {
 
     }

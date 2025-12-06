@@ -975,16 +975,19 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         Ok(v) => info!( "{} MESSAGE_SERVICE_DISCOVERY_RESPONSE received",get_name()),
         Err(e) => {error!( "{} HU sent unexpected channel message", get_name()); return Err(e)},
     }
-    let mut aa_sids:Vec<Box<Option<dyn IService>>> = Vec::new();
+    let mut aa_sids:Vec<Box<Option<dyn IService>>> = vec![];
     let data = &pkt.payload[2..]; // start of message data, without message_id
     if let Ok(msg) = ServiceDiscoveryResponse::parse_from_bytes(&data) {
         //msg.services.len();
         for (idx,proto_srv) in msg.services.iter().enumerate() {
-            let mut srv :MediaSinkService;
-            aa_sids.insert(idx,srv);
+            if proto_srv.hasMediaSinkService()
+            {
+                let mut srv =MediaSinkService::new();
+                aa_sids.insert(idx,Some(Box::new(srv)));
+            }
+
         }
-        //aa_sids[0].handle_hu_msg(4);
-        if let Some(ch) = aa_sids[0] {
+        if let Some(ch) = &aa_sids[0] {
             ch.handle_hu_msg(4);
         }
     }
