@@ -19,6 +19,7 @@ use std::time::{Duration, Instant};
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::broadcast::Receiver as BroadcastReceiver;
+use tokio::sync::broadcast::Sender as BroadcastSender;
 use tokio::sync::Notify;
 use tokio::time::timeout;
 
@@ -42,6 +43,7 @@ const HSP_HS_UUID: Uuid = Uuid::from_u128(0x0000110800001000800000805f9b34fb);
 const HSP_AG_UUID: Uuid = Uuid::from_u128(0x0000111200001000800000805f9b34fb);
 const AV_REMOTE_CONTROL_TARGET_UUID: Uuid = Uuid::from_u128(0x0000110c00001000800000805f9b34fb);
 const AV_REMOTE_CONTROL_UUID: Uuid = Uuid::from_u128(0x00110e00001000800000805f9b34fb);
+const AIS_PRIMARY_UUID: Uuid = Uuid::from_u128(0xe73e0001ef1b4e7482912e4f3164f3b5);
 
 #[derive(Debug, Clone, PartialEq)]
 #[repr(u16)]
@@ -435,9 +437,7 @@ impl Bluetooth {
                     "{} Discovered device {} with service UUIDs {:?}",
                     NAME, addr, &supported_uuids
                 );
-
-                if supported_uuids.contains(&AV_REMOTE_CONTROL_TARGET_UUID)
-                    && supported_uuids.contains(&AV_REMOTE_CONTROL_UUID)
+                if supported_uuids.contains(&AIS_PRIMARY_UUID)
                 {
                     if !dongle_mode {
                         match device.connect_profile(&HSP_AG_UUID).await {
@@ -569,6 +569,7 @@ impl Bluetooth {
         stopped: bool,
         quick_reconnect: bool,
         mut need_restart: BroadcastReceiver<Option<Action>>,
+        restart_tx: BroadcastSender<Option<Action>>,
         profile_connected: Arc<AtomicBool>,
     ) -> Result<()> {
         // Use the provided session and adapter instead of creating new ones
@@ -616,6 +617,8 @@ impl Bluetooth {
                 }
                 // we are now disconnected, redo bluetooth connection
                 profile_connected.store(false, Ordering::Relaxed);
+                // main loop could now wait so send an event to restart
+                let _ = restart_tx.send(None);
             }));
         } else {
             // handshake complete, now disconnect the device so it should
