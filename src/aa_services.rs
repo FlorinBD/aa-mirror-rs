@@ -58,7 +58,7 @@ pub trait IService{
 
 pub struct MediaSinkService {
     sid: ServiceType,
-    ch_id: u8,
+    ch_id: i32,
 }
 
 impl Clone for MediaSinkService {
@@ -71,7 +71,7 @@ impl Clone for MediaSinkService {
 }
 
 impl MediaSinkService {
-    pub fn new(pch:u8) -> Self {
+    pub fn new(pch:i32) -> Self {
         Self{
             sid:ServiceType::MediaSink,
             ch_id:pch,
