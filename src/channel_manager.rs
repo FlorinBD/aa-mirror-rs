@@ -980,11 +980,12 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     if let Ok(msg) = ServiceDiscoveryResponse::parse_from_bytes(&data) {
         info!( "{} ServiceDiscoveryResponse , parsed ok",get_name());
         for (idx,proto_srv) in msg.services.iter().enumerate() {
-            if let Some(act_srv) = proto_srv.media_sink_service.0
+            info!( "SID {}, media sink: {}",u8::from(proto_srv.id()), proto_srv.media_sink_service.is_some());
+            /*if let Some(act_srv) = proto_srv.media_sink_service.0
             {
                 let mut srv =MediaSinkService::new(u8::from(act_srv.id()));
                 aa_sids.insert(idx,Some(Box::new(srv)));
-            }
+            }*/
 
         }
 
