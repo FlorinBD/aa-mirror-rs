@@ -50,27 +50,7 @@ impl fmt::Display for ServiceType {
     }
 }
 
-impl fmt::Display for protos::MediaMessageId {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            protos::MediaMessageId::MEDIA_MESSAGE_DATA => write!(f, "MEDIA_MESSAGE_DATA"),
-            protos::MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG => write!(f, "MEDIA_MESSAGE_CODEC_CONFIG"),
-            protos::MediaMessageId::MEDIA_MESSAGE_SETUP => write!(f, "MEDIA_MESSAGE_SETUP"),
-            protos::MediaMessageId::MEDIA_MESSAGE_START => write!(f, "MEDIA_MESSAGE_START"),
-            protos::MediaMessageId::MEDIA_MESSAGE_STOP => write!(f, "MEDIA_MESSAGE_STOP"),
-            protos::MediaMessageId::MEDIA_MESSAGE_CONFIG => write!(f, "MEDIA_MESSAGE_CONFIG"),
-            protos::MediaMessageId::MEDIA_MESSAGE_ACK => write!(f, "MEDIA_MESSAGE_ACK"),
-            protos::MediaMessageId::MEDIA_MESSAGE_MICROPHONE_REQUEST => write!(f, "MEDIA_MESSAGE_MICROPHONE_REQUEST"),
-            protos::MediaMessageId::MEDIA_MESSAGE_MICROPHONE_RESPONSE => write!(f, "MEDIA_MESSAGE_MICROPHONE_RESPONSE"),
-            protos::MediaMessageId::MEDIA_MESSAGE_VIDEO_FOCUS_REQUEST => write!(f, "MEDIA_MESSAGE_VIDEO_FOCUS_REQUEST"),
-            protos::MediaMessageId::MEDIA_MESSAGE_VIDEO_FOCUS_NOTIFICATION => write!(f, "MEDIA_MESSAGE_VIDEO_FOCUS_NOTIFICATION"),
-            protos::MediaMessageId::MEDIA_MESSAGE_UPDATE_UI_CONFIG_REQUEST => write!(f, "MEDIA_MESSAGE_UPDATE_UI_CONFIG_REQUEST"),
-            protos::MediaMessageId::MEDIA_MESSAGE_UPDATE_UI_CONFIG_REPLY => write!(f, "MEDIA_MESSAGE_UPDATE_UI_CONFIG_REPLY"),
-            protos::MediaMessageId::MEDIA_MESSAGE_AUDIO_UNDERFLOW_NOTIFICATION => write!(f, "MEDIA_MESSAGE_AUDIO_UNDERFLOW_NOTIFICATION"),
-            _ => write!(f, "Unknown_MediaMessageId"),
-        }
-    }
-}
+
 pub trait IService{
     fn handle_hu_msg(&self, pkt: &Packet)->();
     fn get_service_type(&self)->ServiceType;
@@ -106,9 +86,9 @@ impl IService for MediaSinkService {
             let control = protos::MediaMessageId::from_i32(message_id);
             match control.unwrap() {
                 MEDIA_MESSAGE_VIDEO_FOCUS_NOTIFICATION => {
-                    info!("{} Received {} message", self.sid.to_string(), control.to_string());
+                    info!("{} Received {} message", self.sid.to_string(), message_id);
                 }
-                _ =>{ error!( "{} Unhandled message ID: {} received",self.sid.to_string(), control.to_string());}
+                _ =>{ error!( "{} Unhandled message ID: {} received",self.sid.to_string(), message_id);}
             }
         }
 
