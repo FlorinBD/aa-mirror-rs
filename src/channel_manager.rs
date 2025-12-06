@@ -1012,6 +1012,9 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
             if let Some(ch) = &aa_sids[ usize::from(pkt.channel)] {
                 ch.handle_hu_msg(&pkt);
             }
+            else {
+                error!( "{} Channel id {:?} is NULL, message discarded",get_name(), pkt.channel);
+            }
         }
         else { //Default channel messages
             let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
