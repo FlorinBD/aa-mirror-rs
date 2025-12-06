@@ -42,6 +42,26 @@ pub enum ServiceType
     SensorSource,
     VendorExtension,
 }
+impl fmt::Display for ServiceType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+        // or, alternatively:
+        // fmt::Debug::fmt(self, f)
+    }
+}
+
+impl fmt::Display for protos::MediaMessageId {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self)
+        /*match *self {
+            protos::MediaMessageId::Monday => write!(f, "Monday"),
+            protos::MediaMessageId::Tuesday => write!(f, "Tuesday"),
+            protos::MediaMessageId::Wednesday => write!(f, "Wednesday"),
+            protos::MediaMessageId::Thursday => write!(f, "Thursday"),
+            protos::MediaMessageId::Friday => write!(f, "Friday"),
+        }*/
+    }
+}
 pub trait IService{
     fn handle_hu_msg(&self, pkt: &Packet)->();
     fn get_service_type(&self)->ServiceType;
@@ -70,13 +90,13 @@ impl MediaSinkService {
 impl IService for MediaSinkService {
     fn handle_hu_msg(&self, pkt: &Packet)
     {
-        let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+        let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].into()).into();
         let control = protos::MediaMessageId::from_i32(message_id);
-        match control.unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) {
+        match control.unwrap() {
             MEDIA_MESSAGE_VIDEO_FOCUS_NOTIFICATION => {
-                info!("{} Received {} message", self.sid, control);
+                info!("{} Received {} message", self.sid.to_string(), control);
             }
-            _ =>{ error!( "{} Unhandled message ID: {} received",self.sid, control);}
+            _ =>{ error!( "{} Unhandled message ID: {} received",self.sid.to_string(), control);}
         }
     }
 
