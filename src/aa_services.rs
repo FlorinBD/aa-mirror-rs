@@ -43,7 +43,7 @@ pub enum ServiceType
     VendorExtension,
 }
 pub trait IService{
-    fn handle_hu_msg(&self, pkt: &Packet);
+    fn handle_hu_msg(&self, pkt: &Packet)->();
     fn get_service_type(&self)->ServiceType;
 }
 

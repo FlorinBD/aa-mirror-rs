@@ -1009,7 +1009,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         }
         if pkt.channel !=0
         {
-            if let Some(ch) = &aa_sids[pkt.channel] {
+            if let Some(ch) = &aa_sids[ usize::from(pkt.channel)] {
                 ch.handle_hu_msg(&pkt);
             }
         }
