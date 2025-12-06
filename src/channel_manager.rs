@@ -980,16 +980,14 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     if let Ok(msg) = ServiceDiscoveryResponse::parse_from_bytes(&data) {
         //msg.services.len();
         for (idx,proto_srv) in msg.services.iter().enumerate() {
-            if !proto_srv.media_sink_service.is_empty()
+            if proto_srv.media_sink_service.is_some()
             {
                 let mut srv =MediaSinkService::new();
                 aa_sids.insert(idx,Some(Box::new(srv)));
             }
 
         }
-        if let Some(ch) = &aa_sids[0] {
-            ch.handle_hu_msg(4);
-        }
+
     }
     else {
         error!( "{} ServiceDiscoveryResponse couldn't be parsed",get_name());
@@ -1011,7 +1009,9 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         }
         if pkt.channel !=0
         {
-
+            if let Some(ch) = &aa_sids[pkt.channel] {
+                ch.handle_hu_msg(&pkt);
+            }
         }
         else { //Default channel messages
             let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();

@@ -31,6 +31,7 @@ use protobuf::text_format::print_to_string_pretty;
 use protobuf::{Enum, EnumOrUnknown, Message, MessageDyn};
 use protos::ControlMessageType::{self, *};
 use crate::aoa::AccessoryDeviceInfo;
+use crate::channel_manager::Packet;
 
 #[derive(Copy, Clone)]
 pub enum ServiceType
@@ -42,7 +43,7 @@ pub enum ServiceType
     VendorExtension,
 }
 pub trait IService{
-    fn handle_hu_msg(&self, a: i32);
+    fn handle_hu_msg(&self, pkt: &Packet);
     fn get_service_type(&self)->ServiceType;
 }
 
@@ -67,7 +68,7 @@ impl MediaSinkService {
 }
 
 impl IService for MediaSinkService {
-    fn handle_hu_msg(&self, a: i32)
+    fn handle_hu_msg(&self, pkt: &Packet)
     {
 
     }
@@ -83,7 +84,7 @@ pub struct MediaSourceService {
 }
 
 impl IService for MediaSourceService {
-    fn handle_hu_msg(&self, a: i32)
+    fn handle_hu_msg(&self, pkt: &Packet)
     {
 
     }
