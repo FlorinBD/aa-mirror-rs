@@ -79,7 +79,7 @@ impl MediaSinkService {
 impl IService for MediaSinkService {
     fn handle_hu_msg(&self, pkt: &Packet)
     {
-        if let Ok(id)=pkt.payload[0..=1].try_into()
+        if let Ok(id)=pkt.payload[0..=1].try_into()//FIXME catch the error when not enough data is inside
         {
             let message_id: i32 = u16::from_be_bytes(id).into();
 
