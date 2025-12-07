@@ -976,6 +976,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         Err(e) => {error!( "{} HU sent unexpected channel message", get_name()); return Err(e)},
     }
     let mut aa_sids:Vec<Option<Box<dyn IService>>> = vec![];
+    aa_sids.insert(0,None);//first CH is always null, is the default ch witch is managed by this function
     let data = &pkt.payload[2..]; // start of message data, without message_id
     if let Ok(msg) = ServiceDiscoveryResponse::parse_from_bytes(&data) {
         info!( "{} ServiceDiscoveryResponse , parsed ok",get_name());

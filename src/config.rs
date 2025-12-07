@@ -279,7 +279,7 @@ impl Default for AppConfig {
             ssid: String::from(IDENTITY_NAME),
             wpa_passphrase: String::from(IDENTITY_NAME),
             eth_mode: String::new(),
-            startup_delay: 120,
+            startup_delay: 5,
             ble_password: String::new(),
         }
     }
