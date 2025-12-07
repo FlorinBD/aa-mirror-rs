@@ -163,7 +163,8 @@ impl SensorSourceService {
         Self{
             sid:ServiceType::SensorSource,
             ch_id:pch,
-        }
+        };
+        info!( "SensorSourceService init ok");
     }
 }
 impl IService for SensorSourceService {
