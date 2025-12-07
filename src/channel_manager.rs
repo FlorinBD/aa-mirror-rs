@@ -31,7 +31,7 @@ use protobuf::text_format::print_to_string_pretty;
 use protobuf::{Enum, EnumOrUnknown, Message, MessageDyn};
 use protos::ControlMessageType::{self, *};
 use crate::aa_services;
-use crate::aa_services::{MediaSinkService, MediaSourceService, IService, ServiceType};
+use crate::aa_services::{MediaSinkService, MediaSourceService, IService, ServiceType, SensorSourceService, InputSourceService, VendorExtensionService};
 use crate::config::{Action::Stop, AppConfig, SharedConfig};
 use crate::config_types::HexdumpLevel;
 use crate::io_uring::Endpoint;
@@ -820,6 +820,7 @@ async fn hu_send_msg<A: Endpoint<A>>(device: &mut IoDevice<A>, flags: u8, payloa
         final_length: None,
         payload: payload,
     };
+    let _ = pkt_debug(HexdumpLevel::RawOutput, dmp_level, &pkt_rsp).await;
     if flags & ENCRYPTED !=0
     {
         pkt_rsp.encrypt_payload(ssl_buf, ssl_stream).await?;
@@ -828,7 +829,6 @@ async fn hu_send_msg<A: Endpoint<A>>(device: &mut IoDevice<A>, flags: u8, payloa
 
     }
     // sending reply back to the HU
-    let _ = pkt_debug(HexdumpLevel::RawOutput, dmp_level, &pkt_rsp).await;
     pkt_rsp.transmit(device).await.with_context(|| format!("{}: transmit failed", get_name()))?;
     // Increment byte counters for statistics
     // fixme: compute final_len for precise stats
@@ -979,13 +979,37 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     let data = &pkt.payload[2..]; // start of message data, without message_id
     if let Ok(msg) = ServiceDiscoveryResponse::parse_from_bytes(&data) {
         info!( "{} ServiceDiscoveryResponse , parsed ok",get_name());
-        for (idx,proto_srv) in msg.services.iter().enumerate() {
-            info!( "SID {}, media sink: {}",i32::from(proto_srv.id()), proto_srv.media_sink_service.is_some());
-            /*if let Some(act_srv) = proto_srv.media_sink_service.0
+        for (_,proto_srv) in msg.services.iter().enumerate() {
+            let ch_id=i32::from(proto_srv.id());
+            info!( "SID {}, media sink: {}",ch_id, proto_srv.media_sink_service.is_some());
+            let mut srv= None;
+            if proto_srv.media_sink_service.is_some()
             {
-                let mut srv =MediaSinkService::new(u8::from(act_srv.id()));
-                aa_sids.insert(idx,Some(Box::new(srv)));
-            }*/
+                let mut srv =MediaSinkService::new(ch_id);
+            }
+            else if proto_srv.media_source_service.is_some()
+            {
+                let mut srv =MediaSourceService::new(ch_id);
+            }
+            else if proto_srv.sensor_source_service.is_some()
+            {
+                let mut srv =SensorSourceService::new(ch_id);
+            }
+            else if proto_srv.input_source_service.is_some()
+            {
+                let mut srv =InputSourceService::new(ch_id);
+            }
+            else if proto_srv.vendor_extension_service.is_some()
+            {
+                let mut srv =VendorExtensionService::new(ch_id);
+            }
+            else {
+                error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
+            }
+            if srv.is_some()
+            {
+                aa_sids.insert(ch_id,Some(Box::new(srv)));
+            }
 
         }
 
