@@ -160,11 +160,11 @@ impl Clone for SensorSourceService {
 }
 impl SensorSourceService {
     pub fn new(pch:i32) -> Self {
+        info!( "SensorSourceService init ok");
         Self{
             sid:ServiceType::SensorSource,
             ch_id:pch,
-        };
-        info!( "SensorSourceService init ok");
+        }
     }
 }
 impl IService for SensorSourceService {
