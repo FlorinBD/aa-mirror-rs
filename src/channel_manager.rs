@@ -985,30 +985,30 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
             let mut srv= None;
             if proto_srv.media_sink_service.is_some()
             {
-                let mut srv =MediaSinkService::new(ch_id);
+                srv =MediaSinkService::new(ch_id);
             }
             else if proto_srv.media_source_service.is_some()
             {
-                let mut srv =MediaSourceService::new(ch_id);
+                srv =MediaSourceService::new(ch_id);
             }
             else if proto_srv.sensor_source_service.is_some()
             {
-                let mut srv =SensorSourceService::new(ch_id);
+                srv =SensorSourceService::new(ch_id);
             }
             else if proto_srv.input_source_service.is_some()
             {
-                let mut srv =InputSourceService::new(ch_id);
+                srv =InputSourceService::new(ch_id);
             }
             else if proto_srv.vendor_extension_service.is_some()
             {
-                let mut srv =VendorExtensionService::new(ch_id);
+                srv =VendorExtensionService::new(ch_id);
             }
             else {
                 error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
             }
             if srv.is_some()
             {
-                aa_sids.insert(ch_id,Some(Box::new(srv)));
+                aa_sids.insert(usize::from(ch_id),Some(Box::new(srv)));
             }
 
         }
