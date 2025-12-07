@@ -982,33 +982,34 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         for (_,proto_srv) in msg.services.iter().enumerate() {
             let ch_id=i32::from(proto_srv.id());
             info!( "SID {}, media sink: {}",ch_id, proto_srv.media_sink_service.is_some());
-            let mut srv= None;
+
             if proto_srv.media_sink_service.is_some()
             {
-                srv =MediaSinkService::new(ch_id);
+                let mut srv =MediaSinkService::new(ch_id);
+                aa_sids.insert(ch_id as usize,Some(Box::new(srv)));
             }
             else if proto_srv.media_source_service.is_some()
             {
-                srv =MediaSourceService::new(ch_id);
+                let mut srv =MediaSourceService::new(ch_id);
+                aa_sids.insert(ch_id as usize,Some(Box::new(srv)));
             }
             else if proto_srv.sensor_source_service.is_some()
             {
-                srv =SensorSourceService::new(ch_id);
+                let mut srv =SensorSourceService::new(ch_id);
+                aa_sids.insert(ch_id as usize,Some(Box::new(srv)));
             }
             else if proto_srv.input_source_service.is_some()
             {
-                srv =InputSourceService::new(ch_id);
+                let mut srv =InputSourceService::new(ch_id);
+                aa_sids.insert(ch_id as usize,Some(Box::new(srv)));
             }
             else if proto_srv.vendor_extension_service.is_some()
             {
-                srv =VendorExtensionService::new(ch_id);
+                let mut srv =VendorExtensionService::new(ch_id);
+                aa_sids.insert(ch_id as usize,Some(Box::new(srv)));
             }
             else {
                 error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
-            }
-            if srv.is_some()
-            {
-                aa_sids.insert(usize::from(ch_id),Some(Box::new(srv)));
             }
 
         }
