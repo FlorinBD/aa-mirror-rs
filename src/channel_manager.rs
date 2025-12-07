@@ -985,27 +985,27 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
 
             if proto_srv.media_sink_service.is_some()
             {
-                let mut srv =MediaSinkService::new(ch_id);
+                let srv =MediaSinkService::new(ch_id);
                 aa_sids.insert(ch_id as usize,Some(Box::new(srv)));
             }
             else if proto_srv.media_source_service.is_some()
             {
-                let mut srv =MediaSourceService::new(ch_id);
+                let srv =MediaSourceService::new(ch_id);
                 aa_sids.insert(ch_id as usize,Some(Box::new(srv)));
             }
             else if proto_srv.sensor_source_service.is_some()
             {
-                let mut srv =SensorSourceService::new(ch_id);
+                let srv =SensorSourceService::new(ch_id);
                 aa_sids.insert(ch_id as usize,Some(Box::new(srv)));
             }
             else if proto_srv.input_source_service.is_some()
             {
-                let mut srv =InputSourceService::new(ch_id);
+                let srv =InputSourceService::new(ch_id);
                 aa_sids.insert(ch_id as usize,Some(Box::new(srv)));
             }
             else if proto_srv.vendor_extension_service.is_some()
             {
-                let mut srv =VendorExtensionService::new(ch_id);
+                let srv =VendorExtensionService::new(ch_id);
                 aa_sids.insert(ch_id as usize,Some(Box::new(srv)));
             }
             else {
