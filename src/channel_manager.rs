@@ -779,6 +779,32 @@ pub async fn endpoint_reader<A: Endpoint<A>>(
     }
 }
 
+/// main reader thread for a service
+pub async fn service_reader<A: Endpoint<A>>(
+    device: IoDevice<A>,
+    mut rx: Receiver<Packet>,
+    ssl_buf: &mut SslMemBuf,
+    ssl_stream: &mut openssl::ssl::SslStream<SslMemBuf>,
+    statistics: Arc<AtomicUsize>,
+    dmp_level:HexdumpLevel,
+    ) -> Result<()> {
+    loop {
+        match rx.recv()
+        {
+            Ok(pkt)=>{
+                let _ = pkt_debug(HexdumpLevel::RawOutput, dmp_level, &pkt).await;
+                pkt.encrypt_payload(ssl_buf, ssl_stream).await?;
+                // sending reply back to the HU
+                pkt.transmit(device).await.with_context(|| format!("{}: transmit failed", get_name()))?;
+                // Increment byte counters for statistics
+                // fixme: compute final_len for precise stats
+                statistics.fetch_add(HEADER_LENGTH + pkt.payload.len(), Ordering::Relaxed);
+            },
+            Err(e)=>{println!("service_reader thread received Error: {}",e)}
+        }
+    }
+}
+
 /// checking if there was a true fatal SSL error
 /// Note that the error may not be fatal. For example if the underlying
 /// stream is an asynchronous one then `HandshakeError::WouldBlock` may
@@ -848,7 +874,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     info!( "{} Entering channel manager",get_name());
     let cfg = config.read().await.clone();
     let hex_requested = cfg.hexdump_level;
-
+    let mut tsk_srv_read;
     let ssl = ssl_builder().await?;
 
     let mut mem_buf = SslMemBuf {
@@ -990,7 +1016,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
 
             if proto_srv.media_sink_service.is_some()
             {
-                let srv =MediaSinkService::new(ch_id, tx_srv);
+                let srv =MediaSinkService::new(ch_id, tx_srv.clone());
                 aa_sids.insert(ch_id as usize,Some(Box::new(srv)));
             }
             else if proto_srv.media_source_service.is_some()
@@ -1018,6 +1044,8 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
             }
 
         }
+        //Setup mpsc thread
+        tsk_srv_read = tokio_uring::spawn(service_reader(device, rx_srv,&mut mem_buf, &mut server, bytes_written.clone(),hex_requested));
 
     }
     else {
@@ -1075,5 +1103,6 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         }
 
     }
+    //drop(rx_srv);
     return Err(Box::new("proxy main loop ended ok")).expect("TODO");
 }
