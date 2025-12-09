@@ -1042,10 +1042,9 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
             else {
                 error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
             }
-
         }
         //Setup mpsc thread
-        tsk_srv_read = tokio_uring::spawn(service_reader(device, rx_srv,&mut mem_buf, &mut server, bytes_written.clone(),hex_requested));
+        tsk_srv_read = tokio_uring::spawn(service_reader(device.clone(), rx_srv,&mut mem_buf.clone(), &mut server, bytes_written.clone(),hex_requested.clone()));
 
     }
     else {
@@ -1104,5 +1103,8 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
 
     }
     //drop(rx_srv);
+    let res = tokio::try_join!(
+            tsk_srv_read,
+        );
     return Err(Box::new("proxy main loop ended ok")).expect("TODO");
 }
