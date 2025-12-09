@@ -986,7 +986,7 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
 
             if proto_srv.media_sink_service.is_some()
             {
-                let srv =MediaSinkService::new(ch_id);
+                let srv =MediaSinkService::new(ch_id, device.clone());
                 aa_sids.insert(ch_id as usize,Some(Box::new(srv)));
             }
             else if proto_srv.media_source_service.is_some()

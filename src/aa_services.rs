@@ -33,6 +33,8 @@ use protobuf::{Enum, EnumOrUnknown, Message, MessageDyn};
 use protos::ControlMessageType::{self, *};
 use crate::aoa::AccessoryDeviceInfo;
 use crate::channel_manager::Packet;
+use crate::io_uring::Endpoint;
+use crate::io_uring::IoDevice;
 
 #[derive(Copy, Clone, Debug)]
 pub enum ServiceType
@@ -60,20 +62,23 @@ pub trait IService{
 pub struct MediaSinkService {
     sid: ServiceType,
     ch_id: i32,
+    device: IoDevice<dyn Endpoint<A>>,
 }
 impl Clone for MediaSinkService {
     fn clone(&self) -> Self {
         MediaSinkService {
             sid: self.sid.clone(),
-            ch_id: self.ch_id.clone()
+            ch_id: self.ch_id.clone(),
+            device: self.device.clone()
         }
     }
 }
 impl MediaSinkService {
-    pub fn new(pch:i32) -> Self {
+    pub fn new<A: Endpoint<A>>(pch:i32, mut pdevice: IoDevice<A>) -> Self {
         Self{
             sid:ServiceType::MediaSink,
             ch_id:pch,
+            device: pdevice,
         }
     }
 }
