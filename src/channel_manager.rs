@@ -874,7 +874,6 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     info!( "{} Entering channel manager",get_name());
     let cfg = config.read().await.clone();
     let hex_requested = cfg.hexdump_level;
-    let mut tsk_srv_read;
     let ssl = ssl_builder().await?;
 
     let mut mem_buf = SslMemBuf {
@@ -1007,16 +1006,13 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     let data = &pkt.payload[2..]; // start of message data, without message_id
     if let Ok(msg) = ServiceDiscoveryResponse::parse_from_bytes(&data) {
         info!( "{} ServiceDiscoveryResponse , parsed ok",get_name());
-        // mpsc channels:
-        let srv_count=msg.services.len();
-        let (tx_srv, rx_srv): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(srv_count*2);
         for (_,proto_srv) in msg.services.iter().enumerate() {
             let ch_id=i32::from(proto_srv.id());
             info!( "SID {}, media sink: {}",ch_id, proto_srv.media_sink_service.is_some());
 
             if proto_srv.media_sink_service.is_some()
             {
-                let srv =MediaSinkService::new(ch_id, tx_srv.clone());
+                let srv =MediaSinkService::new(ch_id);
                 aa_sids.insert(ch_id as usize,Some(Box::new(srv)));
             }
             else if proto_srv.media_source_service.is_some()
@@ -1043,9 +1039,6 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
                 error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
             }
         }
-        //Setup mpsc thread
-        tsk_srv_read = tokio_uring::spawn(service_reader(device.clone(), rx_srv,&mut mem_buf.clone(), &mut server, bytes_written.clone(),hex_requested.clone()));
-
     }
     else {
         error!( "{} ServiceDiscoveryResponse couldn't be parsed",get_name());
@@ -1102,9 +1095,5 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
         }
 
     }
-    //drop(rx_srv);
-    let res = tokio::try_join!(
-            tsk_srv_read,
-        );
     return Err(Box::new("proxy main loop ended ok")).expect("TODO");
 }
