@@ -62,23 +62,23 @@ pub trait IService{
 pub struct MediaSinkService {
     sid: ServiceType,
     ch_id: i32,
-    device: IoDevice<dyn Endpoint<A>>,
+    tx_srv: Sender<Packet>,
 }
 impl Clone for MediaSinkService {
     fn clone(&self) -> Self {
         MediaSinkService {
             sid: self.sid.clone(),
             ch_id: self.ch_id.clone(),
-            device: self.device.clone()
+            tx_srv: self.tx_srv.clone()
         }
     }
 }
 impl MediaSinkService {
-    pub fn new<A: Endpoint<A>>(pch:i32, mut pdevice: IoDevice<A>) -> Self {
+    pub fn new(pch:i32, tx: Sender<Packet>) -> Self {
         Self{
             sid:ServiceType::MediaSink,
             ch_id:pch,
-            device: pdevice,
+            tx_srv: tx,
         }
     }
 }

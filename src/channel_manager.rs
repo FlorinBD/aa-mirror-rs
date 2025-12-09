@@ -29,6 +29,7 @@ use crate::channel_manager::SensorMessageId::*;
 use crate::channel_manager::SensorType::*;
 use protobuf::text_format::print_to_string_pretty;
 use protobuf::{Enum, EnumOrUnknown, Message, MessageDyn};
+use tokio::sync::mpsc;
 use protos::ControlMessageType::{self, *};
 use crate::aa_services;
 use crate::aa_services::{MediaSinkService, MediaSourceService, IService, ServiceType, SensorSourceService, InputSourceService, VendorExtensionService};
@@ -980,13 +981,16 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     let data = &pkt.payload[2..]; // start of message data, without message_id
     if let Ok(msg) = ServiceDiscoveryResponse::parse_from_bytes(&data) {
         info!( "{} ServiceDiscoveryResponse , parsed ok",get_name());
+        // mpsc channels:
+        let srv_count=msg.services.len();
+        let (tx_srv, rx_srv): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(srv_count*2);
         for (_,proto_srv) in msg.services.iter().enumerate() {
             let ch_id=i32::from(proto_srv.id());
             info!( "SID {}, media sink: {}",ch_id, proto_srv.media_sink_service.is_some());
 
             if proto_srv.media_sink_service.is_some()
             {
-                let srv =MediaSinkService::new(ch_id, device.clone());
+                let srv =MediaSinkService::new(ch_id, tx_srv);
                 aa_sids.insert(ch_id as usize,Some(Box::new(srv)));
             }
             else if proto_srv.media_source_service.is_some()
