@@ -779,6 +779,32 @@ pub async fn endpoint_reader<A: Endpoint<A>>(
     }
 }
 
+/// main reader thread for a service
+pub async fn service_reader<A: Endpoint<A>>(
+    device: IoDevice<A>,
+    mut rx: Receiver<Packet>,
+    ssl_buf: &mut SslMemBuf,
+    ssl_stream: &mut openssl::ssl::SslStream<SslMemBuf>,
+    statistics: Arc<AtomicUsize>,
+    dmp_level:HexdumpLevel,
+    ) -> Result<()> {
+    loop {
+        match rx.recv()
+        {
+            Ok(pkt)=>{
+                let _ = pkt_debug(HexdumpLevel::RawOutput, dmp_level, &pkt).await;
+                pkt.encrypt_payload(ssl_buf, ssl_stream).await?;
+                // sending reply back to the HU
+                pkt.transmit(device).await.with_context(|| format!("{}: transmit failed", get_name()))?;
+                // Increment byte counters for statistics
+                // fixme: compute final_len for precise stats
+                statistics.fetch_add(HEADER_LENGTH + pkt.payload.len(), Ordering::Relaxed);
+            },
+            Err(e)=>{println!("service_reader thread received Error: {}",e)}
+        }
+    }
+}
+
 /// checking if there was a true fatal SSL error
 /// Note that the error may not be fatal. For example if the underlying
 /// stream is an asynchronous one then `HandshakeError::WouldBlock` may
