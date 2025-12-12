@@ -163,7 +163,7 @@ impl Packet {
     /// composes a final frame and transmits it to endpoint device (HU/MD)
     async fn transmit<A: Endpoint<A>>(
         &self,
-        device: IoDevice<A>,
+        device: &mut IoDevice<A>,
     ) -> std::result::Result<usize, std::io::Error> {
         let len = self.payload.len() as u16;
         let mut frame: Vec<u8> = vec![];
@@ -359,7 +359,7 @@ pub async fn endpoint_reader<A: Endpoint<A>>(
 
 /// main reader thread for a service
 pub async fn packet_tls_proxy<A: Endpoint<A>>(
-    device: IoDevice<A>,
+    mut device: IoDevice<A>,
     mut hu_rx: Receiver<Packet>,
     mut srv_rx: Receiver<Packet>,
     mut srv_tx: Sender<Packet>,
@@ -407,7 +407,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                             }
                             let pkt = ssl_encapsulate(mem_buf.clone()).await?;
                             let _ = pkt_debug(HexdumpLevel::RawOutput, dmp_level, &pkt).await;
-                            pkt.transmit(device).await.with_context(|| format!("{}: transmit failed", get_name()))?;
+                            pkt.transmit(&mut device).await.with_context(|| format!("{}: transmit failed", get_name()))?;
                         }
                     }
                     else {
@@ -462,7 +462,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                                     dmp_level,
                                     &msg,
                                 ).await;
-                                msg.transmit(device).await.with_context(|| format!("{}: transmit to HU failed", get_name()))?;
+                                msg.transmit(&mut device).await.with_context(|| format!("{}: transmit to HU failed", get_name()))?;
                                 // Increment byte counters for statistics
                                 // fixme: compute final_len for precise stats
                                 statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
@@ -477,7 +477,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                         dmp_level,
                         &msg,
                     ).await;
-                    msg.transmit(device).await.with_context(|| format!("{}: transmit to HU failed", get_name()))?;
+                    msg.transmit(&mut device).await.with_context(|| format!("{}: transmit to HU failed", get_name()))?;
                     // Increment byte counters for statistics
                     // fixme: compute final_len for precise stats
                     statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
@@ -569,29 +569,6 @@ fn check_control_msg_id(expected: protos::ControlMessageType, pkt: &Packet) -> R
             Err(Box::new("Wrong message id")).expect("ControlMessageType")
         }
     }*/
-}
-///Send a message to HU
-async fn hu_send_msg<A: Endpoint<A>>(device: &mut IoDevice<A>, flags: u8, payload: Vec<u8>, ssl_buf: &mut SslMemBuf, ssl_stream: &mut openssl::ssl::SslStream<SslMemBuf>, statistics: Arc<AtomicUsize>, dmp_level:HexdumpLevel) -> Result<()> {
-    let mut pkt_rsp = Packet {
-        channel: 0,
-        flags: flags,
-        final_length: None,
-        payload: payload,
-    };
-    let _ = pkt_debug(HexdumpLevel::RawOutput, dmp_level, &pkt_rsp).await;
-    if flags & ENCRYPTED !=0
-    {
-        pkt_rsp.encrypt_payload(ssl_buf, ssl_stream).await?;
-    }
-    else {
-
-    }
-    // sending reply back to the HU
-    pkt_rsp.transmit(device).await.with_context(|| format!("{}: transmit failed", get_name()))?;
-    // Increment byte counters for statistics
-    // fixme: compute final_len for precise stats
-    statistics.fetch_add(HEADER_LENGTH + pkt_rsp.payload.len(), Ordering::Relaxed);
-    Ok(())
 }
 
 /// main thread doing all packet processing between HU and device

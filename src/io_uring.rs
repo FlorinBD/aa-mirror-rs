@@ -381,7 +381,7 @@ pub async fn io_loop(
         let cfg = shared_config.read().await.clone();
         let hex_requested = cfg.hexdump_level;
         //service packet proxy
-        tsk_packet_proxy = tokio_uring::spawn(packet_tls_proxy( hu_w, rxr_hu, rxr_srv, tx_srv, file_bytes.clone(), hex_requested));
+        tsk_packet_proxy = tokio_uring::spawn(packet_tls_proxy(hu_w, rxr_hu, rxr_srv, tx_srv, file_bytes.clone(), hex_requested));
 
         // dedicated reading threads:
         tsk_hu_read = tokio_uring::spawn(endpoint_reader(hu_r, txr_hu));
