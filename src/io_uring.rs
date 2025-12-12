@@ -39,8 +39,7 @@ use crate::config::{Action, SharedConfig};
 use crate::config::{TCP_DHU_PORT, TCP_SERVER_PORT};
 use crate::ev::spawn_ev_client_task;
 use crate::ev::EvTaskCommand;
-use crate::channel_manager::endpoint_reader;
-use crate::channel_manager::proxy;
+use crate::channel_manager::{endpoint_reader,ch_proxy, packet_tls_proxy};
 use crate::channel_manager::Packet;
 use crate::usb_stream::{UsbStreamRead, UsbStreamWrite};
 
@@ -351,14 +350,16 @@ pub async fn io_loop(
         let file_bytes = Arc::new(AtomicUsize::new(0));
         let stream_bytes = Arc::new(AtomicUsize::new(0));
 
-        let mut tsk_io_proxy;
+        let mut tsk_ch_manager;
         let mut tsk_hu_read;
+        let mut tsk_packet_proxy;
         // these will be used for cleanup
         let mut hu_tcp_stream = None;
 
         // mpsc channels:
-        let (txr_hu, rxr_hu): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
-        
+        let (txr_hu, rxr_hu):       (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
+        let (tx_srv, rx_srv):   (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
+        let (txr_srv, rxr_srv): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(20);
         // selecting I/O device for reading and writing
         // and creating desired objects for proxy functions
         let hu_r;
@@ -377,17 +378,18 @@ pub async fn io_loop(
             hu_w = IoDevice::TcpStreamIo(hu.clone());
             hu_tcp_stream = Some(hu.clone());
         }
+        let cfg = shared_config.read().await.clone();
+        let hex_requested = cfg.hexdump_level;
+        //service packet proxy
+        tsk_packet_proxy = tokio_uring::spawn(packet_tls_proxy( hu_w, rxr_hu, rxr_srv, tx_srv, file_bytes.clone(), hex_requested));
 
         // dedicated reading threads:
         tsk_hu_read = tokio_uring::spawn(endpoint_reader(hu_r, txr_hu));
         
         // main processing threads:
-        tsk_io_proxy = tokio_uring::spawn(proxy(
-            hu_w,
-            file_bytes.clone(),
-            rxr_hu,
-            shared_config.clone(),
-            sensor_channel.clone(),
+        tsk_ch_manager = tokio_uring::spawn(ch_proxy(
+            rx_srv,
+            txr_srv,
         ));
         
         // Thread for monitoring transfer
@@ -402,20 +404,23 @@ pub async fn io_loop(
         // Stop as soon as one of them errors
         let res = tokio::try_join!(
             flatten(&mut tsk_hu_read, "tsk_hu_read".into()),
-            flatten(&mut tsk_io_proxy, "tsk_io_proxy".into()),
-            flatten(&mut tsk_monitor,"tsk_monitor".into())
+            flatten(&mut tsk_ch_manager, "tsk_ch_manager".into()),
+            flatten(&mut tsk_monitor,"tsk_monitor".into()),
+            flatten(&mut tsk_packet_proxy,"tsk_pkt_proxy".into())
         );
 
         if let Err(e) = res {
             error!("{} 🔴 Connection error: {}", NAME, e);
         }
-        
+
         // Make sure the reference count drops to zero and the socket is
         // freed by aborting both tasks (which both hold a `Rc<TcpStream>`
         // for each direction)
+        tsk_packet_proxy.abort();
         tsk_hu_read.abort();
-        tsk_io_proxy.abort();
+        tsk_ch_manager.abort();
         tsk_monitor.abort();
+
 
         // make sure TCP connections are closed before next connection attempts
         if let Some(stream) = hu_tcp_stream {

@@ -359,14 +359,14 @@ pub async fn endpoint_reader<A: Endpoint<A>>(
 
 /// main reader thread for a service
 pub async fn packet_tls_proxy<A: Endpoint<A>>(
-    device: &mut IoDevice<A>,
+    device: IoDevice<A>,
     mut hu_rx: Receiver<Packet>,
     mut srv_rx: Receiver<Packet>,
     mut srv_tx: Sender<Packet>,
     statistics: Arc<AtomicUsize>,
     dmp_level:HexdumpLevel,
     ) -> Result<()> {
-    let ssl_handshake_done:bool;
+    let mut ssl_handshake_done:bool;
     let ssl = ssl_builder().await?;
     let mut mem_buf = SslMemBuf {
         client_stream: Arc::new(Mutex::new(VecDeque::new())),
@@ -594,43 +594,24 @@ async fn hu_send_msg<A: Endpoint<A>>(device: &mut IoDevice<A>, flags: u8, payloa
     Ok(())
 }
 
-/// main thread doing all packet processing of an endpoint/device
-pub async fn proxy<A: Endpoint<A> + 'static>(
-    mut device: IoDevice<A>,
-    bytes_written: Arc<AtomicUsize>,
-    mut rxr: Receiver<Packet>,
-    mut config: SharedConfig,
-    sensor_channel: Arc<tokio::sync::Mutex<Option<u8>>>,
+/// main thread doing all packet processing between HU and device
+pub async fn ch_proxy(
+    mut rx_srv: Receiver<Packet>,
+    mut tx_srv: Sender<Packet>,
 ) -> Result<()> {
     info!( "{} Entering channel manager",get_name());
-    let cfg = config.read().await.clone();
-    let hex_requested = cfg.hexdump_level;
-    let mut tsk_packet_proxy;
 
-
-    let (tx_srv, mut rx_srv): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(20);
-
-    //Setup mpsc thread
-    tsk_packet_proxy = tokio_uring::spawn(packet_tls_proxy(device.clone(), rxr, rx_srv, tx_srv, bytes_written.clone(),hex_requested.clone()));
 
     // initial phase: passing version and doing SSL handshake
    // waiting for initial version frame (HU is starting transmission)
     info!( "{} Waiting for HU version request...",get_name());
     //let pkt = rx_hu.recv().await.ok_or("reader channel hung up")?;
-
-    match rx_srv.recv()
-    {
-        Ok(pkt)=>{
-            let chk = check_control_msg_id(MESSAGE_VERSION_REQUEST,&pkt);
-            match chk {
-                Ok(_v) => info!( "{} HU version request received, sending VersionResponse back...",get_name()),
-                Err(e) => {error!( "{} HU sent unexpected channel message", get_name()); return Err(e)},
-            }
-        },
-        Err(e)=>{error!("tls proxy thread received Error: {}",e)}
+    let mut pkt = rx_srv.recv().await.ok_or("rx_srv channel hung up")?;
+    let chk = check_control_msg_id(MESSAGE_VERSION_REQUEST,&pkt);
+    match chk {
+        Ok(_v) => info!( "{} HU version request received, sending VersionResponse back...",get_name()),
+        Err(e) => {error!( "{} HU sent unexpected channel message", get_name()); return Err(e)},
     }
-
-
         // build version response for HU
         //let mut response = VersionResponse::new();
         //let mut payload: Vec<u8> = response.write_to_bytes()?;
@@ -656,28 +637,23 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
 
 
     info!( "{} Waiting for HU MESSAGE_AUTH_COMPLETE...",get_name());
-    match rx_srv.recv()
-    {
-        Ok(pkt)=>{
-            let chk = check_control_msg_id(MESSAGE_AUTH_COMPLETE,&pkt);
-            match chk {
-                Ok(_v) => info!( "{} MESSAGE_AUTH_COMPLETE received",get_name()),
-                Err(e) => {error!( "{} HU sent unexpected channel message", get_name()); return Err(e)},
-            }
-            let data = &pkt.payload[2..]; // start of message data, without message_id
-            if let Ok(msg) = AuthResponse::parse_from_bytes(&data) {
-                if msg.status() !=  OK
-                {
-                    error!( "{} AuthResponse status is not OK, got {:?}",get_name(), msg.status);
-                    return Err(Box::new("AuthResponse status is not OK")).expect("AuthResponse.OK");
-                }
-            }
-            else {
-                error!( "{} AuthResponse couldn't be parsed",get_name());
-                return Err(Box::new("AuthResponse couldn't be parsed")).expect("AuthResponse");
-            }
-        },
-        Err(e)=>{error!("tls proxy thread received Error: {}",e)}
+    let mut pkt = rx_srv.recv().await.ok_or("rx_srv channel hung up")?;
+    let chk = check_control_msg_id(MESSAGE_AUTH_COMPLETE,&pkt);
+    match chk {
+        Ok(_v) => info!( "{} MESSAGE_AUTH_COMPLETE received",get_name()),
+        Err(e) => {error!( "{} HU sent unexpected channel message", get_name()); return Err(e)},
+    }
+    let data = &pkt.payload[2..]; // start of message data, without message_id
+    if let Ok(msg) = AuthResponse::parse_from_bytes(&data) {
+        if msg.status() != OK
+        {
+            error!( "{} AuthResponse status is not OK, got {:?}",get_name(), msg.status);
+            return Err(Box::new("AuthResponse status is not OK")).expect("AuthResponse.OK");
+        }
+    }
+    else {
+        error!( "{} AuthResponse couldn't be parsed",get_name());
+        return Err(Box::new("AuthResponse couldn't be parsed")).expect("AuthResponse");
     }
 
     info!( "{} Sending ServiceDiscovery request...",get_name());
@@ -705,112 +681,101 @@ pub async fn proxy<A: Endpoint<A> + 'static>(
     };
 
     info!( "{} Waiting for HU MESSAGE_SERVICE_DISCOVERY_RESPONSE...",get_name());
-    match rx_srv.recv()
-    {
-        Ok(pkt)=>{
-            let chk = check_control_msg_id(MESSAGE_SERVICE_DISCOVERY_RESPONSE,&pkt);
-            match chk {
-                Ok(_v) => info!( "{} MESSAGE_SERVICE_DISCOVERY_RESPONSE received",get_name()),
-                Err(e) => {error!( "{} HU sent unexpected channel message", get_name()); return Err(e)},
+    let mut pkt = rx_srv.recv().await.ok_or("rx_srv channel hung up")?;
+    let chk = check_control_msg_id(MESSAGE_SERVICE_DISCOVERY_RESPONSE,&pkt);
+    match chk {
+        Ok(_v) => info!( "{} MESSAGE_SERVICE_DISCOVERY_RESPONSE received",get_name()),
+        Err(e) => {error!( "{} HU sent unexpected channel message", get_name()); return Err(e)},
+    }
+    let mut aa_sids:Vec<Option<Box<dyn IService>>> = vec![];
+    aa_sids.insert(0,None);//first CH is always null, is the default ch witch is managed by this function
+    let data = &pkt.payload[2..]; // start of message data, without message_id
+    if let Ok(msg) = ServiceDiscoveryResponse::parse_from_bytes(&data) {
+        info!( "{} ServiceDiscoveryResponse parsed ok",get_name());
+        //let srv_count=msg.services.len();
+
+        for (_,proto_srv) in msg.services.iter().enumerate() {
+            let ch_id=i32::from(proto_srv.id());
+            info!( "SID {}, media sink: {}",ch_id, proto_srv.media_sink_service.is_some());
+
+            if proto_srv.media_sink_service.is_some()
+            {
+                let srv =MediaSinkService::new(ch_id, tx_srv.clone());
+                aa_sids.insert(ch_id as usize,Some(Box::new(srv)));
             }
-            let data = &pkt.payload[2..]; // start of message data, without message_id
-            let mut aa_sids:Vec<Option<Box<dyn IService>>> = vec![];
-            aa_sids.insert(0,None);//first CH is always null, is the default ch witch is managed by this function
-            let data = &pkt.payload[2..]; // start of message data, without message_id
-            if let Ok(msg) = ServiceDiscoveryResponse::parse_from_bytes(&data) {
-                info!( "{} ServiceDiscoveryResponse , parsed ok",get_name());
-                //let srv_count=msg.services.len();
-
-                for (_,proto_srv) in msg.services.iter().enumerate() {
-                    let ch_id=i32::from(proto_srv.id());
-                    info!( "SID {}, media sink: {}",ch_id, proto_srv.media_sink_service.is_some());
-
-                    if proto_srv.media_sink_service.is_some()
-                    {
-                        let srv =MediaSinkService::new(ch_id, tx_srv.clone());
-                        aa_sids.insert(ch_id as usize,Some(Box::new(srv)));
-                    }
-                    else if proto_srv.media_source_service.is_some()
-                    {
-                        let srv =MediaSourceService::new(ch_id);
-                        aa_sids.insert(ch_id as usize,Some(Box::new(srv)));
-                    }
-                    else if proto_srv.sensor_source_service.is_some()
-                    {
-                        let srv =SensorSourceService::new(ch_id);
-                        aa_sids.insert(ch_id as usize,Some(Box::new(srv)));
-                    }
-                    else if proto_srv.input_source_service.is_some()
-                    {
-                        let srv =InputSourceService::new(ch_id);
-                        aa_sids.insert(ch_id as usize,Some(Box::new(srv)));
-                    }
-                    else if proto_srv.vendor_extension_service.is_some()
-                    {
-                        let srv =VendorExtensionService::new(ch_id);
-                        aa_sids.insert(ch_id as usize,Some(Box::new(srv)));
-                    }
-                    else {
-                        error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
-                    }
-                }
-
+            else if proto_srv.media_source_service.is_some()
+            {
+                let srv =MediaSourceService::new(ch_id);
+                aa_sids.insert(ch_id as usize,Some(Box::new(srv)));
+            }
+            else if proto_srv.sensor_source_service.is_some()
+            {
+                let srv =SensorSourceService::new(ch_id);
+                aa_sids.insert(ch_id as usize,Some(Box::new(srv)));
+            }
+            else if proto_srv.input_source_service.is_some()
+            {
+                let srv =InputSourceService::new(ch_id);
+                aa_sids.insert(ch_id as usize,Some(Box::new(srv)));
+            }
+            else if proto_srv.vendor_extension_service.is_some()
+            {
+                let srv =VendorExtensionService::new(ch_id);
+                aa_sids.insert(ch_id as usize,Some(Box::new(srv)));
             }
             else {
-                error!( "{} ServiceDiscoveryResponse couldn't be parsed",get_name());
-                return Err(Box::new("ServiceDiscoveryResponse couldn't be parsed")).expect("ServiceDiscoveryResponse");
+                error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
             }
-        },
-        Err(e)=>{error!("tls proxy thread received Error: {}",e)}
+        }
+
+    }
+    else {
+        error!( "{} ServiceDiscoveryResponse couldn't be parsed",get_name());
+        return Err(Box::new("ServiceDiscoveryResponse couldn't be parsed")).expect("ServiceDiscoveryResponse");
     }
 
     info!( "{} ServiceDiscovery done, starting AA Mirror loop",get_name());
     loop {
-        match rx_srv.recv()
+        let mut pkt = rx_srv.recv().await.ok_or("rx_srv channel hung up")?;
+        if pkt.channel !=0
         {
-            Ok(pkt)=>{
-                if pkt.channel !=0
-                {
-                    if let Some(ch) = &aa_sids[ usize::from(pkt.channel)] {
-                        ch.handle_hu_msg(&pkt);
+            if let Some(ch) = &aa_sids[ usize::from(pkt.channel)] {
+                ch.handle_hu_msg(&pkt);
+            }
+            else {
+                error!( "{} Channel id {:?} is NULL, message discarded",get_name(), pkt.channel);
+            }
+        }
+        else { //Default channel messages
+            let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+            let control = protos::ControlMessageType::from_i32(message_id);
+            match control.unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) {
+                MESSAGE_PING_REQUEST =>{
+                    let data = &pkt.payload[2..]; // start of message data, without message_id
+                    if let Ok(msg) = PingRequest::parse_from_bytes(&data) {
+                        let mut pingrsp= PingResponse::new();
+                        pingrsp.set_timestamp(msg.timestamp());
+                        let mut payload: Vec<u8>=pingrsp.write_to_bytes()?;
+                        payload.insert(0,((MESSAGE_PING_RESPONSE as u16) >> 8) as u8);
+                        payload.insert( 1,((MESSAGE_PING_RESPONSE as u16) & 0xff) as u8);
+                        let mut pkt_rsp = Packet {
+                            channel: 0,
+                            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                            final_length: None,
+                            payload: payload,
+                        };
+                        if let Err(_) = tx_srv.send(pkt_rsp).await{
+                            error!( "{} tls proxy send error",get_name());
+                        };
                     }
                     else {
-                        error!( "{} Channel id {:?} is NULL, message discarded",get_name(), pkt.channel);
+                        error!( "{} PingRequest couldn't be parsed",get_name());
                     }
-                }
-                else { //Default channel messages
-                    let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-                    let control = protos::ControlMessageType::from_i32(message_id);
-                    match control.unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) {
-                        MESSAGE_PING_REQUEST =>{
-                            let data = &pkt.payload[2..]; // start of message data, without message_id
-                            if let Ok(msg) = PingRequest::parse_from_bytes(&data) {
-                                let mut pingrsp= PingResponse::new();
-                                pingrsp.set_timestamp(msg.timestamp());
-                                let mut payload: Vec<u8>=pingrsp.write_to_bytes()?;
-                                payload.insert(0,((MESSAGE_PING_RESPONSE as u16) >> 8) as u8);
-                                payload.insert( 1,((MESSAGE_PING_RESPONSE as u16) & 0xff) as u8);
-                                let wr=hu_send_msg(&mut device,ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST, payload, &mut mem_buf, &mut server, bytes_written.clone(),hex_requested).await;
-                                match wr {
-                                    Ok(..)=>(),
-                                    Err(e) => {error!( "{} Error sending message to HU", get_name()); return Err(e)},
-                                }
-                            }
-                            else {
-                                error!( "{} PingRequest couldn't be parsed",get_name());
-                            }
 
-                        }
-                        _ =>{ info!( "{} Unknown message ID: {} received for default channel",get_name(), message_id);}
-                    };
                 }
-            },
-            Err(e)=>{error!("tls proxy thread received Error: {}",e)}
+                _ =>{ info!( "{} Unknown message ID: {} received for default channel",get_name(), message_id);}
+            };
         }
     }
-    //drop(rx_srv);
-    let res = tokio::try_join!(
-            tsk_srv_read,
-        );
     return Err(Box::new("proxy main loop ended ok")).expect("TODO");
 }
