@@ -366,7 +366,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
     statistics: Arc<AtomicUsize>,
     dmp_level:HexdumpLevel,
     ) -> Result<()> {
-    let mut ssl_handshake_done:bool;
+    let mut ssl_handshake_done:bool=false;
     let ssl = ssl_builder().await?;
     let mut mem_buf = SslMemBuf {
         client_stream: Arc::new(Mutex::new(VecDeque::new())),
