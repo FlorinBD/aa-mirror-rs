@@ -373,7 +373,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
         server_stream: Arc::new(Mutex::new(VecDeque::new())),
     };
     let mut server = openssl::ssl::SslStream::new(ssl, mem_buf.clone())?;
-
+    info!( "{}: Starting message proxy loop...", get_name());
     loop {
         //HU>Service
         match hu_rx.try_recv() {
@@ -442,7 +442,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
             // is to process the items.  If the error was Disconnected, on
             // the next iteration rx.recv().await will be None and we'll
             // break from the outer loop anyway.
-            Err(_) => { error!( "{}: tls proxy error receiving message from HU", get_name()); },
+            Err(_) => { /*error!( "{}: tls proxy error receiving message from HU", get_name());*/ },
         }
 
         //Service>HU
@@ -488,7 +488,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
             // is to process the items.  If the error was Disconnected, on
             // the next iteration rx.recv().await will be None and we'll
             // break from the outer loop anyway.
-            Err(_) => { error!( "{}: tls proxy error receiving message from HU", get_name()); },
+            Err(_) => { /*error!( "{}: tls proxy error receiving message from Service", get_name());*/ },
         }
 
     }
