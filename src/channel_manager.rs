@@ -503,7 +503,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                 /*error!( "{}: tls proxy error receiving message from Service", get_name());*/
                 if hu_read_err
                 {
-                    thread::yield_now().await;
+                    tokio::time::sleep(Duration::from_millis(5)).await;
                 }
 
             },
