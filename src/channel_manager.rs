@@ -3,7 +3,7 @@ use log::log_enabled;
 use openssl::ssl::{ErrorCode, Ssl, SslContextBuilder, SslFiletype, SslMethod};
 use simplelog::*;
 use std::collections::VecDeque;
-use std::fmt;
+use std::{fmt, thread};
 use std::io::{Read, Write};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -363,7 +363,8 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
     mut hu_rx: Receiver<Packet>,
     mut srv_rx: Receiver<Packet>,
     mut srv_tx: Sender<Packet>,
-    statistics: Arc<AtomicUsize>,
+    r_statistics: Arc<AtomicUsize>,
+    w_statistics: Arc<AtomicUsize>,
     dmp_level:HexdumpLevel,
     ) -> Result<()> {
     let mut ssl_handshake_done:bool=false;
@@ -378,6 +379,9 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
         //HU>Service
         match hu_rx.try_recv() {
             Ok(mut msg) => {
+                // Increment byte counters for statistics
+                // fixme: compute final_len for precise stats
+                r_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
                 if msg.flags&ENCRYPTED !=0
                 {
                     if !ssl_handshake_done
@@ -442,7 +446,10 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
             // is to process the items.  If the error was Disconnected, on
             // the next iteration rx.recv().await will be None and we'll
             // break from the outer loop anyway.
-            Err(_) => { /*error!( "{}: tls proxy error receiving message from HU", get_name());*/ },
+            Err(_) => {
+                /*error!( "{}: tls proxy error receiving message from HU", get_name());*/
+                thread::yield_now();
+            },
         }
 
         //Service>HU
@@ -462,10 +469,10 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                                     dmp_level,
                                     &msg,
                                 ).await;
-                                msg.transmit(&mut device).await.with_context(|| format!("{}: transmit to HU failed", get_name()))?;
                                 // Increment byte counters for statistics
                                 // fixme: compute final_len for precise stats
-                                statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
+                                w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
+                                msg.transmit(&mut device).await.with_context(|| format!("{}: transmit to HU failed", get_name()))?;
                             }
                             Err(e) => {error!( "{} decrypt_payload error: {:?}", get_name(), e);},
                         }
@@ -477,10 +484,11 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                         dmp_level,
                         &msg,
                     ).await;
-                    msg.transmit(&mut device).await.with_context(|| format!("{}: transmit to HU failed", get_name()))?;
                     // Increment byte counters for statistics
                     // fixme: compute final_len for precise stats
-                    statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
+                    w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
+                    msg.transmit(&mut device).await.with_context(|| format!("{}: transmit to HU failed", get_name()))?;
+
                 }
             }
 
@@ -488,7 +496,10 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
             // is to process the items.  If the error was Disconnected, on
             // the next iteration rx.recv().await will be None and we'll
             // break from the outer loop anyway.
-            Err(_) => { /*error!( "{}: tls proxy error receiving message from Service", get_name());*/ },
+            Err(_) => {
+                /*error!( "{}: tls proxy error receiving message from Service", get_name());*/
+                thread::yield_now();
+            },
         }
 
     }

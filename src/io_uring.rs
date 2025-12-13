@@ -347,8 +347,8 @@ pub async fn io_loop(
         // we can send a reference-counted version of it. also, since a
         // tokio-uring runtime is single-threaded, we can use `Rc` instead of
         // `Arc`.
-        let file_bytes = Arc::new(AtomicUsize::new(0));
-        let stream_bytes = Arc::new(AtomicUsize::new(0));
+        let stats_w_bytes = Arc::new(AtomicUsize::new(0));
+        let stats_r_bytes = Arc::new(AtomicUsize::new(0));
 
         let mut tsk_ch_manager;
         let mut tsk_hu_read;
@@ -381,7 +381,7 @@ pub async fn io_loop(
         let cfg = shared_config.read().await.clone();
         let hex_requested = cfg.hexdump_level;
         //service packet proxy
-        tsk_packet_proxy = tokio_uring::spawn(packet_tls_proxy(hu_w, rxr_hu, rxr_srv, tx_srv, file_bytes.clone(), hex_requested));
+        tsk_packet_proxy = tokio_uring::spawn(packet_tls_proxy(hu_w, rxr_hu, rxr_srv, tx_srv, stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested));
 
         // dedicated reading threads:
         tsk_hu_read = tokio_uring::spawn(endpoint_reader(hu_r, txr_hu));
@@ -395,8 +395,8 @@ pub async fn io_loop(
         // Thread for monitoring transfer
         let mut tsk_monitor = tokio::spawn(transfer_monitor(
             stats_interval,
-            file_bytes,
-            stream_bytes,
+            stats_w_bytes,
+            stats_r_bytes,
             read_timeout,
             shared_config.clone(),
         ));
