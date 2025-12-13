@@ -368,6 +368,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
     dmp_level:HexdumpLevel,
     ) -> Result<()> {
     let mut ssl_handshake_done:bool=false;
+    let mut hu_read_err:bool=false;
     let ssl = ssl_builder().await?;
     let mut mem_buf = SslMemBuf {
         client_stream: Arc::new(Mutex::new(VecDeque::new())),
@@ -379,6 +380,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
         //HU>Service
         match hu_rx.try_recv() {
             Ok(mut msg) => {
+                hu_read_err=false;
                 // Increment byte counters for statistics
                 // fixme: compute final_len for precise stats
                 r_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
@@ -448,7 +450,8 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
             // break from the outer loop anyway.
             Err(_) => {
                 /*error!( "{}: tls proxy error receiving message from HU", get_name());*/
-                thread::yield_now();
+                //thread::yield_now();
+                hu_read_err=true;
             },
         }
 
@@ -498,7 +501,11 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
             // break from the outer loop anyway.
             Err(_) => {
                 /*error!( "{}: tls proxy error receiving message from Service", get_name());*/
-                thread::yield_now();
+                if hu_read_err
+                {
+                    thread::yield_now();
+                }
+
             },
         }
 
