@@ -344,7 +344,7 @@ pub async fn endpoint_reader<A: Endpoint<A>>(
                         final_length,
                         payload: frame,
                     };
-                    info!("Channel {} recieved {} bytes from HU", channel ,payload_size);
+                    info!("Channel {} received {} bytes from HU", channel ,payload_size);
                     // send packet to main thread for further process
                     tx.send(pkt).await?;
                     // check if we have another packet
@@ -503,12 +503,11 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                 /*error!( "{}: tls proxy error receiving message from Service", get_name());*/
                 if hu_read_err
                 {
-                    thread::yield_now();
+                    thread::yield_now().await;
                 }
 
             },
         }
-
     }
 
     /// checking if there was a true fatal SSL error
