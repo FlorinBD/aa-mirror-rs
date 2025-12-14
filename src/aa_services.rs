@@ -32,7 +32,7 @@ use protobuf::text_format::print_to_string_pretty;
 use protobuf::{Enum, EnumOrUnknown, Message, MessageDyn};
 use protos::ControlMessageType::{self, *};
 use crate::aoa::AccessoryDeviceInfo;
-use crate::channel_manager::Packet;
+use crate::channel_manager::{Packet, ENCRYPTED, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
 use crate::io_uring::Endpoint;
 use crate::io_uring::IoDevice;
 
@@ -63,22 +63,41 @@ pub struct MediaSinkService {
     sid: ServiceType,
     ch_id: i32,
     tx_srv: Sender<Packet>,
+    ch_opened:bool,
 }
 impl Clone for MediaSinkService {
     fn clone(&self) -> Self {
         MediaSinkService {
             sid: self.sid.clone(),
             ch_id: self.ch_id.clone(),
-            tx_srv: self.tx_srv.clone()
+            tx_srv: self.tx_srv.clone(),
+            ch_opened: self.ch_opened.clone(),
         }
     }
 }
 impl MediaSinkService {
     pub fn new(pch:i32, tx: Sender<Packet>) -> Self {
+        let mut sdreq= ChannelOpenRequest::new();
+        sdreq.set_priority(0);
+        sdreq.set_service_id(pch);
+        let mut payload: Vec<u8>=sdreq.write_to_bytes()?;
+        payload.insert(0,((MESSAGE_CHANNEL_OPEN_REQUEST as u16) >> 8) as u8);
+        payload.insert( 1,((MESSAGE_CHANNEL_OPEN_REQUEST as u16) & 0xff) as u8);
+
+        let mut pkt_rsp = Packet {
+            channel: 0,
+            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+            final_length: None,
+            payload: payload,
+        };
+        if let Err(_) = tx.send(pkt_rsp){
+            error!( "MediaSinkService: tls proxy send error");
+        };
         Self{
             sid:ServiceType::MediaSink,
             ch_id:pch,
             tx_srv: tx,
+            ch_opened:false,
         }
     }
 }
@@ -93,6 +112,21 @@ impl IService for MediaSinkService {
             match control.unwrap() {
                 MEDIA_MESSAGE_VIDEO_FOCUS_NOTIFICATION => {
                     info!("{} Received {} message", self.sid.to_string(), message_id);
+                }
+                MESSAGE_CHANNEL_OPEN_RESPONSE =>{
+                    info!("{} Received {} message", self.sid.to_string(), message_id);
+                    if let Ok(msg) = ChannelOpenResponse::parse_from_bytes(&pkt) {
+                        if msg.status() != STATUS_SUCCESS
+                        {
+                            error!( "MediaSinkService: ChannelOpenResponse status is not OK, got {:?}", msg.status);
+                        }
+                        else {
+                            info!( "MediaSinkService: ChannelOpenResponse received, waiting for media focus");
+                        }
+                    }
+                    else {
+                        error!( "MediaSinkService: ChannelOpenResponse couldn't be parsed");
+                    }
                 }
                 _ =>{ error!( "{} Unhandled message ID: {} received",self.sid.to_string(), message_id);}
             }
