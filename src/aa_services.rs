@@ -56,7 +56,7 @@ impl fmt::Display for ServiceType {
 
 
 pub trait IService{
-    fn handle_hu_msg(&self, pkt: &Packet)->();
+    async fn handle_hu_msg(&self, pkt: &Packet)->();
     fn get_service_type(&self)->ServiceType;
     fn get_name() -> String;
 }
@@ -93,10 +93,7 @@ impl MediaSinkService {
             payload: payload,
         };
 
-        match tx.send(pkt_rsp)
-        {
-            None=>{error!( "MediaSinkService: OpenChannel message send error");}
-        }
+        tx.send(pkt_rsp).unwrap();
         Self{
             sid:ServiceType::MediaSink,
             ch_id:pch,
@@ -106,7 +103,7 @@ impl MediaSinkService {
     }
 }
 impl IService for MediaSinkService {
-    fn handle_hu_msg(&self, pkt: &Packet)
+    async fn handle_hu_msg(&self, pkt: &Packet)
     {
         if let Ok(id)=pkt.payload[0..=1].try_into()//FIXME catch the error when not enough data is inside
         {
@@ -126,14 +123,14 @@ impl IService for MediaSinkService {
                             error!( "{}: ChannelOpenResponse status is not OK, got {:?}",self.get_name(), msg.status);
                         }
                         else {
-                            info!( "{}: ChannelOpenResponse received, waiting for media focus",self.get_name());
+                            info!( "{}: ChannelOpenResponse received, waiting for media focus",MediaSinkService::get_name());
                         }
                     }
                     else {
-                        error!( "{}: ChannelOpenResponse couldn't be parsed",self.get_name());
+                        error!( "{}: ChannelOpenResponse couldn't be parsed",MediaSinkService::get_name());
                     }
                 }
-                _ =>{ error!( "{}: Unhandled message ID: {} received",self.get_name(), message_id);}
+                _ =>{ error!( "{}: Unhandled message ID: {} received",MediaSinkService::get_name(), message_id);}
             }
         }
 
@@ -172,7 +169,11 @@ impl MediaSourceService {
     }
 }
 impl IService for MediaSourceService {
-    fn handle_hu_msg(&self, pkt: &Packet)
+    fn get_name() -> String {
+        let dev = "MediaSourceService";
+        format!("<i><bright-black> aa-mirror/{}: </>", dev)
+    }
+    async fn handle_hu_msg(&self, pkt: &Packet)
     {
         if let Ok(id)=pkt.payload[0..=1].try_into()//FIXME catch the error when not enough data is inside
         {
@@ -181,9 +182,9 @@ impl IService for MediaSourceService {
             let control = protos::MediaMessageId::from_i32(message_id);
             match control.unwrap() {
                 MEDIA_MESSAGE_VIDEO_FOCUS_NOTIFICATION => {
-                    info!("{} Received {} message", self.sid.to_string(), message_id);
+                    info!("{} Received {} message", MediaSourceService::get_name(), message_id);
                 }
-                _ =>{ error!( "{} Unhandled message ID: {} received",self.sid.to_string(), message_id);}
+                _ =>{ error!( "{} Unhandled message ID: {} received",MediaSourceService::get_name(), message_id);}
             }
         }
     }
@@ -191,11 +192,6 @@ impl IService for MediaSourceService {
     fn get_service_type(&self)->ServiceType
     {
         return self.sid;
-    }
-
-    fn get_name() -> String {
-        let dev = "MediaSourceService";
-        format!("<i><bright-black> aa-mirror/{}: </>", dev)
     }
 }
 
@@ -222,7 +218,7 @@ impl SensorSourceService {
     }
 }
 impl IService for SensorSourceService {
-    fn handle_hu_msg(&self, pkt: &Packet)
+    async fn handle_hu_msg(&self, pkt: &Packet)
     {
         if let Ok(id)=pkt.payload[0..=1].try_into()//FIXME catch the error when not enough data is inside
         {
@@ -231,9 +227,9 @@ impl IService for SensorSourceService {
             let control = protos::SensorMessageId::from_i32(message_id);
             match control.unwrap() {
                 SENSOR_MESSAGE_RESPONSE => {
-                    info!("{} Received {} message", self.sid.to_string(), message_id);
+                    info!("{} Received {} message", SensorSourceService::get_name(), message_id);
                 }
-                _ =>{ error!( "{} Unhandled message ID: {} received",self.sid.to_string(), message_id);}
+                _ =>{ error!( "{} Unhandled message ID: {} received",SensorSourceService::get_name(), message_id);}
             }
         }
 
@@ -272,7 +268,7 @@ impl InputSourceService {
     }
 }
 impl IService for InputSourceService {
-    fn handle_hu_msg(&self, pkt: &Packet)
+    async fn handle_hu_msg(&self, pkt: &Packet)
     {
         if let Ok(id)=pkt.payload[0..=1].try_into()//FIXME catch the error when not enough data is inside
         {
@@ -281,9 +277,9 @@ impl IService for InputSourceService {
             let control = protos::InputMessageId::from_i32(message_id);
             match control.unwrap() {
                 INPUT_MESSAGE_KEY_BINDING_RESPONSE => {
-                    info!("{} Received {} message", self.sid.to_string(), message_id);
+                    info!("{} Received {} message", InputSourceService::get_name(), message_id);
                 }
-                _ =>{ error!( "{} Unhandled message ID: {} received",self.sid.to_string(), message_id);}
+                _ =>{ error!( "{} Unhandled message ID: {} received",InputSourceService::get_name(), message_id);}
             }
         }
 
@@ -322,7 +318,7 @@ impl VendorExtensionService {
     }
 }
 impl IService for VendorExtensionService {
-    fn handle_hu_msg(&self, pkt: &Packet)
+    async fn handle_hu_msg(&self, pkt: &Packet)
     {
         if let Ok(id)=pkt.payload[0..=1].try_into()//FIXME catch the error when not enough data is inside
         {
@@ -331,9 +327,9 @@ impl IService for VendorExtensionService {
             let control = protos::MediaMessageId::from_i32(message_id);
             match control.unwrap() {
                 MEDIA_MESSAGE_SETUP => {
-                    info!("{} Received {} message", self.sid.to_string(), message_id);
+                    info!("{} Received {} message", VendorExtensionService::get_name(), message_id);
                 }
-                _ =>{ error!( "{} Unhandled message ID: {} received",self.sid.to_string(), message_id);}
+                _ =>{ error!( "{} Unhandled message ID: {} received",VendorExtensionService::get_name(), message_id);}
             }
         }
 
