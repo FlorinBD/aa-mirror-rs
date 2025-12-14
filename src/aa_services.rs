@@ -80,7 +80,7 @@ impl MediaSinkService {
         let mut sdreq= ChannelOpenRequest::new();
         sdreq.set_priority(0);
         sdreq.set_service_id(pch);
-        let mut payload: Vec<u8>=sdreq.write_to_bytes();
+        let mut payload: Vec<u8>=sdreq.write_to_bytes().expect("serialization failed");
         payload.insert(0,((MESSAGE_CHANNEL_OPEN_REQUEST as u16) >> 8) as u8);
         payload.insert( 1,((MESSAGE_CHANNEL_OPEN_REQUEST as u16) & 0xff) as u8);
 
@@ -90,9 +90,7 @@ impl MediaSinkService {
             final_length: None,
             payload: payload,
         };
-        if let Err(_) = tx.send(pkt_rsp).unwrap(){
-            error!( "MediaSinkService: tls proxy send error");
-        };
+        tx.send(pkt_rsp).unwrap();
         Self{
             sid:ServiceType::MediaSink,
             ch_id:pch,
