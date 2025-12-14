@@ -359,7 +359,7 @@ pub async fn endpoint_reader<A: Endpoint<A>>(
 
 /// main reader thread for a service
 pub async fn packet_tls_proxy<A: Endpoint<A>>(
-    mut device: IoDevice<A>,
+    mut hu_wr: IoDevice<A>,
     mut hu_rx: Receiver<Packet>,
     mut srv_rx: Receiver<Packet>,
     mut srv_tx: Sender<Packet>,
@@ -384,11 +384,36 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                 // Increment byte counters for statistics
                 // fixme: compute final_len for precise stats
                 r_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
+
                 if msg.flags&ENCRYPTED !=0
                 {
                     if !ssl_handshake_done
                     {
-                        //error!( "{}: tls proxy error: received encrypted message from HU before TLS handshake", get_name());
+                        error!( "{}: tls proxy error: received encrypted message from HU before TLS handshake", get_name());
+                    }
+                    else {
+                        match msg.decrypt_payload(&mut mem_buf, &mut server).await {
+                            Ok(_) => {
+                                let _ = pkt_debug(
+                                    HexdumpLevel::DecryptedInput,
+                                    dmp_level,
+                                    &msg,
+                                ).await;
+                                if let Err(_) = srv_tx.send(msg).await{
+                                    error!( "{} tls proxy send to service error",get_name());
+                                };
+                            }
+                            Err(e) => {error!( "{} decrypt_payload error: {:?}", get_name(), e);},
+                        }
+                    }
+                }
+                else
+                {
+                    let _ = pkt_debug(HexdumpLevel::DecryptedInput, dmp_level, &msg, ).await;
+                    // message_id is the first 2 bytes of payload
+                    let message_id: i32 = u16::from_be_bytes(msg.payload[0..=1].try_into()?).into();
+                    if( !ssl_handshake_done && protos::ControlMessageType::from_i32(message_id).unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) == MESSAGE_ENCAPSULATED_SSL)
+                    {
                         // doing SSL handshake
                         const STEPS: u8 = 2;
                         for i in 1..=STEPS {
@@ -413,34 +438,15 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                             }
                             let pkt = ssl_encapsulate(mem_buf.clone()).await?;
                             let _ = pkt_debug(HexdumpLevel::RawOutput, dmp_level, &pkt).await;
-                            pkt.transmit(&mut device).await.with_context(|| format!("{}: transmit failed", get_name()))?;
+                            pkt.transmit(&mut hu_wr).await.with_context(|| format!("{}: transmit failed", get_name()))?;
                         }
                     }
                     else {
-                        match msg.decrypt_payload(&mut mem_buf, &mut server).await {
-                            Ok(_) => {
-                                let _ = pkt_debug(
-                                    HexdumpLevel::DecryptedInput,
-                                    dmp_level,
-                                    &msg,
-                                ).await;
-                                if let Err(_) = srv_tx.send(msg).await{
-                                    error!( "{} tls proxy send to service error",get_name());
-                                };
-                            }
-                            Err(e) => {error!( "{} decrypt_payload error: {:?}", get_name(), e);},
-                        }
+                        if let Err(_) = srv_tx.send(msg).await{
+                            error!( "{} tls proxy send to service error",get_name());
+                        };
                     }
-                }
-                else {
-                    let _ = pkt_debug(
-                        HexdumpLevel::DecryptedInput,
-                        dmp_level,
-                        &msg,
-                    ).await;
-                    if let Err(_) = srv_tx.send(msg).await{
-                        error!( "{} tls proxy send to service error",get_name());
-                    };
+
                 }
             }
 
@@ -475,7 +481,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                                 // Increment byte counters for statistics
                                 // fixme: compute final_len for precise stats
                                 w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
-                                msg.transmit(&mut device).await.with_context(|| format!("{}: transmit to HU failed", get_name()))?;
+                                msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: transmit to HU failed", get_name()))?;
                             }
                             Err(e) => {error!( "{} decrypt_payload error: {:?}", get_name(), e);},
                         }
@@ -490,7 +496,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                     // Increment byte counters for statistics
                     // fixme: compute final_len for precise stats
                     w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
-                    msg.transmit(&mut device).await.with_context(|| format!("{}: transmit to HU failed", get_name()))?;
+                    msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: transmit to HU failed", get_name()))?;
 
                 }
             }
