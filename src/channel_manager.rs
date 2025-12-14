@@ -412,11 +412,26 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                     let _ = pkt_debug(HexdumpLevel::DecryptedInput, dmp_level, &msg, ).await;
                     // message_id is the first 2 bytes of payload
                     let message_id: i32 = u16::from_be_bytes(msg.payload[0..=1].try_into()?).into();
-                    if( !ssl_handshake_done && protos::ControlMessageType::from_i32(message_id).unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) == MESSAGE_ENCAPSULATED_SSL)
+                    if !ssl_handshake_done && (protos::ControlMessageType::from_i32(message_id).unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) == MESSAGE_ENCAPSULATED_SSL)
                     {
                         // doing SSL handshake
-                        const STEPS: u8 = 2;
-                        for i in 1..=STEPS {
+                            //Step1: parse client hello
+                            let _ = pkt_debug(HexdumpLevel::RawInput, dmp_level, &msg).await;
+                            msg.ssl_decapsulate_write(&mut mem_buf).await?;
+                            ssl_check_failure(server.accept())?;
+                            info!(
+                                "{} 🔒 stage #{} of {}: SSL handshake: {}",
+                                get_name(),
+                                1,
+                                2,
+                                server.ssl().state_string_long(),
+                            );
+                            // Step2: send server hello
+                            let pkt = ssl_encapsulate(mem_buf.clone()).await?;
+                            let _ = pkt_debug(HexdumpLevel::RawOutput, dmp_level, &pkt).await;
+                            pkt.transmit(&mut hu_wr).await.with_context(|| format!("{}: transmit failed", get_name()))?;
+
+                            //Step3: ClientKeyExchange
                             let pkt = hu_rx.recv().await.ok_or("hu reader channel hung up")?;
                             let _ = pkt_debug(HexdumpLevel::RawInput, dmp_level, &pkt).await;
                             pkt.ssl_decapsulate_write(&mut mem_buf).await?;
@@ -424,8 +439,8 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                             info!(
                                 "{} 🔒 stage #{} of {}: SSL handshake: {}",
                                 get_name(),
-                                i,
-                                STEPS,
+                                2,
+                                2,
                                 server.ssl().state_string_long(),
                             );
                             if server.ssl().is_init_finished() {
@@ -436,10 +451,10 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                                     server.ssl().current_cipher().unwrap().name(),
                                 );
                             }
+                            //Step4: Change Cipher spec finished
                             let pkt = ssl_encapsulate(mem_buf.clone()).await?;
                             let _ = pkt_debug(HexdumpLevel::RawOutput, dmp_level, &pkt).await;
                             pkt.transmit(&mut hu_wr).await.with_context(|| format!("{}: transmit failed", get_name()))?;
-                        }
                     }
                     else {
                         if let Err(_) = srv_tx.send(msg).await{
