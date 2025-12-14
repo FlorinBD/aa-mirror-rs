@@ -24,6 +24,7 @@ use crate::aa_services::protos::*;
 use crate::aa_services::sensor_source_service::Sensor;
 use crate::aa_services::AudioStreamType::*;
 use crate::aa_services::ByeByeReason::USER_SELECTION;
+use crate::aa_services::MessageStatus::*;
 use crate::aa_services::MediaMessageId::*;
 use crate::aa_services::InputMessageId::*;
 use crate::aa_services::SensorMessageId::*;
@@ -90,7 +91,11 @@ impl MediaSinkService {
             final_length: None,
             payload: payload,
         };
-        tx.send(pkt_rsp).unwrap();
+
+        match tx.send(pkt_rsp)
+        {
+            Err(e)=>{error!( "MediaSinkService: OpenChannel message send error: {}",e);}
+        }
         Self{
             sid:ServiceType::MediaSink,
             ch_id:pch,
