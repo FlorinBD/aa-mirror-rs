@@ -58,6 +58,7 @@ impl fmt::Display for ServiceType {
 pub trait IService{
     fn handle_hu_msg(&self, pkt: &Packet)->();
     fn get_service_type(&self)->ServiceType;
+    fn get_name() -> String;
 }
 ///MediaSink implementation
 pub struct MediaSinkService {
@@ -94,7 +95,7 @@ impl MediaSinkService {
 
         match tx.send(pkt_rsp)
         {
-            Err(e)=>{error!( "MediaSinkService: OpenChannel message send error: {}",e);}
+            None=>{error!( "MediaSinkService: OpenChannel message send error");}
         }
         Self{
             sid:ServiceType::MediaSink,
@@ -122,17 +123,17 @@ impl IService for MediaSinkService {
                     if let Ok(msg) = ChannelOpenResponse::parse_from_bytes(&data) {
                         if msg.status() != STATUS_SUCCESS
                         {
-                            error!( "MediaSinkService: ChannelOpenResponse status is not OK, got {:?}", msg.status);
+                            error!( "{}: ChannelOpenResponse status is not OK, got {:?}",self.get_name(), msg.status);
                         }
                         else {
-                            info!( "MediaSinkService: ChannelOpenResponse received, waiting for media focus");
+                            info!( "{}: ChannelOpenResponse received, waiting for media focus",self.get_name());
                         }
                     }
                     else {
-                        error!( "MediaSinkService: ChannelOpenResponse couldn't be parsed");
+                        error!( "{}: ChannelOpenResponse couldn't be parsed",self.get_name());
                     }
                 }
-                _ =>{ error!( "{} Unhandled message ID: {} received",self.sid.to_string(), message_id);}
+                _ =>{ error!( "{}: Unhandled message ID: {} received",self.get_name(), message_id);}
             }
         }
 
@@ -141,6 +142,11 @@ impl IService for MediaSinkService {
     fn get_service_type(&self)->ServiceType
     {
         return self.sid;
+    }
+
+    fn get_name() -> String {
+        let dev = "MediaSinkService";
+        format!("<i><bright-black> aa-mirror/{}: </>", dev)
     }
 }
 
@@ -185,6 +191,11 @@ impl IService for MediaSourceService {
     fn get_service_type(&self)->ServiceType
     {
         return self.sid;
+    }
+
+    fn get_name() -> String {
+        let dev = "MediaSourceService";
+        format!("<i><bright-black> aa-mirror/{}: </>", dev)
     }
 }
 
@@ -232,6 +243,11 @@ impl IService for SensorSourceService {
     {
         return self.sid;
     }
+
+    fn get_name() -> String {
+        let dev = "SensorSourceService";
+        format!("<i><bright-black> aa-mirror/{}: </>", dev)
+    }
 }
 
 ///InputSourceService implementation
@@ -277,6 +293,11 @@ impl IService for InputSourceService {
     {
         return self.sid;
     }
+
+    fn get_name() -> String {
+        let dev = "InputSourceService";
+        format!("<i><bright-black> aa-mirror/{}: </>", dev)
+    }
 }
 
 ///VendorExtensionService implementation
@@ -321,5 +342,10 @@ impl IService for VendorExtensionService {
     fn get_service_type(&self)->ServiceType
     {
         return self.sid;
+    }
+
+    fn get_name() -> String {
+        let dev = "VendorExtensionService";
+        format!("<i><bright-black> aa-mirror/{}: </>", dev)
     }
 }
