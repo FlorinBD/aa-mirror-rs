@@ -486,13 +486,13 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                         error!( "{}: tls proxy error: received encrypted message from service before TLS handshake", get_name());
                     }
                     else {
-                        match msg.decrypt_payload(&mut mem_buf, &mut server).await {
+                        let _ = pkt_debug(
+                            HexdumpLevel::DecryptedOutput,
+                            dmp_level,
+                            &msg,
+                        ).await;
+                        match msg.encrypt_payload(&mut mem_buf, &mut server).await {
                             Ok(_) => {
-                                let _ = pkt_debug(
-                                    HexdumpLevel::DecryptedInput,
-                                    dmp_level,
-                                    &msg,
-                                ).await;
                                 // Increment byte counters for statistics
                                 // fixme: compute final_len for precise stats
                                 w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
@@ -504,7 +504,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                 }
                 else {
                     let _ = pkt_debug(
-                        HexdumpLevel::DecryptedInput,
+                        HexdumpLevel::DecryptedOutput,
                         dmp_level,
                         &msg,
                     ).await;
@@ -524,7 +524,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                 /*error!( "{}: tls proxy error receiving message from Service", get_name());*/
                 if hu_read_err
                 {
-                    tokio::time::sleep(Duration::from_millis(5)).await;
+                    tokio::time::sleep(Duration::from_millis(1)).await;
                 }
 
             },
