@@ -717,8 +717,10 @@ pub async fn ch_proxy(
             {
                 let srv =MediaSinkService::new(ch_id, tx_srv.clone());
                 aa_sids.insert(ch_id as usize,Some(Box::new(srv)));
-                srv.open_channel();
-
+                if let Some(opn)=&aa_sids[ch_id]
+                {
+                    opn.open_channel().await?;
+                }
             }
             else if proto_srv.media_source_service.is_some()
             {
