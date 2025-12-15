@@ -92,18 +92,17 @@ impl IService for MediaSinkService {
     fn open_channel(&self) -> () {
         let mut sdreq= ChannelOpenRequest::new();
         sdreq.set_priority(0);
-        sdreq.set_service_id(pch);
+        sdreq.set_service_id(self.ch_id);
         let mut payload: Vec<u8>=sdreq.write_to_bytes().expect("serialization failed");
         payload.insert(0,((MESSAGE_CHANNEL_OPEN_REQUEST as u16) >> 8) as u8);
         payload.insert( 1,((MESSAGE_CHANNEL_OPEN_REQUEST as u16) & 0xff) as u8);
 
-        let mut pkt_rsp = Packet {
+        let pkt_rsp = Packet {
             channel: 0,
             flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
             final_length: None,
             payload: payload,
         };
-
         self.tx_srv.send(pkt_rsp).unwrap();
     }
 
