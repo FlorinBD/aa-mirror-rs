@@ -89,7 +89,7 @@ impl MediaSinkService {
     }
 }
 impl IService for MediaSinkService {
-    fn open_channel(&self) -> () {
+    async fn open_channel(&self) -> () {
         let mut sdreq= ChannelOpenRequest::new();
         sdreq.set_priority(0);
         sdreq.set_service_id(self.ch_id);
@@ -103,7 +103,7 @@ impl IService for MediaSinkService {
             final_length: None,
             payload: payload,
         };
-        self.tx_srv.send(pkt_rsp).unwrap();
+        self.tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
     }
 
     fn handle_hu_msg(&self, pkt: &Packet)
