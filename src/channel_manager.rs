@@ -704,7 +704,7 @@ pub async fn ch_proxy(
     }
     //let mut srv_senders:Vec<Option<Box<Sender<Packet>>>> = vec![];
     let mut srv_senders;
-    srv_senders.insert(0,None);//first CH is always null, is the default ch witch is managed by this function
+
     let data = &pkt.payload[2..]; // start of message data, without message_id
     if let Ok(msg) = ServiceDiscoveryResponse::parse_from_bytes(&data) {
         info!( "{} ServiceDiscoveryResponse parsed ok",get_name());
@@ -718,7 +718,7 @@ pub async fn ch_proxy(
             if proto_srv.media_sink_service.is_some()
             {
                 let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
-                srv_senders.insert(ch_id as usize,tx);
+                srv_senders.insert((ch_id - 1) as usize,tx);
                 tsk_srv_loop = tokio_uring::spawn(aa_services::th_media_sink(ch_id, tx_srv.clone(), rx));
             }
             else {
@@ -737,7 +737,14 @@ pub async fn ch_proxy(
         let mut pkt = rx_srv.recv().await.ok_or("rx_srv channel hung up")?;
         if pkt.channel !=0
         {
-            srv_senders[usize::from(pkt.channel)].send(pkt).await.expect("TODO: panic message");
+            if srv_senders.len() >= pkt.channel as usize
+            {
+                srv_senders[usize::from(pkt.channel - 1)].send(pkt).await.expect("TODO: panic message");
+            }
+            else {
+                error!( "{} Invalid channel {}",get_name(), pkt.channel);
+            }
+
         }
         else { //Default channel messages
             let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
