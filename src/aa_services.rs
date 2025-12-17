@@ -103,7 +103,7 @@ impl IService for MediaSinkService {
             final_length: None,
             payload: payload,
         };
-        self.tx_srv.send(pkt_rsp).await.unwrap();
+        return self.tx_srv.send(pkt_rsp);
     }
 
     fn handle_hu_msg(&self, pkt: &Packet)
