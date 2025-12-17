@@ -33,7 +33,7 @@ use protobuf::{Enum, EnumOrUnknown, Message, MessageDyn};
 use tokio::sync::mpsc;
 use protos::ControlMessageType::{self, *};
 use crate::aa_services;
-use crate::aa_services::{MediaSinkService, MediaSourceService, IService, ServiceType, SensorSourceService, InputSourceService, VendorExtensionService};
+use crate::aa_services::{ServiceType};
 use crate::config::{Action::Stop, AppConfig, SharedConfig};
 use crate::config_types::HexdumpLevel;
 use crate::io_uring::Endpoint;
@@ -711,12 +711,12 @@ pub async fn ch_proxy(
         let mut tsk_srv_loop;
         for (_,proto_srv) in msg.services.iter().enumerate() {
             let ch_id=i32::from(proto_srv.id());
-            info!( "SID {}, media sink: {}",ch_id, proto_srv.media_sink_service.is_some());
+            //info!( "SID {}, media sink: {}",ch_id, proto_srv.media_sink_service.is_some());
 
             if proto_srv.media_sink_service.is_some()
             {
-                srv_senders.insert(ch_id,None);
-                let mut tx=&srv_senders[ch_id];
+                srv_senders.insert(ch_id as usize,None);
+                let mut tx=&srv_senders[ch_id as usize];
                 let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                 tsk_srv_loop = tokio_uring::spawn(aa_services::th_media_sink(ch_id, &tx_srv, rx));
             }
@@ -736,8 +736,8 @@ pub async fn ch_proxy(
         let mut pkt = rx_srv.recv().await.ok_or("rx_srv channel hung up")?;
         if pkt.channel !=0
         {
-            if let Some(ch) = &aa_sids[ usize::from(pkt.channel)] {
-                ch.handle_hu_msg(&pkt);
+            if let Some(ch) = &srv_senders[ usize::from(pkt.channel)] {
+                ch.send(&pkt).await.expect("TODO: panic message");
             }
             else {
                 error!( "{} Channel id {:?} is NULL, message discarded",get_name(), pkt.channel);
