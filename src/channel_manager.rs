@@ -702,45 +702,23 @@ pub async fn ch_proxy(
         Ok(_v) => info!( "{} MESSAGE_SERVICE_DISCOVERY_RESPONSE received",get_name()),
         Err(e) => {error!( "{} HU sent unexpected channel message", get_name()); return Err(e)},
     }
-    let mut aa_sids:Vec<Option<Box<dyn IService>>> = vec![];
-    aa_sids.insert(0,None);//first CH is always null, is the default ch witch is managed by this function
+    let mut srv_senders:Vec<Option<Box<Sender<Packet>>>> = vec![];
+    srv_senders.insert(0,None);//first CH is always null, is the default ch witch is managed by this function
     let data = &pkt.payload[2..]; // start of message data, without message_id
     if let Ok(msg) = ServiceDiscoveryResponse::parse_from_bytes(&data) {
         info!( "{} ServiceDiscoveryResponse parsed ok",get_name());
         //let srv_count=msg.services.len();
-
+        let mut tsk_srv_loop;
         for (_,proto_srv) in msg.services.iter().enumerate() {
             let ch_id=i32::from(proto_srv.id());
             info!( "SID {}, media sink: {}",ch_id, proto_srv.media_sink_service.is_some());
 
             if proto_srv.media_sink_service.is_some()
             {
-                let srv =MediaSinkService::new(ch_id, tx_srv.clone());
-                aa_sids.insert(ch_id as usize,Some(Box::new(srv)));
-                if let Some(opn)=&aa_sids[ch_id as usize]
-                {
-                    opn.open_channel().await?;
-                }
-            }
-            else if proto_srv.media_source_service.is_some()
-            {
-                let srv =MediaSourceService::new(ch_id);
-                aa_sids.insert(ch_id as usize,Some(Box::new(srv)));
-            }
-            else if proto_srv.sensor_source_service.is_some()
-            {
-                let srv =SensorSourceService::new(ch_id);
-                aa_sids.insert(ch_id as usize,Some(Box::new(srv)));
-            }
-            else if proto_srv.input_source_service.is_some()
-            {
-                let srv =InputSourceService::new(ch_id);
-                aa_sids.insert(ch_id as usize,Some(Box::new(srv)));
-            }
-            else if proto_srv.vendor_extension_service.is_some()
-            {
-                let srv =VendorExtensionService::new(ch_id);
-                aa_sids.insert(ch_id as usize,Some(Box::new(srv)));
+                srv_senders.insert(ch_id,None);
+                let mut tx=&srv_senders[ch_id];
+                let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
+                tsk_srv_loop = tokio_uring::spawn(aa_services::th_media_sink(ch_id, &tx_srv, rx));
             }
             else {
                 error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
