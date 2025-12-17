@@ -718,7 +718,7 @@ pub async fn ch_proxy(
                 srv_senders.insert(ch_id as usize,None);
                 let mut tx=&srv_senders[ch_id as usize];
                 let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
-                tsk_srv_loop = tokio_uring::spawn(aa_services::th_media_sink(ch_id, &tx_srv, rx));
+                tsk_srv_loop = tokio_uring::spawn(aa_services::th_media_sink(ch_id, tx_srv.clone(), rx));
             }
             else {
                 error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
@@ -737,7 +737,7 @@ pub async fn ch_proxy(
         if pkt.channel !=0
         {
             if let Some(ch) = &srv_senders[ usize::from(pkt.channel)] {
-                ch.send(&pkt).await.expect("TODO: panic message");
+                ch.send(pkt).await.expect("TODO: panic message");
             }
             else {
                 error!( "{} Channel id {:?} is NULL, message discarded",get_name(), pkt.channel);

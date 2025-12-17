@@ -70,7 +70,7 @@ pub async fn th_media_sink(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Recei
         final_length: None,
         payload: payload,
     };
-    tx_srv.send(pkt_rsp).await.expect("TODO: panic message")?;
+    tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
     loop {
         let mut pkt = rx_srv.recv().await.ok_or("rx_srv channel hung up")?;
         if pkt.channel !=ch_id as u8
@@ -80,7 +80,7 @@ pub async fn th_media_sink(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Recei
         else { //Channel messages
             let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
             let control = protos::MediaMessageId::from_i32(message_id);
-            match control.unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) {
+            match control.unwrap_or(MEDIA_UNEXPECTED_MESSAGE) {
                 MEDIA_MESSAGE_CHANNEL_OPEN_RESPONSE =>{
                     info!("{} Received {} message", ch_id.to_string(), message_id);
                     let data = &pkt.payload[2..]; // start of message data, without message_id
