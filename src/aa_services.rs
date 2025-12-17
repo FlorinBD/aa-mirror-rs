@@ -37,6 +37,7 @@ use crate::channel_manager::{Packet, ENCRYPTED, FRAME_TYPE_FIRST, FRAME_TYPE_LAS
 use crate::io_uring::Endpoint;
 use crate::io_uring::IoDevice;
 
+type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 #[derive(Copy, Clone, Debug)]
 pub enum ServiceType
 {
