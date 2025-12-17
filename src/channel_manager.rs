@@ -702,12 +702,14 @@ pub async fn ch_proxy(
         Ok(_v) => info!( "{} MESSAGE_SERVICE_DISCOVERY_RESPONSE received",get_name()),
         Err(e) => {error!( "{} HU sent unexpected channel message", get_name()); return Err(e)},
     }
-    let mut srv_senders:Vec<Option<Box<Sender<Packet>>>> = vec![];
+    //let mut srv_senders:Vec<Option<Box<Sender<Packet>>>> = vec![];
+    let mut srv_senders;
     srv_senders.insert(0,None);//first CH is always null, is the default ch witch is managed by this function
     let data = &pkt.payload[2..]; // start of message data, without message_id
     if let Ok(msg) = ServiceDiscoveryResponse::parse_from_bytes(&data) {
         info!( "{} ServiceDiscoveryResponse parsed ok",get_name());
         //let srv_count=msg.services.len();
+        srv_senders=Vec::<Sender<Packet>>::with_capacity(msg.services.len());
         let mut tsk_srv_loop;
         for (_,proto_srv) in msg.services.iter().enumerate() {
             let ch_id=i32::from(proto_srv.id());
@@ -715,9 +717,8 @@ pub async fn ch_proxy(
 
             if proto_srv.media_sink_service.is_some()
             {
-                srv_senders.insert(ch_id as usize,None);
-                let mut tx=&srv_senders[ch_id as usize];
                 let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
+                srv_senders.insert(ch_id as usize,tx);
                 tsk_srv_loop = tokio_uring::spawn(aa_services::th_media_sink(ch_id, tx_srv.clone(), rx));
             }
             else {
@@ -736,12 +737,7 @@ pub async fn ch_proxy(
         let mut pkt = rx_srv.recv().await.ok_or("rx_srv channel hung up")?;
         if pkt.channel !=0
         {
-            if let Some(ch) = &srv_senders[ usize::from(pkt.channel)] {
-                ch.send(pkt).await.expect("TODO: panic message");
-            }
-            else {
-                error!( "{} Channel id {:?} is NULL, message discarded",get_name(), pkt.channel);
-            }
+            srv_senders[usize::from(pkt.channel)].send(pkt).await.expect("TODO: panic message");
         }
         else { //Default channel messages
             let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
