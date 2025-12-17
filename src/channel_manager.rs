@@ -704,22 +704,30 @@ pub async fn ch_proxy(
     }
     //let mut srv_senders:Vec<Option<Box<Sender<Packet>>>> = vec![];
     let mut srv_senders;
+    let mut srv_tsk_handles;
 
     let data = &pkt.payload[2..]; // start of message data, without message_id
-    if let Ok(msg) = ServiceDiscoveryResponse::parse_from_bytes(&data) {
+    if  let Ok(msg) = ServiceDiscoveryResponse::parse_from_bytes(&data){
         info!( "{} ServiceDiscoveryResponse parsed ok",get_name());
         //let srv_count=msg.services.len();
-        srv_senders=Vec::<Sender<Packet>>::with_capacity(msg.services.len());
-        let mut tsk_srv_loop;
+        srv_senders=Vec::with_capacity(msg.services.len());
+        srv_tsk_handles=Vec::with_capacity(msg.services.len());
+        //let mut tsk_srv_loop;
         for (_,proto_srv) in msg.services.iter().enumerate() {
-            let ch_id=i32::from(proto_srv.id());
+            let ch_id=i32::from(proto_srv.id()) as usize;
             //info!( "SID {}, media sink: {}",ch_id, proto_srv.media_sink_service.is_some());
 
             if proto_srv.media_sink_service.is_some()
             {
                 let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
-                srv_senders.insert((ch_id - 1) as usize,tx);
-                tsk_srv_loop = tokio_uring::spawn(aa_services::th_media_sink(ch_id, tx_srv.clone(), rx));
+                srv_senders.insert(ch_id - 1,tx);
+                srv_tsk_handles.insert(ch_id - 1, tokio_uring::spawn(aa_services::th_media_sink(ch_id as i32, tx_srv.clone(), rx)));
+            }
+            else if proto_srv.media_source_service.is_some()
+            {
+                let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
+                srv_senders.insert(ch_id - 1,tx);
+                srv_tsk_handles.insert(ch_id - 1, tokio_uring::spawn(aa_services::th_media_source(ch_id as i32, tx_srv.clone(), rx)));
             }
             else {
                 error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
@@ -739,7 +747,7 @@ pub async fn ch_proxy(
         {
             if srv_senders.len() >= pkt.channel as usize
             {
-                srv_senders[usize::from(pkt.channel - 1)].send(pkt).await.expect("TODO: panic message");
+                srv_senders[usize::from(pkt.channel - 1)].send(pkt).await.expect("Error sending message to service");
             }
             else {
                 error!( "{} Invalid channel {}",get_name(), pkt.channel);
