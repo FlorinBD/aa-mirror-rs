@@ -719,7 +719,7 @@ pub async fn ch_proxy(
 
             if proto_srv.media_sink_service.is_some()
             {
-                if proto_srv.media_sink_service.has_audio_configs()
+                if proto_srv.media_sink_service.audio_configs.len()>0
                 {
                     let srv_type=proto_srv.media_sink_service.audio_type();
                     if srv_type == AUDIO_STREAM_GUIDANCE
@@ -738,7 +738,7 @@ pub async fn ch_proxy(
                         error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
                     }
                 }
-                else if proto_srv.media_sink_service.has_video_configs()
+                else if proto_srv.media_sink_service.video_configs.len()>0
                 {
                     let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                     srv_senders.insert(ch_id - 1,tx);
