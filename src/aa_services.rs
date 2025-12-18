@@ -27,6 +27,7 @@ use crate::aa_services::ByeByeReason::USER_SELECTION;
 use crate::aa_services::MessageStatus::*;
 use crate::aa_services::MediaMessageId::*;
 use crate::aa_services::InputMessageId::*;
+use crate::aa_services::GalVerificationVendorExtensionMessageId::*;
 use crate::aa_services::SensorMessageId::*;
 use crate::aa_services::SensorType::*;
 use protobuf::text_format::print_to_string_pretty;

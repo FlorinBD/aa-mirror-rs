@@ -33,7 +33,7 @@ use protobuf::{Enum, EnumOrUnknown, Message, MessageDyn};
 use tokio::sync::mpsc;
 use protos::ControlMessageType::{self, *};
 use crate::aa_services;
-use crate::aa_services::{th_input_source, th_media_sink, th_media_sink_audio_guidance, th_media_sink_audio_streaming, th_media_sink_video, th_media_source, th_sensor_source, th_vendor_extension, ServiceType};
+use crate::aa_services::{th_input_source, th_media_sink_audio_guidance, th_media_sink_audio_streaming, th_media_sink_video, th_media_source, th_sensor_source, th_vendor_extension, ServiceType};
 use crate::config::{Action::Stop, AppConfig, SharedConfig};
 use crate::config_types::HexdumpLevel;
 use crate::io_uring::Endpoint;
@@ -719,7 +719,7 @@ pub async fn ch_proxy(
 
             if proto_srv.media_sink_service.is_some()
             {
-                if proto_srv.media_sink_service.audio_configs.is_some()
+                if proto_srv.media_sink_service.has_audio_configs()
                 {
                     let srv_type=proto_srv.media_sink_service.audio_type();
                     if srv_type == AUDIO_STREAM_GUIDANCE
@@ -738,7 +738,7 @@ pub async fn ch_proxy(
                         error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
                     }
                 }
-                else if proto_srv.media_sink_service.video_configs.is_some()
+                else if proto_srv.media_sink_service.has_video_configs()
                 {
                     let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                     srv_senders.insert(ch_id - 1,tx);
