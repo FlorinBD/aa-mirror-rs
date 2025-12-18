@@ -719,7 +719,7 @@ pub async fn ch_proxy(
 
             if proto_srv.media_sink_service.is_some()
             {
-                if proto_srv.media_sink_service.has_audio_type()
+                if proto_srv.media_sink_service.audio_configs.is_some()
                 {
                     let srv_type=proto_srv.media_sink_service.audio_type();
                     if srv_type == AUDIO_STREAM_GUIDANCE
