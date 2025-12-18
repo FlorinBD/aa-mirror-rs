@@ -54,8 +54,7 @@ impl fmt::Display for ServiceType {
         // fmt::Debug::fmt(self, f)
     }
 }
-
-pub async fn th_media_sink(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>)-> Result<()>{
+pub async fn th_sensor_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>)-> Result<()>{
     info!( "{}: Starting...", get_name());
     let mut sdreq= ChannelOpenRequest::new();
     sdreq.set_priority(0);
@@ -72,35 +71,95 @@ pub async fn th_media_sink(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Recei
     };
     tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
     loop {
-        let mut pkt = rx_srv.recv().await.ok_or("rx_srv channel hung up")?;
-        if pkt.channel !=ch_id as u8
-        {
-            error!( "{} Channel id {:?} is wrong, message discarded",get_name(), pkt.channel);
-        }
-        else { //Channel messages
-            let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-            let control = protos::MediaMessageId::from_i32(message_id);
-            match control.unwrap_or(MEDIA_UNEXPECTED_MESSAGE) {
-                MEDIA_MESSAGE_CHANNEL_OPEN_RESPONSE =>{
-                    info!("{} Received {} message", ch_id.to_string(), message_id);
-                    let data = &pkt.payload[2..]; // start of message data, without message_id
-                    if let Ok(msg) = ChannelOpenResponse::parse_from_bytes(&data) {
-                        if msg.status() != STATUS_SUCCESS
-                        {
-                            error!( "{}: ChannelOpenResponse status is not OK, got {:?}",get_name(), msg.status);
-                        }
-                        else {
-                            info!( "{}: ChannelOpenResponse received, waiting for media focus",get_name());
-                        }
-                    }
-                    else {
-                        error!( "{}: ChannelOpenResponse couldn't be parsed",get_name());
-                    }
+        match  rx_srv.recv().await {
+            Ok(pkt)=> {
+                if pkt.channel != ch_id as u8
+                {
+                    error!( "{} Channel id {:?} is wrong, message discarded", get_name(), pkt.channel);
+                } else { //Channel messages
+                    let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+                    let control = protos::SensorMessageId::from_i32(message_id);
+                    match control.unwrap_or(SENSOR_UNEXPECTED_MESSAGE) {
+                        MEDIA_MESSAGE_CHANNEL_OPEN_RESPONSE => {
+                            info!("{} Received {} message", ch_id.to_string(), message_id);
+                            let data = &pkt.payload[2..]; // start of message data, without message_id
+                            if let Ok(msg) = ChannelOpenResponse::parse_from_bytes(&data) {
+                                if msg.status() != STATUS_SUCCESS
+                                {
+                                    error!( "{}: ChannelOpenResponse status is not OK, got {:?}", get_name(), msg.status);
+                                } else {
+                                    info!( "{}: ChannelOpenResponse received, waiting for media focus", get_name());
+                                }
+                            }
+                            else {
+                                error ! ( "{}: ChannelOpenResponse couldn't be parsed", get_name());
+                            }
 
+                        }
+                        _ =>{ info ! ( "{} Unknown message ID: {} received", get_name(), message_id);}
+                    };
                 }
-                _ =>{ info!( "{} Unknown message ID: {} received",get_name(), message_id);}
-            };
+            },
+            Err(e)=>{error!("{} Receive Error: {}, mpsc dropped?",get_name(),e)}
         }
+    }
+
+    fn get_name() -> String {
+        let dev = "MediaSourceService";
+        format!("<i><bright-black> aa-mirror/{}: </>", dev)
+    }
+}
+pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>)-> Result<()>{
+    info!( "{}: Starting...", get_name());
+    let mut sdreq= ChannelOpenRequest::new();
+    sdreq.set_priority(0);
+    sdreq.set_service_id(ch_id);
+    let mut payload: Vec<u8>=sdreq.write_to_bytes().expect("serialization failed");
+    payload.insert(0,((MESSAGE_CHANNEL_OPEN_REQUEST as u16) >> 8) as u8);
+    payload.insert( 1,((MESSAGE_CHANNEL_OPEN_REQUEST as u16) & 0xff) as u8);
+
+    let pkt_rsp = Packet {
+        channel: 0,
+        flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+        final_length: None,
+        payload: payload,
+    };
+    tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+    loop {
+        match  rx_srv.recv().await{
+            Ok(pkt)=>{
+                if pkt.channel !=ch_id as u8
+                {
+                    error!( "{} Channel id {:?} is wrong, message discarded",get_name(), pkt.channel);
+                }
+                else { //Channel messages
+                    let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+                    let control = protos::MediaMessageId::from_i32(message_id);
+                    match control.unwrap_or(MEDIA_UNEXPECTED_MESSAGE) {
+                        MEDIA_MESSAGE_CHANNEL_OPEN_RESPONSE =>{
+                            info!("{} Received {} message", ch_id.to_string(), message_id);
+                            let data = &pkt.payload[2..]; // start of message data, without message_id
+                            if let Ok(msg) = ChannelOpenResponse::parse_from_bytes(&data) {
+                                if msg.status() != STATUS_SUCCESS
+                                {
+                                    error!( "{}: ChannelOpenResponse status is not OK, got {:?}",get_name(), msg.status);
+                                }
+                                else {
+                                    info!( "{}: ChannelOpenResponse received, waiting for media focus",get_name());
+                                }
+                            }
+                            else {
+                                error!( "{}: ChannelOpenResponse couldn't be parsed",get_name());
+                            }
+
+                        }
+                        _ =>{ info!( "{} Unknown message ID: {} received",get_name(), message_id);}
+                    };
+                }
+            },
+            Err(e)=>{error!("{} Receive Error: {}, mpsc dropped?",get_name(),e)}
+        }
+
     }
 
     fn get_name() -> String {
@@ -108,7 +167,122 @@ pub async fn th_media_sink(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Recei
         format!("<i><bright-black> aa-mirror/{}: </>", dev)
     }
 }
+pub async fn th_media_sink_audio_guidance(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>)-> Result<()>{
+    info!( "{}: Starting...", get_name());
+    let mut sdreq= ChannelOpenRequest::new();
+    sdreq.set_priority(0);
+    sdreq.set_service_id(ch_id);
+    let mut payload: Vec<u8>=sdreq.write_to_bytes().expect("serialization failed");
+    payload.insert(0,((MESSAGE_CHANNEL_OPEN_REQUEST as u16) >> 8) as u8);
+    payload.insert( 1,((MESSAGE_CHANNEL_OPEN_REQUEST as u16) & 0xff) as u8);
 
+    let pkt_rsp = Packet {
+        channel: 0,
+        flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+        final_length: None,
+        payload: payload,
+    };
+    tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+    loop {
+        match  rx_srv.recv().await{
+            Ok(pkt)=>{
+                if pkt.channel !=ch_id as u8
+                {
+                    error!( "{} Channel id {:?} is wrong, message discarded",get_name(), pkt.channel);
+                }
+                else { //Channel messages
+                    let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+                    let control = protos::MediaMessageId::from_i32(message_id);
+                    match control.unwrap_or(MEDIA_UNEXPECTED_MESSAGE) {
+                        MEDIA_MESSAGE_CHANNEL_OPEN_RESPONSE =>{
+                            info!("{} Received {} message", ch_id.to_string(), message_id);
+                            let data = &pkt.payload[2..]; // start of message data, without message_id
+                            if let Ok(msg) = ChannelOpenResponse::parse_from_bytes(&data) {
+                                if msg.status() != STATUS_SUCCESS
+                                {
+                                    error!( "{}: ChannelOpenResponse status is not OK, got {:?}",get_name(), msg.status);
+                                }
+                                else {
+                                    info!( "{}: ChannelOpenResponse received, waiting for media focus",get_name());
+                                }
+                            }
+                            else {
+                                error!( "{}: ChannelOpenResponse couldn't be parsed",get_name());
+                            }
+
+                        }
+                        _ =>{ info!( "{} Unknown message ID: {} received",get_name(), message_id);}
+                    };
+                }
+            },
+            Err(e)=>{error!("{} Receive Error: {}, mpsc dropped?",get_name(),e)}
+        }
+
+    }
+
+    fn get_name() -> String {
+        let dev = "MediaSinkService";
+        format!("<i><bright-black> aa-mirror/{}: </>", dev)
+    }
+}
+pub async fn th_media_sink_audio_streaming(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>)-> Result<()>{
+    info!( "{}: Starting...", get_name());
+    let mut sdreq= ChannelOpenRequest::new();
+    sdreq.set_priority(0);
+    sdreq.set_service_id(ch_id);
+    let mut payload: Vec<u8>=sdreq.write_to_bytes().expect("serialization failed");
+    payload.insert(0,((MESSAGE_CHANNEL_OPEN_REQUEST as u16) >> 8) as u8);
+    payload.insert( 1,((MESSAGE_CHANNEL_OPEN_REQUEST as u16) & 0xff) as u8);
+
+    let pkt_rsp = Packet {
+        channel: 0,
+        flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+        final_length: None,
+        payload: payload,
+    };
+    tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+    loop {
+        match  rx_srv.recv().await{
+            Ok(pkt)=>{
+                if pkt.channel !=ch_id as u8
+                {
+                    error!( "{} Channel id {:?} is wrong, message discarded",get_name(), pkt.channel);
+                }
+                else { //Channel messages
+                    let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+                    let control = protos::MediaMessageId::from_i32(message_id);
+                    match control.unwrap_or(MEDIA_UNEXPECTED_MESSAGE) {
+                        MEDIA_MESSAGE_CHANNEL_OPEN_RESPONSE =>{
+                            info!("{} Received {} message", ch_id.to_string(), message_id);
+                            let data = &pkt.payload[2..]; // start of message data, without message_id
+                            if let Ok(msg) = ChannelOpenResponse::parse_from_bytes(&data) {
+                                if msg.status() != STATUS_SUCCESS
+                                {
+                                    error!( "{}: ChannelOpenResponse status is not OK, got {:?}",get_name(), msg.status);
+                                }
+                                else {
+                                    info!( "{}: ChannelOpenResponse received, waiting for media focus",get_name());
+                                }
+                            }
+                            else {
+                                error!( "{}: ChannelOpenResponse couldn't be parsed",get_name());
+                            }
+
+                        }
+                        _ =>{ info!( "{} Unknown message ID: {} received",get_name(), message_id);}
+                    };
+                }
+            },
+            Err(e)=>{error!("{} Receive Error: {}, mpsc dropped?",get_name(),e)}
+        }
+
+    }
+
+    fn get_name() -> String {
+        let dev = "MediaSinkService";
+        format!("<i><bright-black> aa-mirror/{}: </>", dev)
+    }
+}
 pub async fn th_media_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>)-> Result<()>{
     info!( "{}: Starting...", get_name());
     let mut sdreq= ChannelOpenRequest::new();
@@ -126,34 +300,146 @@ pub async fn th_media_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Rec
     };
     tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
     loop {
-        let mut pkt = rx_srv.recv().await.ok_or("rx_srv channel hung up")?;
-        if pkt.channel !=ch_id as u8
-        {
-            error!( "{} Channel id {:?} is wrong, message discarded",get_name(), pkt.channel);
-        }
-        else { //Channel messages
-            let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-            let control = protos::MediaMessageId::from_i32(message_id);
-            match control.unwrap_or(MEDIA_UNEXPECTED_MESSAGE) {
-                MEDIA_MESSAGE_CHANNEL_OPEN_RESPONSE =>{
-                    info!("{} Received {} message", ch_id.to_string(), message_id);
-                    let data = &pkt.payload[2..]; // start of message data, without message_id
-                    if let Ok(msg) = ChannelOpenResponse::parse_from_bytes(&data) {
-                        if msg.status() != STATUS_SUCCESS
-                        {
-                            error!( "{}: ChannelOpenResponse status is not OK, got {:?}",get_name(), msg.status);
-                        }
-                        else {
-                            info!( "{}: ChannelOpenResponse received, waiting for media focus",get_name());
-                        }
-                    }
-                    else {
-                        error!( "{}: ChannelOpenResponse couldn't be parsed",get_name());
-                    }
+        match  rx_srv.recv().await {
+            Ok(pkt)=> {
+                if pkt.channel != ch_id as u8
+                {
+                    error!( "{} Channel id {:?} is wrong, message discarded", get_name(), pkt.channel);
+                } else { //Channel messages
+                    let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+                    let control = protos::MediaMessageId::from_i32(message_id);
+                    match control.unwrap_or(MEDIA_UNEXPECTED_MESSAGE) {
+                        MEDIA_MESSAGE_CHANNEL_OPEN_RESPONSE => {
+                            info!("{} Received {} message", ch_id.to_string(), message_id);
+                            let data = &pkt.payload[2..]; // start of message data, without message_id
+                            if let Ok(msg) = ChannelOpenResponse::parse_from_bytes(&data) {
+                                if msg.status() != STATUS_SUCCESS
+                                {
+                                    error!( "{}: ChannelOpenResponse status is not OK, got {:?}", get_name(), msg.status);
+                                } else {
+                                    info!( "{}: ChannelOpenResponse received, waiting for media focus", get_name());
+                                }
+                            }
+                            else {
+                                error ! ( "{}: ChannelOpenResponse couldn't be parsed", get_name());
+                            }
 
+                        }
+                        _ =>{ info ! ( "{} Unknown message ID: {} received", get_name(), message_id);}
+                    };
                 }
-                _ =>{ info!( "{} Unknown message ID: {} received",get_name(), message_id);}
-            };
+            },
+            Err(e)=>{error!("{} Receive Error: {}, mpsc dropped?",get_name(),e)}
+        }
+    }
+
+    fn get_name() -> String {
+        let dev = "MediaSourceService";
+        format!("<i><bright-black> aa-mirror/{}: </>", dev)
+    }
+}
+pub async fn th_input_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>)-> Result<()>{
+    info!( "{}: Starting...", get_name());
+    let mut sdreq= ChannelOpenRequest::new();
+    sdreq.set_priority(0);
+    sdreq.set_service_id(ch_id);
+    let mut payload: Vec<u8>=sdreq.write_to_bytes().expect("serialization failed");
+    payload.insert(0,((MESSAGE_CHANNEL_OPEN_REQUEST as u16) >> 8) as u8);
+    payload.insert( 1,((MESSAGE_CHANNEL_OPEN_REQUEST as u16) & 0xff) as u8);
+
+    let pkt_rsp = Packet {
+        channel: 0,
+        flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+        final_length: None,
+        payload: payload,
+    };
+    tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+    loop {
+        match  rx_srv.recv().await {
+            Ok(pkt)=> {
+                if pkt.channel != ch_id as u8
+                {
+                    error!( "{} Channel id {:?} is wrong, message discarded", get_name(), pkt.channel);
+                } else { //Channel messages
+                    let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+                    let control = protos::InputMessageId::from_i32(message_id);
+                    match control.unwrap_or(INPUT_UNEXPECTED_MESSAGE) {
+                        MEDIA_MESSAGE_CHANNEL_OPEN_RESPONSE => {
+                            info!("{} Received {} message", ch_id.to_string(), message_id);
+                            let data = &pkt.payload[2..]; // start of message data, without message_id
+                            if let Ok(msg) = ChannelOpenResponse::parse_from_bytes(&data) {
+                                if msg.status() != STATUS_SUCCESS
+                                {
+                                    error!( "{}: ChannelOpenResponse status is not OK, got {:?}", get_name(), msg.status);
+                                } else {
+                                    info!( "{}: ChannelOpenResponse received, waiting for media focus", get_name());
+                                }
+                            }
+                            else {
+                                error ! ( "{}: ChannelOpenResponse couldn't be parsed", get_name());
+                            }
+
+                        }
+                        _ =>{ info ! ( "{} Unknown message ID: {} received", get_name(), message_id);}
+                    };
+                }
+            },
+            Err(e)=>{error!("{} Receive Error: {}, mpsc dropped?",get_name(),e)}
+        }
+    }
+
+    fn get_name() -> String {
+        let dev = "MediaSourceService";
+        format!("<i><bright-black> aa-mirror/{}: </>", dev)
+    }
+}
+pub async fn th_vendor_extension(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>)-> Result<()>{
+    info!( "{}: Starting...", get_name());
+    let mut sdreq= ChannelOpenRequest::new();
+    sdreq.set_priority(0);
+    sdreq.set_service_id(ch_id);
+    let mut payload: Vec<u8>=sdreq.write_to_bytes().expect("serialization failed");
+    payload.insert(0,((MESSAGE_CHANNEL_OPEN_REQUEST as u16) >> 8) as u8);
+    payload.insert( 1,((MESSAGE_CHANNEL_OPEN_REQUEST as u16) & 0xff) as u8);
+
+    let pkt_rsp = Packet {
+        channel: 0,
+        flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+        final_length: None,
+        payload: payload,
+    };
+    tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+    loop {
+        match  rx_srv.recv().await {
+            Ok(pkt)=> {
+                if pkt.channel != ch_id as u8
+                {
+                    error!( "{} Channel id {:?} is wrong, message discarded", get_name(), pkt.channel);
+                } else { //Channel messages
+                    let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+                    let control = protos::GalVerificationVendorExtensionMessageId::from_i32(message_id);
+                    match control.unwrap_or(GAL_VERIFICATION_UNEXPECTED_MESSAGE) {
+                        MEDIA_MESSAGE_CHANNEL_OPEN_RESPONSE => {
+                            info!("{} Received {} message", ch_id.to_string(), message_id);
+                            let data = &pkt.payload[2..]; // start of message data, without message_id
+                            if let Ok(msg) = ChannelOpenResponse::parse_from_bytes(&data) {
+                                if msg.status() != STATUS_SUCCESS
+                                {
+                                    error!( "{}: ChannelOpenResponse status is not OK, got {:?}", get_name(), msg.status);
+                                } else {
+                                    info!( "{}: ChannelOpenResponse received, waiting for media focus", get_name());
+                                }
+                            }
+                            else {
+                                error ! ( "{}: ChannelOpenResponse couldn't be parsed", get_name());
+                            }
+
+                        }
+                        _ =>{ info ! ( "{} Unknown message ID: {} received", get_name(), message_id);}
+                    };
+                }
+            },
+            Err(e)=>{error!("{} Receive Error: {}, mpsc dropped?",get_name(),e)}
         }
     }
 

@@ -33,7 +33,7 @@ use protobuf::{Enum, EnumOrUnknown, Message, MessageDyn};
 use tokio::sync::mpsc;
 use protos::ControlMessageType::{self, *};
 use crate::aa_services;
-use crate::aa_services::{ServiceType};
+use crate::aa_services::{th_input_source, th_media_sink, th_media_sink_audio_guidance, th_media_sink_audio_streaming, th_media_sink_video, th_media_source, th_sensor_source, th_vendor_extension, ServiceType};
 use crate::config::{Action::Stop, AppConfig, SharedConfig};
 use crate::config_types::HexdumpLevel;
 use crate::io_uring::Endpoint;
@@ -719,18 +719,66 @@ pub async fn ch_proxy(
 
             if proto_srv.media_sink_service.is_some()
             {
-                let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
-                srv_senders.insert(ch_id - 1,tx);
-                srv_tsk_handles.insert(ch_id - 1, tokio_uring::spawn(aa_services::th_media_sink(ch_id as i32, tx_srv.clone(), rx)));
+                if proto_srv.media_sink_service.audio_type.is_some()
+                {
+                    let srv_type=proto_srv.media_sink_service.audio_type();
+                    if srv_type == AUDIO_STREAM_GUIDANCE
+                    {
+                        let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
+                        srv_senders.insert(ch_id - 1,tx);
+                        srv_tsk_handles.insert(ch_id - 1, tokio_uring::spawn(th_media_sink_audio_guidance(ch_id as i32, tx_srv.clone(), rx)));
+                    }
+                    else if srv_type == AUDIO_STREAM_MEDIA
+                    {
+                        let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
+                        srv_senders.insert(ch_id - 1,tx);
+                        srv_tsk_handles.insert(ch_id - 1, tokio_uring::spawn(th_media_sink_audio_streaming(ch_id as i32, tx_srv.clone(), rx)));
+                    }
+                    else {
+                        error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
+                        srv_senders.insert(ch_id - 1,None);
+                    }
+                }
+                else if proto_srv.media_sink_service.video_configs.is_some()
+                {
+                    let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
+                    srv_senders.insert(ch_id - 1,tx);
+                    srv_tsk_handles.insert(ch_id - 1, tokio_uring::spawn(th_media_sink_video(ch_id as i32, tx_srv.clone(), rx)));
+                }
+                else {
+                    error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
+                    srv_senders.insert(ch_id - 1,None);
+                }
+
+
             }
             else if proto_srv.media_source_service.is_some()
             {
                 let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                 srv_senders.insert(ch_id - 1,tx);
-                srv_tsk_handles.insert(ch_id - 1, tokio_uring::spawn(aa_services::th_media_source(ch_id as i32, tx_srv.clone(), rx)));
+                srv_tsk_handles.insert(ch_id - 1, tokio_uring::spawn(th_media_source(ch_id as i32, tx_srv.clone(), rx)));
+            }
+            else if proto_srv.sensor_source_service.is_some()
+            {
+                let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
+                srv_senders.insert(ch_id - 1,tx);
+                srv_tsk_handles.insert(ch_id - 1, tokio_uring::spawn(th_sensor_source(ch_id as i32, tx_srv.clone(), rx)));
+            }
+            else if proto_srv.input_source_service.is_some()
+            {
+                let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
+                srv_senders.insert(ch_id - 1,tx);
+                srv_tsk_handles.insert(ch_id - 1, tokio_uring::spawn(th_input_source(ch_id as i32, tx_srv.clone(), rx)));
+            }
+            else if proto_srv.vendor_extension_service.is_some()
+            {
+                let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
+                srv_senders.insert(ch_id - 1,tx);
+                srv_tsk_handles.insert(ch_id - 1, tokio_uring::spawn(th_vendor_extension(ch_id as i32, tx_srv.clone(), rx)));
             }
             else {
                 error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
+                srv_senders.insert(ch_id - 1,None);
             }
         }
 
