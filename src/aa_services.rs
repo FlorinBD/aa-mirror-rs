@@ -410,7 +410,7 @@ pub async fn th_vendor_extension(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
     };
     tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
     loop {
-        match  rx_srv.recv().await {
+        match  rx_srv.recv().await.unwrap() {
             Ok(pkt)=> {
                 if pkt.channel != ch_id as u8
                 {

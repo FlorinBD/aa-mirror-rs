@@ -738,7 +738,7 @@ pub async fn ch_proxy(
                         error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
                     }
                 }
-                else if proto_srv.media_sink_service.has_video_configs()
+                else if proto_srv.media_sink_service.video_configs.is_some()
                 {
                     let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                     srv_senders.insert(ch_id - 1,tx);
