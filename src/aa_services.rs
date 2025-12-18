@@ -80,7 +80,7 @@ pub async fn th_sensor_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Re
                     let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
                     let control = protos::SensorMessageId::from_i32(message_id);
                     match control.unwrap_or(SENSOR_UNEXPECTED_MESSAGE) {
-                        MEDIA_MESSAGE_CHANNEL_OPEN_RESPONSE => {
+                        SENSOR_OPEN_CHANNEL_RESPONSE => {
                             info!("{} Received {} message", ch_id.to_string(), message_id);
                             let data = &pkt.payload[2..]; // start of message data, without message_id
                             if let Ok(msg) = ChannelOpenResponse::parse_from_bytes(&data) {
@@ -100,7 +100,7 @@ pub async fn th_sensor_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Re
                     };
                 }
             },
-            Err(e)=>{error!("{} Receive Error: {}, mpsc dropped?",get_name(),e)}
+            Err(e)=>{error!("{} Receive Error: {}, mpsc dropped?",get_name(),e);return Err(e)}
         }
     }
 
@@ -157,7 +157,7 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
                     };
                 }
             },
-            Err(e)=>{error!("{} Receive Error: {}, mpsc dropped?",get_name(),e)}
+            Err(e)=>{error!("{} Receive Error: {}, mpsc dropped?",get_name(),e);return Err(e)}
         }
 
     }
@@ -215,7 +215,7 @@ pub async fn th_media_sink_audio_guidance(ch_id: i32, tx_srv: Sender<Packet>, mu
                     };
                 }
             },
-            Err(e)=>{error!("{} Receive Error: {}, mpsc dropped?",get_name(),e)}
+            Err(e)=>{error!("{} Receive Error: {}, mpsc dropped?",get_name(),e);return Err(e)}
         }
 
     }
@@ -273,7 +273,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, tx_srv: Sender<Packet>, m
                     };
                 }
             },
-            Err(e)=>{error!("{} Receive Error: {}, mpsc dropped?",get_name(),e)}
+            Err(e)=>{error!("{} Receive Error: {}, mpsc dropped?",get_name(),e);return Err(e)}
         }
 
     }
@@ -329,7 +329,7 @@ pub async fn th_media_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Rec
                     };
                 }
             },
-            Err(e)=>{error!("{} Receive Error: {}, mpsc dropped?",get_name(),e)}
+            Err(e)=>{error!("{} Receive Error: {}, mpsc dropped?",get_name(),e);return Err(e)}
         }
     }
 
@@ -364,7 +364,7 @@ pub async fn th_input_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Rec
                     let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
                     let control = protos::InputMessageId::from_i32(message_id);
                     match control.unwrap_or(INPUT_UNEXPECTED_MESSAGE) {
-                        MEDIA_MESSAGE_CHANNEL_OPEN_RESPONSE => {
+                        INPUT_OPEN_CHANNEL_RESPONSE => {
                             info!("{} Received {} message", ch_id.to_string(), message_id);
                             let data = &pkt.payload[2..]; // start of message data, without message_id
                             if let Ok(msg) = ChannelOpenResponse::parse_from_bytes(&data) {
@@ -384,7 +384,7 @@ pub async fn th_input_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Rec
                     };
                 }
             },
-            Err(e)=>{error!("{} Receive Error: {}, mpsc dropped?",get_name(),e)}
+            Err(e)=>{error!("{} Receive Error: {}, mpsc dropped?",get_name(),e);return Err(e)}
         }
     }
 
@@ -419,7 +419,7 @@ pub async fn th_vendor_extension(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
                     let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
                     let control = protos::GalVerificationVendorExtensionMessageId::from_i32(message_id);
                     match control.unwrap_or(GAL_VERIFICATION_UNEXPECTED_MESSAGE) {
-                        MEDIA_MESSAGE_CHANNEL_OPEN_RESPONSE => {
+                        GAL_VERIFICATION_OPEN_CHANNEL_RESPONSE => {
                             info!("{} Received {} message", ch_id.to_string(), message_id);
                             let data = &pkt.payload[2..]; // start of message data, without message_id
                             if let Ok(msg) = ChannelOpenResponse::parse_from_bytes(&data) {
@@ -439,7 +439,7 @@ pub async fn th_vendor_extension(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
                     };
                 }
             },
-            Err(e)=>{error!("{} Receive Error: {}, mpsc dropped?",get_name(),e)}
+            Err(e)=>{error!("{} Receive Error: {}, mpsc dropped?",get_name(),e);return Err(e)}
         }
     }
 
