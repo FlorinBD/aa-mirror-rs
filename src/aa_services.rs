@@ -78,7 +78,7 @@ pub async fn th_sensor_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Re
         error!( "{} Channel id {:?} is wrong, message discarded", get_name(), pkt.channel);
     } else { //Channel messages
         let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-        if message_id != i32::from(SENSOR_OPEN_CHANNEL_RESPONSE)
+        if message_id != SENSOR_OPEN_CHANNEL_RESPONSE as i32
         {
             error!( "{}, channel {:?}: Wrong message received: {}", get_name(), pkt.channel, message_id);
         }
@@ -528,7 +528,7 @@ pub async fn th_vendor_extension(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
         error!( "{} Channel id {:?} is wrong, message discarded", get_name(), pkt.channel);
     } else { //Channel messages
         let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-        if message_id != i32::from(SENSOR_OPEN_CHANNEL_RESPONSE)
+        if message_id != SENSOR_OPEN_CHANNEL_RESPONSE as i32
         {
             error!( "{}, channel {:?}: Wrong message received: {}", get_name(), pkt.channel, message_id);
         }
