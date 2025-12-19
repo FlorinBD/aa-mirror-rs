@@ -119,7 +119,7 @@ pub async fn th_sensor_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Re
         format!("<i><bright-black> aa-mirror/{}: </>", dev)
     }
 }
-pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, vcfg:VideoConfiguration)-> Result<()>{
+pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, vcfg:protos::VideoConfiguration)-> Result<()>{
     info!( "{}: Starting...", get_name());
     /* -----------------------------------OPEN CHANNEL----------------------------------------------- */
     let mut sdreq= ChannelOpenRequest::new();
@@ -149,7 +149,7 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
         else {
             let data = &pkt.payload[2..]; // start of message data, without message_id
             if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
-                if(rsp.status() != STATUS_SUCCESS)
+                if rsp.status() != STATUS_SUCCESS
                 {
                     error!( "{}, channel {:?}: Wrong message status received", get_name(), pkt.channel);
                 }
@@ -190,7 +190,7 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
                 let data = &pkt.payload[2..]; // start of message data, without message_id
                 if  let Ok(rsp) = Config::parse_from_bytes(&data) {
                     info!( "{}, channel {:?}: Message status: {:?}", get_name(), pkt.channel, rsp.status());
-                    if rsp.status() == ChConfig::Status::STATUS_READY
+                    if rsp.status() == ChConfig::STATUS_READY
                     {
                         info!( "{}, channel {:?}: Starting video capture", get_name(), pkt.channel);
                     }

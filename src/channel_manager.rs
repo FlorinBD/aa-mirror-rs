@@ -742,7 +742,7 @@ pub async fn ch_proxy(
                 {
                     let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                     srv_senders.insert(ch_id - 1,tx);
-                    let video_cfg = proto_srv.media_sink_service.video_configs.0;
+                    let video_cfg = proto_srv.media_sink_service.video_configs[0];
                     srv_tsk_handles.insert(ch_id - 1, tokio_uring::spawn(th_media_sink_video(ch_id as i32, tx_srv.clone(), rx, video_cfg)));
                 }
                 else {
