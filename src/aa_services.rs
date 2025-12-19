@@ -244,7 +244,7 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
                 if  let Ok(rsp) = ChConfig::parse_from_bytes(&data)
                 {
                     info!( "{}, channel {:?}: Message status: {:?}", get_name(), pkt.channel, rsp.status());
-                    if rsp.status() == ChConfig::Status::STATUS_READY
+                    if rsp.status() == Status::STATUS_READY
                     {
                         info!( "{}, channel {:?}: Starting video capture", get_name(), pkt.channel);
                         if vcfg.resolution == VideoCodecResolution::Video_800x480
@@ -353,13 +353,13 @@ pub async fn th_media_sink_audio_guidance(ch_id: i32, tx_srv: Sender<Packet>, mu
                     if rsp.status() == STATUS_READY
                     {
                         info!( "{}, channel {:?}: Starting video capture", get_name(), pkt.channel);
-                        if vcfg.resolution == VideoCodecResolution::Video_800x480
+                        if acfg.codec == MediaCodec::AUDIO_PCM
                         {
                             audio_stream_started =true;
                         }
                         else
                         {
-                            error!( "{}: Unsupported video resolution detected", get_name());
+                            error!( "{}: Unsupported audio codec detected", get_name());
                         }
                     }
                 }
@@ -458,13 +458,13 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, tx_srv: Sender<Packet>, m
                     if rsp.status() == STATUS_READY
                     {
                         info!( "{}, channel {:?}: Starting video capture", get_name(), pkt.channel);
-                        if vcfg.resolution == VideoCodecResolution::Video_800x480
+                        if acfg.codec == MediaCodec::AUDIO_PCM
                         {
                             audio_stream_started =true;
                         }
                         else
                         {
-                            error!( "{}: Unsupported video resolution detected", get_name());
+                            error!( "{}: Unsupported audio codec detected", get_name());
                         }
                     }
                 }
