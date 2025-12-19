@@ -78,7 +78,7 @@ pub async fn th_sensor_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Re
         error!( "{} Channel id {:?} is wrong, message discarded", get_name(), pkt.channel);
     } else { //Channel messages
         let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-        if message_id != SENSOR_OPEN_CHANNEL_RESPONSE as i32
+        if message_id != MESSAGE_CHANNEL_OPEN_RESPONSE as i32
         {
             error!( "{}, channel {:?}: Wrong message received: {}", get_name(), pkt.channel, message_id);
         }
@@ -103,23 +103,13 @@ pub async fn th_sensor_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Re
             error!( "{} Channel id {:?} is wrong, message discarded", get_name(), pkt.channel);
         } else { //Channel messages
             let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-            match message_id {
-                SENSOR_OPEN_CHANNEL_RESPONSE => {
-                    info!("{} Received {} message", ch_id.to_string(), message_id);
-                    let data = &pkt.payload[2..]; // start of message data, without message_id
-                    if let Ok(msg) = ChannelOpenResponse::parse_from_bytes(&data) {
-                        if msg.status() != STATUS_SUCCESS
-                        {
-                            error!( "{}: ChannelOpenResponse status is not OK, got {:?}", get_name(), msg.status);
-                        } else {
-                            info!( "{}: ChannelOpenResponse received, waiting for media focus", get_name());
-                        }
-                    } else {
-                        error!( "{}: ChannelOpenResponse couldn't be parsed", get_name());
-                    }
-                }
-                _ => { info!( "{} Unknown message ID: {} received", get_name(), message_id); }
-            };
+            if message_id == MESSAGE_CHANNEL_OPEN_RESPONSE  as i32
+            {
+                info!("{} Received {} message", ch_id.to_string(), message_id);
+            }
+            else {
+                info!( "{} Unknown message ID: {} received", get_name(), message_id);
+            }
         }
     }
     fn get_name() -> String {
@@ -149,7 +139,7 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
         error!( "{} Channel id {:?} is wrong, message discarded", get_name(), pkt.channel);
     } else { //Channel messages
         let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-        if message_id != SENSOR_OPEN_CHANNEL_RESPONSE as i32
+        if message_id != MESSAGE_CHANNEL_OPEN_RESPONSE as i32
         {
             error!( "{}, channel {:?}: Wrong message received: {}", get_name(), pkt.channel, message_id);
         }
@@ -175,26 +165,13 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
         }
         else { //Channel messages
             let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-            match message_id{
-                i32::from(MEDIA_MESSAGE_CHANNEL_OPEN_RESPONSE) =>{
-                    info!("{} Received {} message", ch_id.to_string(), message_id);
-                    let data = &pkt.payload[2..]; // start of message data, without message_id
-                    if let Ok(msg) = ChannelOpenResponse::parse_from_bytes(&data) {
-                        if msg.status() != STATUS_SUCCESS
-                        {
-                            error!( "{}: ChannelOpenResponse status is not OK, got {:?}",get_name(), msg.status);
-                        }
-                        else {
-                            info!( "{}: ChannelOpenResponse received, waiting for media focus",get_name());
-                        }
-                    }
-                    else {
-                        error!( "{}: ChannelOpenResponse couldn't be parsed",get_name());
-                    }
-
-                }
-                _ =>{ info!( "{} Unknown message ID: {} received",get_name(), message_id);}
-            };
+            if message_id == MESSAGE_CHANNEL_OPEN_RESPONSE  as i32
+            {
+                info!("{} Received {} message", ch_id.to_string(), message_id);
+            }
+            else {
+                info!( "{} Unknown message ID: {} received", get_name(), message_id);
+            }
         }
 
     }
@@ -226,7 +203,7 @@ pub async fn th_media_sink_audio_guidance(ch_id: i32, tx_srv: Sender<Packet>, mu
         error!( "{} Channel id {:?} is wrong, message discarded", get_name(), pkt.channel);
     } else { //Channel messages
         let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-        if message_id != SENSOR_OPEN_CHANNEL_RESPONSE as i32
+        if message_id != MESSAGE_CHANNEL_OPEN_RESPONSE as i32
         {
             error!( "{}, channel {:?}: Wrong message received: {}", get_name(), pkt.channel, message_id);
         }
@@ -252,26 +229,13 @@ pub async fn th_media_sink_audio_guidance(ch_id: i32, tx_srv: Sender<Packet>, mu
         }
         else { //Channel messages
             let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-            match message_id {
-                    i32::from(MEDIA_MESSAGE_CHANNEL_OPEN_RESPONSE) =>{
-                    info!("{} Received {} message", ch_id.to_string(), message_id);
-                    let data = &pkt.payload[2..]; // start of message data, without message_id
-                    if let Ok(msg) = ChannelOpenResponse::parse_from_bytes(&data) {
-                        if msg.status() != STATUS_SUCCESS
-                        {
-                            error!( "{}: ChannelOpenResponse status is not OK, got {:?}",get_name(), msg.status);
-                        }
-                        else {
-                            info!( "{}: ChannelOpenResponse received, waiting for media focus",get_name());
-                        }
-                    }
-                    else {
-                        error!( "{}: ChannelOpenResponse couldn't be parsed",get_name());
-                    }
-
-                }
-                _ =>{ info!( "{} Unknown message ID: {} received",get_name(), message_id);}
-            };
+            if message_id == MESSAGE_CHANNEL_OPEN_RESPONSE  as i32
+            {
+                info!("{} Received {} message", ch_id.to_string(), message_id);
+            }
+            else {
+                info!( "{} Unknown message ID: {} received", get_name(), message_id);
+            }
         }
 
     }
@@ -303,7 +267,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, tx_srv: Sender<Packet>, m
         error!( "{} Channel id {:?} is wrong, message discarded", get_name(), pkt.channel);
     } else { //Channel messages
         let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-        if message_id != SENSOR_OPEN_CHANNEL_RESPONSE as i32
+        if message_id != MESSAGE_CHANNEL_OPEN_RESPONSE as i32
         {
             error!( "{}, channel {:?}: Wrong message received: {}", get_name(), pkt.channel, message_id);
         }
@@ -329,26 +293,13 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, tx_srv: Sender<Packet>, m
         }
         else { //Channel messages
             let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-            match message_id {
-                i32::from(MEDIA_MESSAGE_CHANNEL_OPEN_RESPONSE) =>{
-                    info!("{} Received {} message", ch_id.to_string(), message_id);
-                    let data = &pkt.payload[2..]; // start of message data, without message_id
-                    if let Ok(msg) = ChannelOpenResponse::parse_from_bytes(&data) {
-                        if msg.status() != STATUS_SUCCESS
-                        {
-                            error!( "{}: ChannelOpenResponse status is not OK, got {:?}",get_name(), msg.status);
-                        }
-                        else {
-                            info!( "{}: ChannelOpenResponse received, waiting for media focus",get_name());
-                        }
-                    }
-                    else {
-                        error!( "{}: ChannelOpenResponse couldn't be parsed",get_name());
-                    }
-
-                }
-                _ =>{ info!( "{} Unknown message ID: {} received",get_name(), message_id);}
-            };
+            if message_id == MESSAGE_CHANNEL_OPEN_RESPONSE  as i32
+            {
+                info!("{} Received {} message", ch_id.to_string(), message_id);
+            }
+            else {
+                info!( "{} Unknown message ID: {} received", get_name(), message_id);
+            }
         }
 
     }
@@ -380,7 +331,7 @@ pub async fn th_media_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Rec
         error!( "{} Channel id {:?} is wrong, message discarded", get_name(), pkt.channel);
     } else { //Channel messages
         let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-        if message_id != SENSOR_OPEN_CHANNEL_RESPONSE as i32
+        if message_id != MESSAGE_CHANNEL_OPEN_RESPONSE as i32
         {
             error!( "{}, channel {:?}: Wrong message received: {}", get_name(), pkt.channel, message_id);
         }
@@ -405,25 +356,13 @@ pub async fn th_media_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Rec
             error!( "{} Channel id {:?} is wrong, message discarded", get_name(), pkt.channel);
         } else { //Channel messages
             let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-            match message_id {
-                i32::from(MEDIA_MESSAGE_CHANNEL_OPEN_RESPONSE) => {
-                    info!("{} Received {} message", ch_id.to_string(), message_id);
-                    let data = &pkt.payload[2..]; // start of message data, without message_id
-                    if let Ok(msg) = ChannelOpenResponse::parse_from_bytes(&data) {
-                        if msg.status() != STATUS_SUCCESS
-                        {
-                            error!( "{}: ChannelOpenResponse status is not OK, got {:?}", get_name(), msg.status);
-                        } else {
-                            info!( "{}: ChannelOpenResponse received, waiting for media focus", get_name());
-                        }
-                    }
-                    else {
-                        error ! ( "{}: ChannelOpenResponse couldn't be parsed", get_name());
-                    }
-
-                }
-                _ =>{ info ! ( "{} Unknown message ID: {} received", get_name(), message_id);}
-            };
+            if message_id == MESSAGE_CHANNEL_OPEN_RESPONSE  as i32
+            {
+                info!("{} Received {} message", ch_id.to_string(), message_id);
+            }
+            else {
+                info!( "{} Unknown message ID: {} received", get_name(), message_id);
+            }
         }
     }
 
@@ -454,7 +393,7 @@ pub async fn th_input_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Rec
         error!( "{} Channel id {:?} is wrong, message discarded", get_name(), pkt.channel);
     } else { //Channel messages
         let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-        if message_id != SENSOR_OPEN_CHANNEL_RESPONSE as i32
+        if message_id != MESSAGE_CHANNEL_OPEN_RESPONSE as i32
         {
             error!( "{}, channel {:?}: Wrong message received: {}", get_name(), pkt.channel, message_id);
         }
@@ -479,25 +418,13 @@ pub async fn th_input_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Rec
             error!( "{} Channel id {:?} is wrong, message discarded", get_name(), pkt.channel);
         } else { //Channel messages
             let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-            match message_id {
-                i32::from(INPUT_OPEN_CHANNEL_RESPONSE) => {
-                    info!("{} Received {} message", ch_id.to_string(), message_id);
-                    let data = &pkt.payload[2..]; // start of message data, without message_id
-                    if let Ok(msg) = ChannelOpenResponse::parse_from_bytes(&data) {
-                        if msg.status() != STATUS_SUCCESS
-                        {
-                            error!( "{}: ChannelOpenResponse status is not OK, got {:?}", get_name(), msg.status);
-                        } else {
-                            info!( "{}: ChannelOpenResponse received, waiting for media focus", get_name());
-                        }
-                    }
-                    else {
-                        error ! ( "{}: ChannelOpenResponse couldn't be parsed", get_name());
-                    }
-
-                }
-                _ =>{ info ! ( "{} Unknown message ID: {} received", get_name(), message_id);}
-            };
+            if message_id == MESSAGE_CHANNEL_OPEN_RESPONSE  as i32
+            {
+                info!("{} Received {} message", ch_id.to_string(), message_id);
+            }
+            else {
+                info!( "{} Unknown message ID: {} received", get_name(), message_id);
+            }
         }
     }
 
@@ -528,7 +455,7 @@ pub async fn th_vendor_extension(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
         error!( "{} Channel id {:?} is wrong, message discarded", get_name(), pkt.channel);
     } else { //Channel messages
         let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-        if message_id != SENSOR_OPEN_CHANNEL_RESPONSE as i32
+        if message_id != MESSAGE_CHANNEL_OPEN_RESPONSE as i32
         {
             error!( "{}, channel {:?}: Wrong message received: {}", get_name(), pkt.channel, message_id);
         }
@@ -553,25 +480,13 @@ pub async fn th_vendor_extension(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
             error!( "{} Channel id {:?} is wrong, message discarded", get_name(), pkt.channel);
         } else { //Channel messages
             let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-            match message_id {
-                i32::from(GAL_VERIFICATION_OPEN_CHANNEL_RESPONSE) => {
-                    info!("{} Received {} message", ch_id.to_string(), message_id);
-                    let data = &pkt.payload[2..]; // start of message data, without message_id
-                    if let Ok(msg) = ChannelOpenResponse::parse_from_bytes(&data) {
-                        if msg.status() != STATUS_SUCCESS
-                        {
-                            error!( "{}: ChannelOpenResponse status is not OK, got {:?}", get_name(), msg.status);
-                        } else {
-                            info!( "{}: ChannelOpenResponse received, waiting for media focus", get_name());
-                        }
-                    }
-                    else {
-                        error ! ( "{}: ChannelOpenResponse couldn't be parsed", get_name());
-                    }
-
-                }
-                _ =>{ info ! ( "{} Unknown message ID: {} received", get_name(), message_id);}
-            };
+            if message_id == MESSAGE_CHANNEL_OPEN_RESPONSE  as i32
+            {
+                info!("{} Received {} message", ch_id.to_string(), message_id);
+            }
+            else {
+                info!( "{} Unknown message ID: {} received", get_name(), message_id);
+            }
         }
     }
 
