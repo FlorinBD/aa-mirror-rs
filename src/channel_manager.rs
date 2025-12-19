@@ -745,7 +745,7 @@ pub async fn ch_proxy(
                     let vcr=match proto_srv.media_sink_service.video_configs[0].codec_resolution() {
                         VideoCodecResolutionType::VIDEO_800x480=>Video_800x480,
                         VideoCodecResolutionType::VIDEO_720x1280=>Video_720x1280,
-                        VideoCodecResolutionType::VIDEO_1080x19200=>Video_1080x1920,
+                        VideoCodecResolutionType::VIDEO_1080x1920=>Video_1080x1920,
                     };
 
                     let vcd=match proto_srv.media_sink_service.video_configs[0].video_codec_type() {

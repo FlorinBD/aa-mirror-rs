@@ -208,7 +208,7 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
         payload: payload,
     };
     tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
-
+    let mut video_stream_started:bool=false;
     loop {
         let pkt=  rx_srv.recv().await.ok_or("service reader channel hung up")?;
         if pkt.channel !=ch_id as u8
@@ -221,18 +221,29 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
             {
                 info!("{} Received {} message", ch_id.to_string(), message_id);
                 let data = &pkt.payload[2..]; // start of message data, without message_id
-                if  let Ok(rsp) = ChConfig::parse_from_bytes(&data) {
+                if  let Ok(rsp) = ChConfig::parse_from_bytes(&data)
+                {
                     info!( "{}, channel {:?}: Message status: {:?}", get_name(), pkt.channel, rsp.status());
                     if rsp.status() == STATUS_READY
                     {
                         info!( "{}, channel {:?}: Starting video capture", get_name(), pkt.channel);
+                        if vcfg.resolution == VideoCodecResolution::Video_800x480
+                        {
+                            video_stream_started=true;
+                        }
+                        else
+                        {
+                            error!( "{}: Unsupported video resolution detected", get_name());
+                        }
                     }
                 }
-                else {
+                else
+                {
                     error!( "{}, channel {:?}: Unable to parse received message", get_name(), pkt.channel);
                 }
             }
-            else {
+            else
+            {
                 info!( "{} Unknown message ID: {} received", get_name(), message_id);
             }
         }
