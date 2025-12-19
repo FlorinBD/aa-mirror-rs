@@ -71,6 +71,31 @@ pub async fn th_sensor_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Re
         payload: payload,
     };
     tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+
+    let pkt = rx_srv.recv().await.ok_or("service reader channel hung up")?;
+    if pkt.channel != ch_id as u8
+    {
+        error!( "{} Channel id {:?} is wrong, message discarded", get_name(), pkt.channel);
+    } else { //Channel messages
+        let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+        if message_id != i32::from(SENSOR_OPEN_CHANNEL_RESPONSE)
+        {
+            error!( "{}, channel {:?}: Wrong message received: {}", get_name(), pkt.channel, message_id);
+        }
+        else {
+            let data = &pkt.payload[2..]; // start of message data, without message_id
+            if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
+                if(rsp.status() != STATUS_SUCCESS)
+                {
+                    error!( "{}, channel {:?}: Wrong message status received", get_name(), pkt.channel);
+                }
+            }
+            else {
+                error!( "{}, channel {:?}: Unable to parse received message", get_name(), pkt.channel);
+            }
+
+        }
+    }
     loop {
         let pkt = rx_srv.recv().await.ok_or("service reader channel hung up")?;
         if pkt.channel != ch_id as u8
@@ -78,9 +103,8 @@ pub async fn th_sensor_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Re
             error!( "{} Channel id {:?} is wrong, message discarded", get_name(), pkt.channel);
         } else { //Channel messages
             let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-            let control = protos::SensorMessageId::from_i32(message_id);
-            match control.unwrap_or(SENSOR_UNEXPECTED_MESSAGE) {
-                SENSOR_OPEN_CHANNEL_RESPONSE => {
+            match message_id {
+                i32::from(SENSOR_OPEN_CHANNEL_RESPONSE) => {
                     info!("{} Received {} message", ch_id.to_string(), message_id);
                     let data = &pkt.payload[2..]; // start of message data, without message_id
                     if let Ok(msg) = ChannelOpenResponse::parse_from_bytes(&data) {
@@ -119,6 +143,30 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
         payload: payload,
     };
     tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+    let pkt = rx_srv.recv().await.ok_or("service reader channel hung up")?;
+    if pkt.channel != ch_id as u8
+    {
+        error!( "{} Channel id {:?} is wrong, message discarded", get_name(), pkt.channel);
+    } else { //Channel messages
+        let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+        if message_id != i32::from(SENSOR_OPEN_CHANNEL_RESPONSE)
+        {
+            error!( "{}, channel {:?}: Wrong message received: {}", get_name(), pkt.channel, message_id);
+        }
+        else {
+            let data = &pkt.payload[2..]; // start of message data, without message_id
+            if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
+                if(rsp.status() != STATUS_SUCCESS)
+                {
+                    error!( "{}, channel {:?}: Wrong message status received", get_name(), pkt.channel);
+                }
+            }
+            else {
+                error!( "{}, channel {:?}: Unable to parse received message", get_name(), pkt.channel);
+            }
+
+        }
+    }
     loop {
         let pkt=  rx_srv.recv().await.ok_or("service reader channel hung up")?;
         if pkt.channel !=ch_id as u8
@@ -127,9 +175,8 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
         }
         else { //Channel messages
             let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-            //let control = protos::MediaMessageId::from_i32(message_id);
             match message_id{
-                MEDIA_MESSAGE_CHANNEL_OPEN_RESPONSE =>{
+                i32::from(MEDIA_MESSAGE_CHANNEL_OPEN_RESPONSE) =>{
                     info!("{} Received {} message", ch_id.to_string(), message_id);
                     let data = &pkt.payload[2..]; // start of message data, without message_id
                     if let Ok(msg) = ChannelOpenResponse::parse_from_bytes(&data) {
@@ -173,6 +220,30 @@ pub async fn th_media_sink_audio_guidance(ch_id: i32, tx_srv: Sender<Packet>, mu
         payload: payload,
     };
     tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+    let pkt = rx_srv.recv().await.ok_or("service reader channel hung up")?;
+    if pkt.channel != ch_id as u8
+    {
+        error!( "{} Channel id {:?} is wrong, message discarded", get_name(), pkt.channel);
+    } else { //Channel messages
+        let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+        if message_id != i32::from(SENSOR_OPEN_CHANNEL_RESPONSE)
+        {
+            error!( "{}, channel {:?}: Wrong message received: {}", get_name(), pkt.channel, message_id);
+        }
+        else {
+            let data = &pkt.payload[2..]; // start of message data, without message_id
+            if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
+                if(rsp.status() != STATUS_SUCCESS)
+                {
+                    error!( "{}, channel {:?}: Wrong message status received", get_name(), pkt.channel);
+                }
+            }
+            else {
+                error!( "{}, channel {:?}: Unable to parse received message", get_name(), pkt.channel);
+            }
+
+        }
+    }
     loop {
         let pkt=  rx_srv.recv().await.ok_or("service reader channel hung up")?;
         if pkt.channel !=ch_id as u8
@@ -181,9 +252,8 @@ pub async fn th_media_sink_audio_guidance(ch_id: i32, tx_srv: Sender<Packet>, mu
         }
         else { //Channel messages
             let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-            let control = protos::MediaMessageId::from_i32(message_id);
-            match control.unwrap_or(MEDIA_UNEXPECTED_MESSAGE) {
-                MEDIA_MESSAGE_CHANNEL_OPEN_RESPONSE =>{
+            match message_id {
+                    i32::from(MEDIA_MESSAGE_CHANNEL_OPEN_RESPONSE) =>{
                     info!("{} Received {} message", ch_id.to_string(), message_id);
                     let data = &pkt.payload[2..]; // start of message data, without message_id
                     if let Ok(msg) = ChannelOpenResponse::parse_from_bytes(&data) {
@@ -227,6 +297,30 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, tx_srv: Sender<Packet>, m
         payload: payload,
     };
     tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+    let pkt = rx_srv.recv().await.ok_or("service reader channel hung up")?;
+    if pkt.channel != ch_id as u8
+    {
+        error!( "{} Channel id {:?} is wrong, message discarded", get_name(), pkt.channel);
+    } else { //Channel messages
+        let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+        if message_id != i32::from(SENSOR_OPEN_CHANNEL_RESPONSE)
+        {
+            error!( "{}, channel {:?}: Wrong message received: {}", get_name(), pkt.channel, message_id);
+        }
+        else {
+            let data = &pkt.payload[2..]; // start of message data, without message_id
+            if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
+                if(rsp.status() != STATUS_SUCCESS)
+                {
+                    error!( "{}, channel {:?}: Wrong message status received", get_name(), pkt.channel);
+                }
+            }
+            else {
+                error!( "{}, channel {:?}: Unable to parse received message", get_name(), pkt.channel);
+            }
+
+        }
+    }
     loop {
         let pkt=  rx_srv.recv().await.ok_or("service reader channel hung up")?;
         if pkt.channel !=ch_id as u8
@@ -235,9 +329,8 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, tx_srv: Sender<Packet>, m
         }
         else { //Channel messages
             let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-            let control = protos::MediaMessageId::from_i32(message_id);
-            match control.unwrap_or(MEDIA_UNEXPECTED_MESSAGE) {
-                MEDIA_MESSAGE_CHANNEL_OPEN_RESPONSE =>{
+            match message_id {
+                i32::from(MEDIA_MESSAGE_CHANNEL_OPEN_RESPONSE) =>{
                     info!("{} Received {} message", ch_id.to_string(), message_id);
                     let data = &pkt.payload[2..]; // start of message data, without message_id
                     if let Ok(msg) = ChannelOpenResponse::parse_from_bytes(&data) {
@@ -281,6 +374,30 @@ pub async fn th_media_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Rec
         payload: payload,
     };
     tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+    let pkt = rx_srv.recv().await.ok_or("service reader channel hung up")?;
+    if pkt.channel != ch_id as u8
+    {
+        error!( "{} Channel id {:?} is wrong, message discarded", get_name(), pkt.channel);
+    } else { //Channel messages
+        let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+        if message_id != i32::from(SENSOR_OPEN_CHANNEL_RESPONSE)
+        {
+            error!( "{}, channel {:?}: Wrong message received: {}", get_name(), pkt.channel, message_id);
+        }
+        else {
+            let data = &pkt.payload[2..]; // start of message data, without message_id
+            if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
+                if(rsp.status() != STATUS_SUCCESS)
+                {
+                    error!( "{}, channel {:?}: Wrong message status received", get_name(), pkt.channel);
+                }
+            }
+            else {
+                error!( "{}, channel {:?}: Unable to parse received message", get_name(), pkt.channel);
+            }
+
+        }
+    }
     loop {
         let pkt=  rx_srv.recv().await.ok_or("service reader channel hung up")?;
         if pkt.channel != ch_id as u8
@@ -288,9 +405,8 @@ pub async fn th_media_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Rec
             error!( "{} Channel id {:?} is wrong, message discarded", get_name(), pkt.channel);
         } else { //Channel messages
             let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-            let control = protos::MediaMessageId::from_i32(message_id);
-            match control.unwrap_or(MEDIA_UNEXPECTED_MESSAGE) {
-                MEDIA_MESSAGE_CHANNEL_OPEN_RESPONSE => {
+            match message_id {
+                i32::from(MEDIA_MESSAGE_CHANNEL_OPEN_RESPONSE) => {
                     info!("{} Received {} message", ch_id.to_string(), message_id);
                     let data = &pkt.payload[2..]; // start of message data, without message_id
                     if let Ok(msg) = ChannelOpenResponse::parse_from_bytes(&data) {
@@ -332,6 +448,30 @@ pub async fn th_input_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Rec
         payload: payload,
     };
     tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+    let pkt = rx_srv.recv().await.ok_or("service reader channel hung up")?;
+    if pkt.channel != ch_id as u8
+    {
+        error!( "{} Channel id {:?} is wrong, message discarded", get_name(), pkt.channel);
+    } else { //Channel messages
+        let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+        if message_id != i32::from(SENSOR_OPEN_CHANNEL_RESPONSE)
+        {
+            error!( "{}, channel {:?}: Wrong message received: {}", get_name(), pkt.channel, message_id);
+        }
+        else {
+            let data = &pkt.payload[2..]; // start of message data, without message_id
+            if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
+                if(rsp.status() != STATUS_SUCCESS)
+                {
+                    error!( "{}, channel {:?}: Wrong message status received", get_name(), pkt.channel);
+                }
+            }
+            else {
+                error!( "{}, channel {:?}: Unable to parse received message", get_name(), pkt.channel);
+            }
+
+        }
+    }
     loop {
         let pkt=  rx_srv.recv().await.ok_or("service reader channel hung up")?;
         if pkt.channel != ch_id as u8
@@ -339,9 +479,8 @@ pub async fn th_input_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Rec
             error!( "{} Channel id {:?} is wrong, message discarded", get_name(), pkt.channel);
         } else { //Channel messages
             let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-            let control = protos::InputMessageId::from_i32(message_id);
-            match control.unwrap_or(INPUT_UNEXPECTED_MESSAGE) {
-                INPUT_OPEN_CHANNEL_RESPONSE => {
+            match message_id {
+                i32::from(INPUT_OPEN_CHANNEL_RESPONSE) => {
                     info!("{} Received {} message", ch_id.to_string(), message_id);
                     let data = &pkt.payload[2..]; // start of message data, without message_id
                     if let Ok(msg) = ChannelOpenResponse::parse_from_bytes(&data) {
@@ -383,6 +522,30 @@ pub async fn th_vendor_extension(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
         payload: payload,
     };
     tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+    let pkt = rx_srv.recv().await.ok_or("service reader channel hung up")?;
+    if pkt.channel != ch_id as u8
+    {
+        error!( "{} Channel id {:?} is wrong, message discarded", get_name(), pkt.channel);
+    } else { //Channel messages
+        let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+        if message_id != i32::from(SENSOR_OPEN_CHANNEL_RESPONSE)
+        {
+            error!( "{}, channel {:?}: Wrong message received: {}", get_name(), pkt.channel, message_id);
+        }
+        else {
+            let data = &pkt.payload[2..]; // start of message data, without message_id
+            if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
+                if(rsp.status() != STATUS_SUCCESS)
+                {
+                    error!( "{}, channel {:?}: Wrong message status received", get_name(), pkt.channel);
+                }
+            }
+            else {
+                error!( "{}, channel {:?}: Unable to parse received message", get_name(), pkt.channel);
+            }
+
+        }
+    }
     loop {
         let pkt=  rx_srv.recv().await.ok_or("service reader channel hung up")?;
         if pkt.channel != ch_id as u8
@@ -390,9 +553,8 @@ pub async fn th_vendor_extension(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
             error!( "{} Channel id {:?} is wrong, message discarded", get_name(), pkt.channel);
         } else { //Channel messages
             let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-            let control = protos::GalVerificationVendorExtensionMessageId::from_i32(message_id);
-            match control.unwrap_or(GAL_VERIFICATION_UNEXPECTED_MESSAGE) {
-                GAL_VERIFICATION_OPEN_CHANNEL_RESPONSE => {
+            match message_id {
+                i32::from(GAL_VERIFICATION_OPEN_CHANNEL_RESPONSE) => {
                     info!("{} Received {} message", ch_id.to_string(), message_id);
                     let data = &pkt.payload[2..]; // start of message data, without message_id
                     if let Ok(msg) = ChannelOpenResponse::parse_from_bytes(&data) {
