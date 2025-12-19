@@ -30,7 +30,6 @@ use crate::aa_services::InputMessageId::*;
 use crate::aa_services::GalVerificationVendorExtensionMessageId::*;
 use crate::aa_services::SensorMessageId::*;
 use crate::aa_services::SensorType::*;
-use crate::aa_services::Config::Status::*;
 use crate::aa_services::MediaCodecType::*;
 use protobuf::text_format::print_to_string_pretty;
 use protobuf::{Enum, EnumOrUnknown, Message, MessageDyn};
@@ -191,7 +190,7 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
                 let data = &pkt.payload[2..]; // start of message data, without message_id
                 if  let Ok(rsp) = Config::parse_from_bytes(&data) {
                     info!( "{}, channel {:?}: Message status: {:?}", get_name(), pkt.channel, rsp.status());
-                    if rsp.status() == STATUS_READY
+                    if rsp.status() == Config::STATUS_READY
                     {
                         info!( "{}, channel {:?}: Starting video capture", get_name(), pkt.channel);
                     }
