@@ -50,6 +50,39 @@ pub enum ServiceType
     SensorSource,
     VendorExtension,
 }
+
+pub enum VideoCodecResolution {
+    Video_800x480 = 1,
+    Video_1280x720 = 2,
+    Video_1920x1080 = 3,
+    Video_2560x1440 = 4,
+    Video_3840x2160 = 5,
+    Video_720x1280 = 6,
+    Video_1080x1920 = 7,
+    Video_1440x2560 = 8,
+    Video_2160x3840 = 9,
+}
+
+pub enum VideoFPS {
+    FPS_60 = 1,
+    FPS_30 = 2,
+}
+
+enum MediaCodec {
+    AUDIO_PCM = 1,
+    AUDIO_AAC_LC = 2,
+    VIDEO_H264_BP = 3,
+    AUDIO_AAC_LC_ADTS = 4,
+    VIDEO_VP9 = 5,
+    VIDEO_AV1 = 6,
+    VIDEO_H265 = 7,
+}
+pub struct VideoConfig
+{
+    pub resolution : VideoCodecResolution,
+    pub fps: VideoFPS,
+    pub codec: MediaCodec,
+}
 impl fmt::Display for ServiceType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
@@ -119,7 +152,7 @@ pub async fn th_sensor_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Re
         format!("<i><bright-black> aa-mirror/{}: </>", dev)
     }
 }
-pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, vcfg:protos::VideoConfiguration)-> Result<()>{
+pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, vcfg:VideoConfig)-> Result<()>{
     info!( "{}: Starting...", get_name());
     /* -----------------------------------OPEN CHANNEL----------------------------------------------- */
     let mut sdreq= ChannelOpenRequest::new();

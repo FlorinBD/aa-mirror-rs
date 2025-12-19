@@ -33,7 +33,7 @@ use protobuf::{Enum, EnumOrUnknown, Message, MessageDyn};
 use tokio::sync::mpsc;
 use protos::ControlMessageType::{self, *};
 use crate::aa_services;
-use crate::aa_services::{th_input_source, th_media_sink_audio_guidance, th_media_sink_audio_streaming, th_media_sink_video, th_media_source, th_sensor_source, th_vendor_extension, ServiceType};
+use crate::aa_services::{th_input_source, th_media_sink_audio_guidance, th_media_sink_audio_streaming, th_media_sink_video, th_media_source, th_sensor_source, th_vendor_extension, ServiceType, VideoConfig};
 use crate::config::{Action::Stop, AppConfig, SharedConfig};
 use crate::config_types::HexdumpLevel;
 use crate::io_uring::Endpoint;
@@ -742,7 +742,13 @@ pub async fn ch_proxy(
                 {
                     let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                     srv_senders.insert(ch_id - 1,tx);
-                    let video_cfg = proto_srv.media_sink_service.video_configs[0];
+                    let video_cfg=VideoConfig
+                    {
+                        resolution:proto_srv.media_sink_service.video_configs[0].get_codec_resolution(),
+                        codec:proto_srv.media_sink_service.video_configs[0].get_video_codec_type(),
+                        fps:proto_srv.media_sink_service.video_configs[0].get_frame_rate(),
+                    };
+                    
                     srv_tsk_handles.insert(ch_id - 1, tokio_uring::spawn(th_media_sink_video(ch_id as i32, tx_srv.clone(), rx, video_cfg)));
                 }
                 else {
