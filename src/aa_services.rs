@@ -50,7 +50,7 @@ pub enum ServiceType
     SensorSource,
     VendorExtension,
 }
-
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum VideoCodecResolution {
     Video_800x480 = 1,
     Video_1280x720 = 2,
@@ -62,12 +62,12 @@ pub enum VideoCodecResolution {
     Video_1440x2560 = 8,
     Video_2160x3840 = 9,
 }
-
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum VideoFPS {
     FPS_60 = 1,
     FPS_30 = 2,
 }
-
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum MediaCodec {
     AUDIO_PCM = 1,
     AUDIO_AAC_LC = 2,
