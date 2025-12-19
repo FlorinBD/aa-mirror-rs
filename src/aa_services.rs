@@ -19,7 +19,7 @@ use tokio_uring::buf::BoundedBuf;
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use crate::aa_services::protos::navigation_maneuver::NavigationType::*;
 use crate::aa_services::protos::auth_response::Status::*;
-use crate::aa_services::protos::Config;
+use crate::aa_services::protos::Config as ChConfig;
 use crate::aa_services::protos::*;
 use crate::aa_services::sensor_source_service::Sensor;
 use crate::aa_services::AudioStreamType::*;
@@ -190,7 +190,7 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
                 let data = &pkt.payload[2..]; // start of message data, without message_id
                 if  let Ok(rsp) = Config::parse_from_bytes(&data) {
                     info!( "{}, channel {:?}: Message status: {:?}", get_name(), pkt.channel, rsp.status());
-                    if rsp.status() == Config::Status::STATUS_READY
+                    if rsp.status() == ChConfig::Status::STATUS_READY
                     {
                         info!( "{}, channel {:?}: Starting video capture", get_name(), pkt.channel);
                     }
