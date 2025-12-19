@@ -30,6 +30,8 @@ use crate::aa_services::InputMessageId::*;
 use crate::aa_services::GalVerificationVendorExtensionMessageId::*;
 use crate::aa_services::SensorMessageId::*;
 use crate::aa_services::SensorType::*;
+use crate::aa_services::Config::Status::*;
+use crate::aa_services::MediaCodecType::*;
 use protobuf::text_format::print_to_string_pretty;
 use protobuf::{Enum, EnumOrUnknown, Message, MessageDyn};
 use protos::*;
