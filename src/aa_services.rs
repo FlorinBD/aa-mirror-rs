@@ -104,7 +104,7 @@ pub async fn th_sensor_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Re
         } else { //Channel messages
             let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
             match message_id {
-                i32::from(ControlMessageType::SENSOR_OPEN_CHANNEL_RESPONSE) => {
+                SENSOR_OPEN_CHANNEL_RESPONSE => {
                     info!("{} Received {} message", ch_id.to_string(), message_id);
                     let data = &pkt.payload[2..]; // start of message data, without message_id
                     if let Ok(msg) = ChannelOpenResponse::parse_from_bytes(&data) {
