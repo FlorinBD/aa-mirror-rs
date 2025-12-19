@@ -20,7 +20,7 @@ include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use crate::aa_services::protos::navigation_maneuver::NavigationType::*;
 use crate::aa_services::protos::auth_response::Status::*;
 use crate::aa_services::protos::Config as ChConfig;
-use crate::aa_services::protos::Config::Status::*;
+use crate::aa_services::protos::config::Status::*;
 use crate::aa_services::sensor_source_service::Sensor;
 use crate::aa_services::AudioStreamType::*;
 use crate::aa_services::ByeByeReason::USER_SELECTION;
@@ -68,7 +68,7 @@ pub enum VideoFPS {
     FPS_30 = 2,
 }
 
-enum MediaCodec {
+pub enum MediaCodec {
     AUDIO_PCM = 1,
     AUDIO_AAC_LC = 2,
     VIDEO_H264_BP = 3,
