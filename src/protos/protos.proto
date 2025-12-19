@@ -1153,7 +1153,7 @@ message GalVerificationSetSensor { optional SensorBatch sensors = 1; }
 
 message GalVerificationMediaSinkStatus {
   required int32 channel = 1;
-  required Config.Status status = 2;
+  required ConfigStatus status = 2;
 }
 
 message GalVerificationVideoFocus {
@@ -1213,7 +1213,7 @@ enum ConfigStatus {
     STATUS_WAIT = 1;
     STATUS_READY = 2;
   }
-  
+
 enum CustomCommand{
     CMD_OPEN_CH=1;
 }
