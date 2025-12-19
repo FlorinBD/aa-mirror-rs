@@ -77,11 +77,30 @@ pub enum MediaCodec {
     VIDEO_AV1 = 6,
     VIDEO_H265 = 7,
 }
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum AudioStream
+{
+    GUIDANCE=1,
+    SYSTEM_AUDIO=2,
+    MEDIA=3,
+    TELEPHONY=4,
+}
 pub struct VideoConfig
 {
     pub resolution : VideoCodecResolution,
     pub fps: VideoFPS,
     pub codec: MediaCodec,
+}
+
+pub struct AudioChConfiguration {
+    sampling_rate:u32 ,
+    number_of_bits:u32 ,
+    number_of_channels:u32,
+}
+pub struct AudioConfig
+{
+    pub codec: MediaCodec,
+    pub stream_type: AudioStream,
 }
 impl fmt::Display for ServiceType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -161,6 +180,112 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
         }
         else { //Channel messages
             let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+            if message_id == ControlMessageType::MESSAGE_CHANNEL_OPEN_RESPONSE  as i32
+            {
+                info!("{} Received {} message", ch_id.to_string(), message_id);
+                let data = &pkt.payload[2..]; // start of message data, without message_id
+                if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
+                    if rsp.status() != MessageStatus::STATUS_SUCCESS
+                    {
+                        error!( "{}, channel {:?}: Wrong message status received", get_name(), pkt.channel);
+                    }
+                    else {
+                        let mut cfg_req= Setup::new();
+                        cfg_req.set_type(MediaCodecType::MEDIA_CODEC_VIDEO_H264_BP);
+
+                        let mut payload: Vec<u8>=cfg_req.write_to_bytes().expect("serialization failed");
+                        payload.insert(0,((MediaMessageId::MEDIA_MESSAGE_SETUP as u16) >> 8) as u8);
+                        payload.insert( 1,((MediaMessageId::MEDIA_MESSAGE_SETUP as u16) & 0xff) as u8);
+
+                        let pkt_rsp = Packet {
+                            channel: ch_id as u8,
+                            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                            final_length: None,
+                            payload: payload,
+                        };
+                        tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+                    }
+                }
+                else {
+                    error!( "{}, channel {:?}: Unable to parse received message", get_name(), pkt.channel);
+                }
+            }
+            else if message_id == ControlMessageType::MESSAGE_CUSTOM_CMD  as i32
+            {
+                info!("{} Received {} message", ch_id.to_string(), message_id);
+                let data = &pkt.payload[2..]; // start of message data, without message_id
+                if let Ok(msg) = CustomCommandMessage::parse_from_bytes(&data) {
+                    if msg.cmd() == CustomCommand::CMD_OPEN_CH
+                    {
+                        let mut open_req = ChannelOpenRequest::new();
+                        open_req.set_priority(0);
+                        open_req.set_service_id(ch_id);
+                        let mut payload: Vec<u8> = open_req.write_to_bytes().expect("serialization failed");
+                        payload.insert(0, ((ControlMessageType::MESSAGE_CHANNEL_OPEN_REQUEST as u16) >> 8) as u8);
+                        payload.insert(1, ((ControlMessageType::MESSAGE_CHANNEL_OPEN_REQUEST as u16) & 0xff) as u8);
+
+                        let pkt_rsp = Packet {
+                            channel: ch_id as u8,
+                            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                            final_length: None,
+                            payload: payload,
+                        };
+                        tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+                    }
+                }
+                else {
+                    error!( "{} CustomCommandMessage couldn't be parsed",get_name());
+                }
+            }
+            else if message_id == MediaMessageId::MEDIA_MESSAGE_CONFIG  as i32
+            {
+                info!("{} Received {} message", ch_id.to_string(), message_id);
+                let data = &pkt.payload[2..]; // start of message data, without message_id
+                if  let Ok(rsp) = ChConfig::parse_from_bytes(&data)
+                {
+                    info!( "{}, channel {:?}: Message status: {:?}", get_name(), pkt.channel, rsp.status());
+                    if rsp.status() == ChConfig::Status::STATUS_READY
+                    {
+                        info!( "{}, channel {:?}: Starting video capture", get_name(), pkt.channel);
+                        if vcfg.resolution == VideoCodecResolution::Video_800x480
+                        {
+                            video_stream_started=true;
+                        }
+                        else
+                        {
+                            error!( "{}: Unsupported video resolution detected", get_name());
+                        }
+                    }
+                }
+                else
+                {
+                    error!( "{}, channel {:?}: Unable to parse received message", get_name(), pkt.channel);
+                }
+            }
+            else
+            {
+                info!( "{} Unknown message ID: {} received", get_name(), message_id);
+            }
+        }
+
+    }
+
+    fn get_name() -> String {
+        let dev = "MediaSinkService Video";
+        format!("<i><bright-black> aa-mirror/{}: </>", dev)
+    }
+}
+pub async fn th_media_sink_audio_guidance(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, acfg:AudioConfig)-> Result<()>{
+    info!( "{}: Starting...", get_name());
+    let mut audio_stream_started:bool=false;
+    loop {
+        let pkt=  rx_srv.recv().await.ok_or("service reader channel hung up")?;
+        if pkt.channel !=ch_id as u8
+        {
+            error!( "{} Channel id {:?} is wrong, message discarded",get_name(), pkt.channel);
+        }
+        else { //Channel messages
+            let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
             if message_id == MESSAGE_CHANNEL_OPEN_RESPONSE  as i32
             {
                 info!("{} Received {} message", ch_id.to_string(), message_id);
@@ -230,7 +355,7 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
                         info!( "{}, channel {:?}: Starting video capture", get_name(), pkt.channel);
                         if vcfg.resolution == VideoCodecResolution::Video_800x480
                         {
-                            video_stream_started=true;
+                            audio_stream_started =true;
                         }
                         else
                         {
@@ -250,116 +375,14 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
         }
 
     }
-
-    fn get_name() -> String {
-        let dev = "MediaSinkService Video";
-        format!("<i><bright-black> aa-mirror/{}: </>", dev)
-    }
-}
-pub async fn th_media_sink_audio_guidance(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>)-> Result<()>{
-    info!( "{}: Starting...", get_name());
-    let mut sdreq= ChannelOpenRequest::new();
-    sdreq.set_priority(0);
-    sdreq.set_service_id(ch_id);
-    let mut payload: Vec<u8>=sdreq.write_to_bytes().expect("serialization failed");
-    payload.insert(0,((MESSAGE_CHANNEL_OPEN_REQUEST as u16) >> 8) as u8);
-    payload.insert( 1,((MESSAGE_CHANNEL_OPEN_REQUEST as u16) & 0xff) as u8);
-
-    let pkt_rsp = Packet {
-        channel: ch_id as u8,
-        flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-        final_length: None,
-        payload: payload,
-    };
-    tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
-    let pkt = rx_srv.recv().await.ok_or("service reader channel hung up")?;
-    if pkt.channel != ch_id as u8
-    {
-        error!( "{} Channel id {:?} is wrong, message discarded", get_name(), pkt.channel);
-    } else { //Channel messages
-        let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-        if message_id != MESSAGE_CHANNEL_OPEN_RESPONSE as i32
-        {
-            error!( "{}, channel {:?}: Wrong message received: {}", get_name(), pkt.channel, message_id);
-        }
-        else {
-            let data = &pkt.payload[2..]; // start of message data, without message_id
-            if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
-                if rsp.status() != STATUS_SUCCESS
-                {
-                    error!( "{}, channel {:?}: Wrong message status received", get_name(), pkt.channel);
-                }
-            }
-            else {
-                error!( "{}, channel {:?}: Unable to parse received message", get_name(), pkt.channel);
-            }
-
-        }
-    }
-    loop {
-        let pkt=  rx_srv.recv().await.ok_or("service reader channel hung up")?;
-        if pkt.channel !=ch_id as u8
-        {
-            error!( "{} Channel id {:?} is wrong, message discarded",get_name(), pkt.channel);
-        }
-        else { //Channel messages
-            let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-            if message_id == MESSAGE_CHANNEL_OPEN_RESPONSE  as i32
-            {
-                info!("{} Received {} message", ch_id.to_string(), message_id);
-            }
-            else {
-                info!( "{} Unknown message ID: {} received", get_name(), message_id);
-            }
-        }
-
-    }
-
     fn get_name() -> String {
         let dev = "MediaSinkService Audio Guidance";
         format!("<i><bright-black> aa-mirror/{}: </>", dev)
     }
 }
-pub async fn th_media_sink_audio_streaming(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>)-> Result<()>{
+pub async fn th_media_sink_audio_streaming(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, acfg:AudioConfig)-> Result<()>{
     info!( "{}: Starting...", get_name());
-    let mut sdreq= ChannelOpenRequest::new();
-    sdreq.set_priority(0);
-    sdreq.set_service_id(ch_id);
-    let mut payload: Vec<u8>=sdreq.write_to_bytes().expect("serialization failed");
-    payload.insert(0,((MESSAGE_CHANNEL_OPEN_REQUEST as u16) >> 8) as u8);
-    payload.insert( 1,((MESSAGE_CHANNEL_OPEN_REQUEST as u16) & 0xff) as u8);
-
-    let pkt_rsp = Packet {
-        channel: ch_id as u8,
-        flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-        final_length: None,
-        payload: payload,
-    };
-    tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
-    let pkt = rx_srv.recv().await.ok_or("service reader channel hung up")?;
-    if pkt.channel != ch_id as u8
-    {
-        error!( "{} Channel id {:?} is wrong, message discarded", get_name(), pkt.channel);
-    } else { //Channel messages
-        let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-        if message_id != MESSAGE_CHANNEL_OPEN_RESPONSE as i32
-        {
-            error!( "{}, channel {:?}: Wrong message received: {}", get_name(), pkt.channel, message_id);
-        }
-        else {
-            let data = &pkt.payload[2..]; // start of message data, without message_id
-            if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
-                if rsp.status() != STATUS_SUCCESS
-                {
-                    error!( "{}, channel {:?}: Wrong message status received", get_name(), pkt.channel);
-                }
-            }
-            else {
-                error!( "{}, channel {:?}: Unable to parse received message", get_name(), pkt.channel);
-            }
-
-        }
-    }
+    let mut audio_stream_started:bool=false;
     loop {
         let pkt=  rx_srv.recv().await.ok_or("service reader channel hung up")?;
         if pkt.channel !=ch_id as u8
@@ -371,14 +394,92 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, tx_srv: Sender<Packet>, m
             if message_id == MESSAGE_CHANNEL_OPEN_RESPONSE  as i32
             {
                 info!("{} Received {} message", ch_id.to_string(), message_id);
+                let data = &pkt.payload[2..]; // start of message data, without message_id
+                if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
+                    if rsp.status() != STATUS_SUCCESS
+                    {
+                        error!( "{}, channel {:?}: Wrong message status received", get_name(), pkt.channel);
+                    }
+                    else {
+                        let mut cfg_req= Setup::new();
+                        cfg_req.set_type(MEDIA_CODEC_VIDEO_H264_BP);
+
+                        let mut payload: Vec<u8>=cfg_req.write_to_bytes().expect("serialization failed");
+                        payload.insert(0,((MEDIA_MESSAGE_SETUP as u16) >> 8) as u8);
+                        payload.insert( 1,((MEDIA_MESSAGE_SETUP as u16) & 0xff) as u8);
+
+                        let pkt_rsp = Packet {
+                            channel: ch_id as u8,
+                            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                            final_length: None,
+                            payload: payload,
+                        };
+                        tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+                    }
+                }
+                else {
+                    error!( "{}, channel {:?}: Unable to parse received message", get_name(), pkt.channel);
+                }
             }
-            else {
+            else if message_id == MESSAGE_CUSTOM_CMD  as i32
+            {
+                info!("{} Received {} message", ch_id.to_string(), message_id);
+                let data = &pkt.payload[2..]; // start of message data, without message_id
+                if let Ok(msg) = CustomCommandMessage::parse_from_bytes(&data) {
+                    if msg.cmd() == CustomCommand::CMD_OPEN_CH
+                    {
+                        let mut open_req = ChannelOpenRequest::new();
+                        open_req.set_priority(0);
+                        open_req.set_service_id(ch_id);
+                        let mut payload: Vec<u8> = open_req.write_to_bytes().expect("serialization failed");
+                        payload.insert(0, ((MESSAGE_CHANNEL_OPEN_REQUEST as u16) >> 8) as u8);
+                        payload.insert(1, ((MESSAGE_CHANNEL_OPEN_REQUEST as u16) & 0xff) as u8);
+
+                        let pkt_rsp = Packet {
+                            channel: ch_id as u8,
+                            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                            final_length: None,
+                            payload: payload,
+                        };
+                        tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+                    }
+                }
+                else {
+                    error!( "{} CustomCommandMessage couldn't be parsed",get_name());
+                }
+            }
+            else if message_id == MEDIA_MESSAGE_CONFIG  as i32
+            {
+                info!("{} Received {} message", ch_id.to_string(), message_id);
+                let data = &pkt.payload[2..]; // start of message data, without message_id
+                if  let Ok(rsp) = ChConfig::parse_from_bytes(&data)
+                {
+                    info!( "{}, channel {:?}: Message status: {:?}", get_name(), pkt.channel, rsp.status());
+                    if rsp.status() == STATUS_READY
+                    {
+                        info!( "{}, channel {:?}: Starting video capture", get_name(), pkt.channel);
+                        if vcfg.resolution == VideoCodecResolution::Video_800x480
+                        {
+                            audio_stream_started =true;
+                        }
+                        else
+                        {
+                            error!( "{}: Unsupported video resolution detected", get_name());
+                        }
+                    }
+                }
+                else
+                {
+                    error!( "{}, channel {:?}: Unable to parse received message", get_name(), pkt.channel);
+                }
+            }
+            else
+            {
                 info!( "{} Unknown message ID: {} received", get_name(), message_id);
             }
         }
 
     }
-
     fn get_name() -> String {
         let dev = "MediaSinkService Audio Streaming";
         format!("<i><bright-black> aa-mirror/{}: </>", dev)
@@ -386,46 +487,8 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, tx_srv: Sender<Packet>, m
 }
 pub async fn th_media_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>)-> Result<()>{
     info!( "{}: Starting...", get_name());
-    let mut sdreq= ChannelOpenRequest::new();
-    sdreq.set_priority(0);
-    sdreq.set_service_id(ch_id);
-    let mut payload: Vec<u8>=sdreq.write_to_bytes().expect("serialization failed");
-    payload.insert(0,((MESSAGE_CHANNEL_OPEN_REQUEST as u16) >> 8) as u8);
-    payload.insert( 1,((MESSAGE_CHANNEL_OPEN_REQUEST as u16) & 0xff) as u8);
-
-    let pkt_rsp = Packet {
-        channel: ch_id as u8,
-        flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-        final_length: None,
-        payload: payload,
-    };
-    tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
-    let pkt = rx_srv.recv().await.ok_or("service reader channel hung up")?;
-    if pkt.channel != ch_id as u8
-    {
-        error!( "{} Channel id {:?} is wrong, message discarded", get_name(), pkt.channel);
-    } else { //Channel messages
-        let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-        if message_id != MESSAGE_CHANNEL_OPEN_RESPONSE as i32
-        {
-            error!( "{}, channel {:?}: Wrong message received: {}", get_name(), pkt.channel, message_id);
-        }
-        else {
-            let data = &pkt.payload[2..]; // start of message data, without message_id
-            if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
-                if rsp.status() != STATUS_SUCCESS
-                {
-                    error!( "{}, channel {:?}: Wrong message status received", get_name(), pkt.channel);
-                }
-            }
-            else {
-                error!( "{}, channel {:?}: Unable to parse received message", get_name(), pkt.channel);
-            }
-
-        }
-    }
     loop {
-        let pkt=  rx_srv.recv().await.ok_or("service reader channel hung up")?;
+        let pkt = rx_srv.recv().await.ok_or("service reader channel hung up")?;
         if pkt.channel != ch_id as u8
         {
             error!( "{} Channel id {:?} is wrong, message discarded", get_name(), pkt.channel);
@@ -434,6 +497,43 @@ pub async fn th_media_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Rec
             if message_id == MESSAGE_CHANNEL_OPEN_RESPONSE  as i32
             {
                 info!("{} Received {} message", ch_id.to_string(), message_id);
+                let data = &pkt.payload[2..]; // start of message data, without message_id
+                if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
+                    if rsp.status() != STATUS_SUCCESS
+                    {
+                        error!( "{}, channel {:?}: Wrong message status received", get_name(), pkt.channel);
+                    }
+                }
+                else {
+                    error!( "{}, channel {:?}: Unable to parse received message", get_name(), pkt.channel);
+                }
+            }
+            else if message_id == MESSAGE_CUSTOM_CMD  as i32
+            {
+                info!("{} Received {} message", ch_id.to_string(), message_id);
+                let data = &pkt.payload[2..]; // start of message data, without message_id
+                if let Ok(msg) = CustomCommandMessage::parse_from_bytes(&data) {
+                    if msg.cmd() == CustomCommand::CMD_OPEN_CH
+                    {
+                        let mut open_req = ChannelOpenRequest::new();
+                        open_req.set_priority(0);
+                        open_req.set_service_id(ch_id);
+                        let mut payload: Vec<u8> = open_req.write_to_bytes().expect("serialization failed");
+                        payload.insert(0, ((MESSAGE_CHANNEL_OPEN_REQUEST as u16) >> 8) as u8);
+                        payload.insert(1, ((MESSAGE_CHANNEL_OPEN_REQUEST as u16) & 0xff) as u8);
+
+                        let pkt_rsp = Packet {
+                            channel: ch_id as u8,
+                            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                            final_length: None,
+                            payload: payload,
+                        };
+                        tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+                    }
+                }
+                else {
+                    error!( "{} CustomCommandMessage couldn't be parsed",get_name());
+                }
             }
             else {
                 info!( "{} Unknown message ID: {} received", get_name(), message_id);
@@ -448,46 +548,8 @@ pub async fn th_media_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Rec
 }
 pub async fn th_input_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>)-> Result<()>{
     info!( "{}: Starting...", get_name());
-    let mut sdreq= ChannelOpenRequest::new();
-    sdreq.set_priority(0);
-    sdreq.set_service_id(ch_id);
-    let mut payload: Vec<u8>=sdreq.write_to_bytes().expect("serialization failed");
-    payload.insert(0,((MESSAGE_CHANNEL_OPEN_REQUEST as u16) >> 8) as u8);
-    payload.insert( 1,((MESSAGE_CHANNEL_OPEN_REQUEST as u16) & 0xff) as u8);
-
-    let pkt_rsp = Packet {
-        channel: ch_id as u8,
-        flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-        final_length: None,
-        payload: payload,
-    };
-    tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
-    let pkt = rx_srv.recv().await.ok_or("service reader channel hung up")?;
-    if pkt.channel != ch_id as u8
-    {
-        error!( "{} Channel id {:?} is wrong, message discarded", get_name(), pkt.channel);
-    } else { //Channel messages
-        let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-        if message_id != MESSAGE_CHANNEL_OPEN_RESPONSE as i32
-        {
-            error!( "{}, channel {:?}: Wrong message received: {}", get_name(), pkt.channel, message_id);
-        }
-        else {
-            let data = &pkt.payload[2..]; // start of message data, without message_id
-            if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
-                if rsp.status() != STATUS_SUCCESS
-                {
-                    error!( "{}, channel {:?}: Wrong message status received", get_name(), pkt.channel);
-                }
-            }
-            else {
-                error!( "{}, channel {:?}: Unable to parse received message", get_name(), pkt.channel);
-            }
-
-        }
-    }
     loop {
-        let pkt=  rx_srv.recv().await.ok_or("service reader channel hung up")?;
+        let pkt = rx_srv.recv().await.ok_or("service reader channel hung up")?;
         if pkt.channel != ch_id as u8
         {
             error!( "{} Channel id {:?} is wrong, message discarded", get_name(), pkt.channel);
@@ -496,13 +558,49 @@ pub async fn th_input_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Rec
             if message_id == MESSAGE_CHANNEL_OPEN_RESPONSE  as i32
             {
                 info!("{} Received {} message", ch_id.to_string(), message_id);
+                let data = &pkt.payload[2..]; // start of message data, without message_id
+                if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
+                    if rsp.status() != STATUS_SUCCESS
+                    {
+                        error!( "{}, channel {:?}: Wrong message status received", get_name(), pkt.channel);
+                    }
+                }
+                else {
+                    error!( "{}, channel {:?}: Unable to parse received message", get_name(), pkt.channel);
+                }
+            }
+            else if message_id == MESSAGE_CUSTOM_CMD  as i32
+            {
+                info!("{} Received {} message", ch_id.to_string(), message_id);
+                let data = &pkt.payload[2..]; // start of message data, without message_id
+                if let Ok(msg) = CustomCommandMessage::parse_from_bytes(&data) {
+                    if msg.cmd() == CustomCommand::CMD_OPEN_CH
+                    {
+                        let mut open_req = ChannelOpenRequest::new();
+                        open_req.set_priority(0);
+                        open_req.set_service_id(ch_id);
+                        let mut payload: Vec<u8> = open_req.write_to_bytes().expect("serialization failed");
+                        payload.insert(0, ((MESSAGE_CHANNEL_OPEN_REQUEST as u16) >> 8) as u8);
+                        payload.insert(1, ((MESSAGE_CHANNEL_OPEN_REQUEST as u16) & 0xff) as u8);
+
+                        let pkt_rsp = Packet {
+                            channel: ch_id as u8,
+                            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                            final_length: None,
+                            payload: payload,
+                        };
+                        tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+                    }
+                }
+                else {
+                    error!( "{} CustomCommandMessage couldn't be parsed",get_name());
+                }
             }
             else {
                 info!( "{} Unknown message ID: {} received", get_name(), message_id);
             }
         }
     }
-
     fn get_name() -> String {
         let dev = "InputSourceService";
         format!("<i><bright-black> aa-mirror/{}: </>", dev)
@@ -510,46 +608,8 @@ pub async fn th_input_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Rec
 }
 pub async fn th_vendor_extension(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>)-> Result<()>{
     info!( "{}: Starting...", get_name());
-    let mut sdreq= ChannelOpenRequest::new();
-    sdreq.set_priority(0);
-    sdreq.set_service_id(ch_id);
-    let mut payload: Vec<u8>=sdreq.write_to_bytes().expect("serialization failed");
-    payload.insert(0,((MESSAGE_CHANNEL_OPEN_REQUEST as u16) >> 8) as u8);
-    payload.insert( 1,((MESSAGE_CHANNEL_OPEN_REQUEST as u16) & 0xff) as u8);
-
-    let pkt_rsp = Packet {
-        channel: ch_id as u8,
-        flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-        final_length: None,
-        payload: payload,
-    };
-    tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
-    let pkt = rx_srv.recv().await.ok_or("service reader channel hung up")?;
-    if pkt.channel != ch_id as u8
-    {
-        error!( "{} Channel id {:?} is wrong, message discarded", get_name(), pkt.channel);
-    } else { //Channel messages
-        let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-        if message_id != MESSAGE_CHANNEL_OPEN_RESPONSE as i32
-        {
-            error!( "{}, channel {:?}: Wrong message received: {}", get_name(), pkt.channel, message_id);
-        }
-        else {
-            let data = &pkt.payload[2..]; // start of message data, without message_id
-            if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
-                if rsp.status() != STATUS_SUCCESS
-                {
-                    error!( "{}, channel {:?}: Wrong message status received", get_name(), pkt.channel);
-                }
-            }
-            else {
-                error!( "{}, channel {:?}: Unable to parse received message", get_name(), pkt.channel);
-            }
-
-        }
-    }
     loop {
-        let pkt=  rx_srv.recv().await.ok_or("service reader channel hung up")?;
+        let pkt = rx_srv.recv().await.ok_or("service reader channel hung up")?;
         if pkt.channel != ch_id as u8
         {
             error!( "{} Channel id {:?} is wrong, message discarded", get_name(), pkt.channel);
@@ -558,13 +618,49 @@ pub async fn th_vendor_extension(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
             if message_id == MESSAGE_CHANNEL_OPEN_RESPONSE  as i32
             {
                 info!("{} Received {} message", ch_id.to_string(), message_id);
+                let data = &pkt.payload[2..]; // start of message data, without message_id
+                if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
+                    if rsp.status() != STATUS_SUCCESS
+                    {
+                        error!( "{}, channel {:?}: Wrong message status received", get_name(), pkt.channel);
+                    }
+                }
+                else {
+                    error!( "{}, channel {:?}: Unable to parse received message", get_name(), pkt.channel);
+                }
+            }
+            else if message_id == MESSAGE_CUSTOM_CMD  as i32
+            {
+                info!("{} Received {} message", ch_id.to_string(), message_id);
+                let data = &pkt.payload[2..]; // start of message data, without message_id
+                if let Ok(msg) = CustomCommandMessage::parse_from_bytes(&data) {
+                    if msg.cmd() == CustomCommand::CMD_OPEN_CH
+                    {
+                        let mut open_req = ChannelOpenRequest::new();
+                        open_req.set_priority(0);
+                        open_req.set_service_id(ch_id);
+                        let mut payload: Vec<u8> = open_req.write_to_bytes().expect("serialization failed");
+                        payload.insert(0, ((MESSAGE_CHANNEL_OPEN_REQUEST as u16) >> 8) as u8);
+                        payload.insert(1, ((MESSAGE_CHANNEL_OPEN_REQUEST as u16) & 0xff) as u8);
+
+                        let pkt_rsp = Packet {
+                            channel: ch_id as u8,
+                            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                            final_length: None,
+                            payload: payload,
+                        };
+                        tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+                    }
+                }
+                else {
+                    error!( "{} CustomCommandMessage couldn't be parsed",get_name());
+                }
             }
             else {
                 info!( "{} Unknown message ID: {} received", get_name(), message_id);
             }
         }
     }
-
     fn get_name() -> String {
         let dev = "VendorExtensionService";
         format!("<i><bright-black> aa-mirror/{}: </>", dev)

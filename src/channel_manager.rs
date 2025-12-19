@@ -32,7 +32,7 @@ use protobuf::{Enum, EnumOrUnknown, Message, MessageDyn};
 use tokio::sync::mpsc;
 use protos::ControlMessageType::{self, *};
 use crate::aa_services;
-use crate::aa_services::{ServiceType,VideoCodecResolution::*,VideoFPS::*, VideoConfig, MediaCodec, MediaCodec::*};
+use crate::aa_services::{VideoCodecResolution::*, VideoFPS::*, AudioStream::*, VideoConfig, AudioConfig, AudioChConfiguration, MediaCodec, MediaCodec::*, AudioStream};
 use crate::aa_services::{th_input_source, th_media_sink_audio_guidance, th_media_sink_audio_streaming, th_media_sink_video, th_media_source, th_sensor_source, th_vendor_extension};
 use crate::config::{Action::Stop, AppConfig, SharedConfig};
 use crate::config_types::HexdumpLevel;
@@ -722,17 +722,33 @@ pub async fn ch_proxy(
                 if proto_srv.media_sink_service.audio_configs.len()>0
                 {
                     let srv_type=proto_srv.media_sink_service.audio_type();
+                    let acd=match proto_srv.media_sink_service.available_type() {
+                        MediaCodecType::MEDIA_CODEC_AUDIO_AAC_LC_ADTS=>AUDIO_AAC_LC_ADTS,
+                        MediaCodecType::MEDIA_CODEC_AUDIO_AAC_LC=>AUDIO_AAC_LC,
+                        MediaCodecType::MEDIA_CODEC_AUDIO_PCM=>AUDIO_PCM,
+                        _=>AUDIO_PCM,
+                    };
                     if srv_type == AUDIO_STREAM_GUIDANCE
                     {
+                        let audio_cfg=AudioConfig
+                        {
+                            codec:acd,
+                            stream_type: AudioStream::GUIDANCE,
+                        };
                         let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                         srv_senders.insert(ch_id - 1,tx);
-                        srv_tsk_handles.insert(ch_id - 1, tokio_uring::spawn(th_media_sink_audio_guidance(ch_id as i32, tx_srv.clone(), rx)));
+                        srv_tsk_handles.insert(ch_id - 1, tokio_uring::spawn(th_media_sink_audio_guidance(ch_id as i32, tx_srv.clone(), rx, audio_cfg)));
                     }
                     else if srv_type == AUDIO_STREAM_MEDIA
                     {
+                        let audio_cfg=AudioConfig
+                        {
+                            codec:acd,
+                            stream_type: AudioStream::MEDIA,
+                        };
                         let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                         srv_senders.insert(ch_id - 1,tx);
-                        srv_tsk_handles.insert(ch_id - 1, tokio_uring::spawn(th_media_sink_audio_streaming(ch_id as i32, tx_srv.clone(), rx)));
+                        srv_tsk_handles.insert(ch_id - 1, tokio_uring::spawn(th_media_sink_audio_streaming(ch_id as i32, tx_srv.clone(), rx, audio_cfg)));
                     }
                     else {
                         error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
