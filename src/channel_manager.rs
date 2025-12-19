@@ -879,7 +879,7 @@ pub async fn ch_proxy(
                             let mut cmd_req= CustomCommandMessage::new();
                             cmd_req.set_cmd(CustomCommand::CMD_OPEN_CH);
 
-                            let mut payload: Vec<u8>=focus_req.write_to_bytes()?;
+                            let mut payload: Vec<u8>=cmd_req.write_to_bytes()?;
                             payload.insert(0,((MESSAGE_CUSTOM_CMD as u16) >> 8) as u8);
                             payload.insert( 1,((MESSAGE_CUSTOM_CMD as u16) & 0xff) as u8);
 
@@ -893,7 +893,7 @@ pub async fn ch_proxy(
                                 error!( "{} tls proxy send error",get_name());
                             };
                         }
-                        
+
                     }
                     else {
                         error!( "{} AudioFocusNotification couldn't be parsed",get_name());
