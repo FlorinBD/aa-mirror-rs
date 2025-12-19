@@ -468,12 +468,7 @@ message Start {
 message Stop {}
 
 message Config {
-  required Status status = 1;
-  enum Status {
-    STATUS_WAIT = 1;
-    STATUS_READY = 2;
-  }
-
+  required ConfigStatus status = 1;
   optional uint32 max_unacked = 2;
   repeated uint32 configuration_indices = 3;
 }
@@ -1214,6 +1209,11 @@ message GoogleDiagnosticsBugReportResponse {
   repeated int32 tokens = 2;
 }
 
+enum ConfigStatus {
+    STATUS_WAIT = 1;
+    STATUS_READY = 2;
+  }
+  
 enum CustomCommand{
     CMD_OPEN_CH=1;
 }

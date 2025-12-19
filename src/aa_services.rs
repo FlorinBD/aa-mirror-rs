@@ -20,7 +20,8 @@ include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use crate::aa_services::protos::navigation_maneuver::NavigationType::*;
 use crate::aa_services::protos::auth_response::Status::*;
 use crate::aa_services::protos::Config as ChConfig;
-use crate::aa_services::protos::config::Status::*;
+use crate::aa_services::protos::ConfigStatus;
+use crate::aa_services::protos::ConfigStatus::*;
 use crate::aa_services::sensor_source_service::Sensor;
 use crate::aa_services::AudioStreamType::*;
 use crate::aa_services::ByeByeReason::USER_SELECTION;
@@ -244,7 +245,7 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
                 if  let Ok(rsp) = ChConfig::parse_from_bytes(&data)
                 {
                     info!( "{}, channel {:?}: Message status: {:?}", get_name(), pkt.channel, rsp.status());
-                    if rsp.status() == Status::STATUS_READY
+                    if rsp.status() == ConfigStatus::STATUS_READY
                     {
                         info!( "{}, channel {:?}: Starting video capture", get_name(), pkt.channel);
                         if vcfg.resolution == VideoCodecResolution::Video_800x480
