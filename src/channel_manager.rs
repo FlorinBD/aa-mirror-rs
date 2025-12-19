@@ -20,7 +20,6 @@ use tokio_uring::buf::BoundedBuf;
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use crate::channel_manager::protos::navigation_maneuver::NavigationType::*;
 use crate::channel_manager::protos::auth_response::Status::*;
-use crate::channel_manager::protos::Config as AudioConfig;
 use crate::channel_manager::protos::*;
 use crate::channel_manager::sensor_source_service::Sensor;
 use crate::channel_manager::AudioStreamType::*;
@@ -744,9 +743,9 @@ pub async fn ch_proxy(
                     srv_senders.insert(ch_id - 1,tx);
                     let video_cfg=VideoConfig
                     {
-                        resolution:proto_srv.media_sink_service.video_configs[0].get_codec_resolution(),
-                        codec:proto_srv.media_sink_service.video_configs[0].get_video_codec_type(),
-                        fps:proto_srv.media_sink_service.video_configs[0].get_frame_rate(),
+                        resolution:proto_srv.media_sink_service.video_configs[0].codec_resolution(),
+                        codec:proto_srv.media_sink_service.video_configs[0].video_codec_type(),
+                        fps:proto_srv.media_sink_service.video_configs[0].frame_rate(),
                     };
                     
                     srv_tsk_handles.insert(ch_id - 1, tokio_uring::spawn(th_media_sink_video(ch_id as i32, tx_srv.clone(), rx, video_cfg)));

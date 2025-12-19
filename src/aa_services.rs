@@ -20,7 +20,7 @@ include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use crate::aa_services::protos::navigation_maneuver::NavigationType::*;
 use crate::aa_services::protos::auth_response::Status::*;
 use crate::aa_services::protos::Config as ChConfig;
-use crate::aa_services::protos::*;
+use crate::aa_services::protos::Config::Status::*;
 use crate::aa_services::sensor_source_service::Sensor;
 use crate::aa_services::AudioStreamType::*;
 use crate::aa_services::ByeByeReason::USER_SELECTION;
@@ -120,7 +120,7 @@ pub async fn th_sensor_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Re
         else {
             let data = &pkt.payload[2..]; // start of message data, without message_id
             if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
-                if(rsp.status() != STATUS_SUCCESS)
+                if rsp.status() != STATUS_SUCCESS
                 {
                     error!( "{}, channel {:?}: Wrong message status received", get_name(), pkt.channel);
                 }
@@ -221,9 +221,9 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
             {
                 info!("{} Received {} message", ch_id.to_string(), message_id);
                 let data = &pkt.payload[2..]; // start of message data, without message_id
-                if  let Ok(rsp) = Config::parse_from_bytes(&data) {
+                if  let Ok(rsp) = ChConfig::parse_from_bytes(&data) {
                     info!( "{}, channel {:?}: Message status: {:?}", get_name(), pkt.channel, rsp.status());
-                    if rsp.status() == ChConfig::STATUS_READY
+                    if rsp.status() == STATUS_READY
                     {
                         info!( "{}, channel {:?}: Starting video capture", get_name(), pkt.channel);
                     }
@@ -273,7 +273,7 @@ pub async fn th_media_sink_audio_guidance(ch_id: i32, tx_srv: Sender<Packet>, mu
         else {
             let data = &pkt.payload[2..]; // start of message data, without message_id
             if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
-                if(rsp.status() != STATUS_SUCCESS)
+                if rsp.status() != STATUS_SUCCESS
                 {
                     error!( "{}, channel {:?}: Wrong message status received", get_name(), pkt.channel);
                 }
@@ -337,7 +337,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, tx_srv: Sender<Packet>, m
         else {
             let data = &pkt.payload[2..]; // start of message data, without message_id
             if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
-                if(rsp.status() != STATUS_SUCCESS)
+                if rsp.status() != STATUS_SUCCESS
                 {
                     error!( "{}, channel {:?}: Wrong message status received", get_name(), pkt.channel);
                 }
@@ -401,7 +401,7 @@ pub async fn th_media_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Rec
         else {
             let data = &pkt.payload[2..]; // start of message data, without message_id
             if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
-                if(rsp.status() != STATUS_SUCCESS)
+                if rsp.status() != STATUS_SUCCESS
                 {
                     error!( "{}, channel {:?}: Wrong message status received", get_name(), pkt.channel);
                 }
@@ -463,7 +463,7 @@ pub async fn th_input_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Rec
         else {
             let data = &pkt.payload[2..]; // start of message data, without message_id
             if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
-                if(rsp.status() != STATUS_SUCCESS)
+                if rsp.status() != STATUS_SUCCESS
                 {
                     error!( "{}, channel {:?}: Wrong message status received", get_name(), pkt.channel);
                 }
@@ -525,7 +525,7 @@ pub async fn th_vendor_extension(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
         else {
             let data = &pkt.payload[2..]; // start of message data, without message_id
             if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
-                if(rsp.status() != STATUS_SUCCESS)
+                if rsp.status() != STATUS_SUCCESS
                 {
                     error!( "{}, channel {:?}: Wrong message status received", get_name(), pkt.channel);
                 }
