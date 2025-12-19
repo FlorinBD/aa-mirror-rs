@@ -742,13 +742,28 @@ pub async fn ch_proxy(
                 {
                     let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                     srv_senders.insert(ch_id - 1,tx);
+                    let vcr=match proto_srv.media_sink_service.video_configs[0].codec_resolution() {
+                        VideoCodecResolutionType::VIDEO_800x480=>Video_800x480,
+                        VideoCodecResolutionType::VIDEO_720x1280=>Video_720x1280,
+                        VideoCodecResolutionType::VIDEO_1080x19200=>Video_1080x1920,
+                    };
+
+                    let vcd=match proto_srv.media_sink_service.video_configs[0].video_codec_type() {
+                        MediaCodecType::MEDIA_CODEC_VIDEO_H264_BP=>VIDEO_H264_BP,
+                        MediaCodecType::MEDIA_CODEC_VIDEO_H265=>VIDEO_H265,
+                        MediaCodecType::MEDIA_CODEC_AUDIO_PCM=>AUDIO_PCM,
+                    };
+                    let vfps=match proto_srv.media_sink_service.video_configs[0].frame_rate() {
+                        VideoFrameRateType::VIDEO_FPS_60=>FPS_60,
+                        VideoFrameRateType::VIDEO_FPS_30=>FPS_30,
+                    };
                     let video_cfg=VideoConfig
                     {
-                        resolution:VideoCodecResolution.from(proto_srv.media_sink_service.video_configs[0].codec_resolution()),
-                        codec:MediaCodec.from(proto_srv.media_sink_service.video_configs[0].video_codec_type()),
-                        fps:VideoFPS.from(proto_srv.media_sink_service.video_configs[0].frame_rate()),
+                        resolution:vcr,
+                        codec:vcd,
+                        fps:vfps,
                     };
-                    
+
                     srv_tsk_handles.insert(ch_id - 1, tokio_uring::spawn(th_media_sink_video(ch_id as i32, tx_srv.clone(), rx, video_cfg)));
                 }
                 else {
