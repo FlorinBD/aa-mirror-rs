@@ -190,7 +190,7 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
                 let data = &pkt.payload[2..]; // start of message data, without message_id
                 if  let Ok(rsp) = Config::parse_from_bytes(&data) {
                     info!( "{}, channel {:?}: Message status: {:?}", get_name(), pkt.channel, rsp.status());
-                    if rsp.status() == Config::STATUS_READY
+                    if rsp.status() == Config::Status::STATUS_READY
                     {
                         info!( "{}, channel {:?}: Starting video capture", get_name(), pkt.channel);
                     }
