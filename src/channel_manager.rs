@@ -742,7 +742,7 @@ pub async fn ch_proxy(
                 {
                     let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                     srv_senders.insert(ch_id - 1,tx);
-                    srv_tsk_handles.insert(ch_id - 1, tokio_uring::spawn(th_media_sink_video(ch_id as i32, tx_srv.clone(), rx)));
+                    srv_tsk_handles.insert(ch_id - 1, tokio_uring::spawn(th_media_sink_video(ch_id as i32, tx_srv.clone(), rx, proto_srv.media_sink_service.video_configs[0])));
                 }
                 else {
                     error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);

@@ -19,7 +19,7 @@ use tokio_uring::buf::BoundedBuf;
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use crate::aa_services::protos::navigation_maneuver::NavigationType::*;
 use crate::aa_services::protos::auth_response::Status::*;
-use crate::aa_services::protos::Config as AudioConfig;
+use crate::aa_services::protos::Config;
 use crate::aa_services::protos::*;
 use crate::aa_services::sensor_source_service::Sensor;
 use crate::aa_services::AudioStreamType::*;
@@ -32,6 +32,7 @@ use crate::aa_services::SensorMessageId::*;
 use crate::aa_services::SensorType::*;
 use protobuf::text_format::print_to_string_pretty;
 use protobuf::{Enum, EnumOrUnknown, Message, MessageDyn};
+use protos::*;
 use protos::ControlMessageType::{self, *};
 use crate::aoa::AccessoryDeviceInfo;
 use crate::channel_manager::{Packet, ENCRYPTED, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
@@ -117,8 +118,9 @@ pub async fn th_sensor_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Re
         format!("<i><bright-black> aa-mirror/{}: </>", dev)
     }
 }
-pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>)-> Result<()>{
+pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, vcfg:VideoConfiguration)-> Result<()>{
     info!( "{}: Starting...", get_name());
+    /* -----------------------------------OPEN CHANNEL----------------------------------------------- */
     let mut sdreq= ChannelOpenRequest::new();
     sdreq.set_priority(0);
     sdreq.set_service_id(ch_id);
@@ -157,6 +159,22 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
 
         }
     }
+    /* -----------------------------------CHANNEL CONFIG----------------------------------------------- */
+    let mut cfg_req= Setup::new();
+    cfg_req.set_type(MEDIA_CODEC_VIDEO_H264_BP);
+
+    let mut payload: Vec<u8>=cfg_req.write_to_bytes().expect("serialization failed");
+    payload.insert(0,((MEDIA_MESSAGE_SETUP as u16) >> 8) as u8);
+    payload.insert( 1,((MEDIA_MESSAGE_SETUP as u16) & 0xff) as u8);
+
+    let pkt_rsp = Packet {
+        channel: ch_id as u8,
+        flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+        final_length: None,
+        payload: payload,
+    };
+    tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+
     loop {
         let pkt=  rx_srv.recv().await.ok_or("service reader channel hung up")?;
         if pkt.channel !=ch_id as u8
@@ -165,9 +183,20 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
         }
         else { //Channel messages
             let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-            if message_id == MESSAGE_CHANNEL_OPEN_RESPONSE  as i32
+            if message_id == MEDIA_MESSAGE_CONFIG  as i32
             {
                 info!("{} Received {} message", ch_id.to_string(), message_id);
+                let data = &pkt.payload[2..]; // start of message data, without message_id
+                if  let Ok(rsp) = Config::parse_from_bytes(&data) {
+                    info!( "{}, channel {:?}: Message status: {:?}", get_name(), pkt.channel, rsp.status());
+                    if rsp.status() == STATUS_READY
+                    {
+                        info!( "{}, channel {:?}: Starting video capture", get_name(), pkt.channel);
+                    }
+                }
+                else {
+                    error!( "{}, channel {:?}: Unable to parse received message", get_name(), pkt.channel);
+                }
             }
             else {
                 info!( "{} Unknown message ID: {} received", get_name(), message_id);
