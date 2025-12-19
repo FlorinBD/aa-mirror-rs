@@ -257,6 +257,10 @@ message ChannelOpenRequest {
   required sint32 priority = 1;
   required int32 service_id = 2;
 }
+//Custom service command, not used by AA
+message CustomCommandMessage {
+  required CustomCommand cmd = 1;
+}
 
 message ChannelOpenResponse { required MessageStatus status = 1; }
 
@@ -1210,6 +1214,10 @@ message GoogleDiagnosticsBugReportResponse {
   repeated int32 tokens = 2;
 }
 
+enum CustomCommand{
+    CMD_OPEN_CH=1;
+}
+
 enum ControlMessageType {
   MESSAGE_VERSION_REQUEST = 1;
   MESSAGE_VERSION_RESPONSE = 2;
@@ -1236,6 +1244,7 @@ enum ControlMessageType {
   MESSAGE_CALL_AVAILABILITY_STATUS = 24;
   MESSAGE_USER_SWITCH_RESPONSE = 25;
   MESSAGE_SERVICE_DISCOVERY_UPDATE = 26;
+  MESSAGE_CUSTOM_CMD = 254;
   MESSAGE_UNEXPECTED_MESSAGE = 255;
   MESSAGE_FRAMING_ERROR = 65535;
 }

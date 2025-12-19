@@ -804,6 +804,24 @@ pub async fn ch_proxy(
             }
         }
 
+        info!( "{} Sending AudioFocus request...",get_name());
+        let mut focus_req= AudioFocusRequestNotification::new();
+        focus_req.set_request(AudioFocusRequestType::AUDIO_FOCUS_GAIN);
+
+        let mut payload: Vec<u8>=focus_req.write_to_bytes()?;
+        payload.insert(0,((MESSAGE_AUDIO_FOCUS_REQUEST as u16) >> 8) as u8);
+        payload.insert( 1,((MESSAGE_AUDIO_FOCUS_REQUEST as u16) & 0xff) as u8);
+
+        let mut pkt_rsp = Packet {
+            channel: 0,
+            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+            final_length: None,
+            payload: payload,
+        };
+        if let Err(_) = tx_srv.send(pkt_rsp).await{
+            error!( "{} tls proxy send error",get_name());
+        };
+
     }
     else {
         error!( "{} ServiceDiscoveryResponse couldn't be parsed",get_name());
@@ -848,6 +866,37 @@ pub async fn ch_proxy(
                     }
                     else {
                         error!( "{} PingRequest couldn't be parsed",get_name());
+                    }
+
+                }
+                MESSAGE_AUDIO_FOCUS_NOTIFICATION =>{
+                    let data = &pkt.payload[2..]; // start of message data, without message_id
+                    if let Ok(msg) = AudioFocusNotification::parse_from_bytes(&data) {
+                        info!( "{} AUDIO_FOCUS_STATE received is: {:?}",get_name(), msg.focus_state());
+                        if msg.focus_state() == AudioFocusStateType::AUDIO_FOCUS_STATE_GAIN
+                        {
+                            info!( "{} Sending custom command OPEN_CHANNEL",get_name());
+                            let mut cmd_req= CustomCommandMessage::new();
+                            cmd_req.set_cmd(CustomCommand::CMD_OPEN_CH);
+
+                            let mut payload: Vec<u8>=focus_req.write_to_bytes()?;
+                            payload.insert(0,((MESSAGE_CUSTOM_CMD as u16) >> 8) as u8);
+                            payload.insert( 1,((MESSAGE_CUSTOM_CMD as u16) & 0xff) as u8);
+
+                            let mut pkt_rsp = Packet {
+                                channel: 0,
+                                flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                                final_length: None,
+                                payload: payload,
+                            };
+                            if let Err(_) = tx_srv.send(pkt_rsp).await{
+                                error!( "{} tls proxy send error",get_name());
+                            };
+                        }
+                        
+                    }
+                    else {
+                        error!( "{} AudioFocusNotification couldn't be parsed",get_name());
                     }
 
                 }
