@@ -65,7 +65,7 @@ pub async fn th_sensor_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Re
     payload.insert(1, ((MESSAGE_CHANNEL_OPEN_REQUEST as u16) & 0xff) as u8);
 
     let pkt_rsp = Packet {
-        channel: 0,
+        channel: ch_id as u8,
         flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
         final_length: None,
         payload: payload,
@@ -113,7 +113,7 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
     payload.insert( 1,((MESSAGE_CHANNEL_OPEN_REQUEST as u16) & 0xff) as u8);
 
     let pkt_rsp = Packet {
-        channel: 0,
+        channel: ch_id as u8,
         flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
         final_length: None,
         payload: payload,
@@ -127,8 +127,8 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
         }
         else { //Channel messages
             let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-            let control = protos::MediaMessageId::from_i32(message_id);
-            match control.unwrap_or(MEDIA_UNEXPECTED_MESSAGE) {
+            //let control = protos::MediaMessageId::from_i32(message_id);
+            match message_id{
                 MEDIA_MESSAGE_CHANNEL_OPEN_RESPONSE =>{
                     info!("{} Received {} message", ch_id.to_string(), message_id);
                     let data = &pkt.payload[2..]; // start of message data, without message_id
@@ -167,7 +167,7 @@ pub async fn th_media_sink_audio_guidance(ch_id: i32, tx_srv: Sender<Packet>, mu
     payload.insert( 1,((MESSAGE_CHANNEL_OPEN_REQUEST as u16) & 0xff) as u8);
 
     let pkt_rsp = Packet {
-        channel: 0,
+        channel: ch_id as u8,
         flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
         final_length: None,
         payload: payload,
@@ -221,7 +221,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, tx_srv: Sender<Packet>, m
     payload.insert( 1,((MESSAGE_CHANNEL_OPEN_REQUEST as u16) & 0xff) as u8);
 
     let pkt_rsp = Packet {
-        channel: 0,
+        channel: ch_id as u8,
         flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
         final_length: None,
         payload: payload,
@@ -275,7 +275,7 @@ pub async fn th_media_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Rec
     payload.insert( 1,((MESSAGE_CHANNEL_OPEN_REQUEST as u16) & 0xff) as u8);
 
     let pkt_rsp = Packet {
-        channel: 0,
+        channel: ch_id as u8,
         flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
         final_length: None,
         payload: payload,
@@ -326,7 +326,7 @@ pub async fn th_input_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Rec
     payload.insert( 1,((MESSAGE_CHANNEL_OPEN_REQUEST as u16) & 0xff) as u8);
 
     let pkt_rsp = Packet {
-        channel: 0,
+        channel: ch_id as u8,
         flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
         final_length: None,
         payload: payload,
@@ -377,7 +377,7 @@ pub async fn th_vendor_extension(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
     payload.insert( 1,((MESSAGE_CHANNEL_OPEN_REQUEST as u16) & 0xff) as u8);
 
     let pkt_rsp = Packet {
-        channel: 0,
+        channel: ch_id as u8,
         flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
         final_length: None,
         payload: payload,
