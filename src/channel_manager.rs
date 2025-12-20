@@ -899,15 +899,16 @@ pub async fn ch_proxy(
                             payload.insert(0,((MESSAGE_CUSTOM_CMD as u16) >> 8) as u8);
                             payload.insert( 1,((MESSAGE_CUSTOM_CMD as u16) & 0xff) as u8);
 
-                            let mut pkt_rsp = Packet {
-                                channel: 0,
-                                flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                                final_length: None,
-                                payload: payload,
-                            };
-                            for tx in srv_senders
+
+                            for idx in 0..srv_senders.len()
                             {
-                                if let Err(_) = tx.send(pkt_rsp).await{
+                                let pkt_rsp = Packet {
+                                    channel: idx as u8,
+                                    flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                                    final_length: None,
+                                    payload: payload,
+                                };
+                                if let Err(_) = srv_senders[idx].send(pkt_rsp).await{
                                     error!( "{} custom command send error",get_name());
                                 };
                             }
