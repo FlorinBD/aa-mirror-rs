@@ -906,7 +906,7 @@ pub async fn ch_proxy(
                                     channel: idx as u8,
                                     flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                                     final_length: None,
-                                    payload: payload,
+                                    payload: payload.clone(),
                                 };
                                 if let Err(_) = srv_senders[idx].send(pkt_rsp).await{
                                     error!( "{} custom command send error",get_name());
