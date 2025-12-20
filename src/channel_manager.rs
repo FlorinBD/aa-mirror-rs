@@ -905,9 +905,13 @@ pub async fn ch_proxy(
                                 final_length: None,
                                 payload: payload,
                             };
-                            if let Err(_) = tx_srv.send(pkt_rsp).await{
-                                error!( "{} tls proxy send error",get_name());
-                            };
+                            for tx in srv_senders
+                            {
+                                if let Err(_) = tx.send(pkt_rsp).await{
+                                    error!( "{} custom command send error",get_name());
+                                };
+                            }
+
                         }
 
                     }
