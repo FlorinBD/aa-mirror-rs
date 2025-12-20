@@ -7,13 +7,15 @@ use std::io::{Read, Write};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, SystemTime};
 use nusb::DeviceInfo;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::time::timeout;
 use tokio_uring::buf::BoundedBuf;
+use ffmpeg_sidecar::command::FfmpegCommand;
+use ffmpeg_sidecar::event::{FfmpegEvent, LogLevel};
 
 // protobuf stuff:
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
@@ -34,10 +36,13 @@ use crate::aa_services::SensorType::*;
 use crate::aa_services::MediaCodecType::*;
 use protobuf::text_format::print_to_string_pretty;
 use protobuf::{Enum, EnumOrUnknown, Message, MessageDyn};
+use tokio::net::TcpListener;
+use tokio_uring::net::{TcpStream};
 use protos::*;
 use protos::ControlMessageType::{self, *};
 use crate::aoa::AccessoryDeviceInfo;
 use crate::channel_manager::{Packet, ENCRYPTED, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
+use crate::config::{TCP_DHU_PORT, TCP_VIDEO_PORT};
 use crate::io_uring::Endpoint;
 use crate::io_uring::IoDevice;
 
@@ -251,6 +256,37 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
                         if vcfg.resolution == VideoCodecResolution::Video_800x480
                         {
                             video_stream_started=true;
+                            let listener_thread = tokio_uring::spawn(|| listen_for_connections(tx_srv.clone(),ch_id));
+
+                            // Wait for the listener to start
+                            tokio::time::sleep(Duration::from_millis(1000)).await;
+                            // Prepare an FFmpeg command with separate outputs for video, audio, and subtitles.
+                            FfmpegCommand::new()
+                                // Global flags
+                                .hide_banner()
+                                // Generate test video
+                                .realtime()
+                                .input("/etc/aa-mirror-rs/res/130dpi.png")
+                                .rate(30)
+                                // Video output
+                                .map("0:v")
+                                .codec_video("libx264")
+                                .format("mpegts")
+                                .output(format!("tcp://0.0.0.0:{TCP_VIDEO_PORT}"))
+                                .print_command()
+                                .spawn()?
+                                .iter()?
+                                .for_each(|event| match event {
+                                    // Log any unexpected errors
+                                    FfmpegEvent::Log(LogLevel::Warning | LogLevel::Error | LogLevel::Fatal, msg) => {
+                                        error!("{msg}");
+                                    }
+
+                                    // _ => {}
+                                    e => {
+                                        error!("{e:?}");
+                                    }
+                                });
                         }
                         else
                         {
@@ -274,6 +310,74 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
     fn get_name() -> String {
         let dev = "MediaSinkService Video";
         format!("<i><bright-black> aa-mirror/{}: </>", dev)
+    }
+    fn listen_for_connections(mut tx: Receiver<()>, ch_id: u8) -> Result<()> {
+        let bind_addr = format!("0.0.0.0:{}", TCP_VIDEO_PORT).parse().unwrap();
+        let listener = TcpListener::bind(bind_addr)?;
+        listener.set_nonblocking(true)?;
+        info!("Server listening on port {}", TCP_VIDEO_PORT);
+
+        let mut handler_threads = Vec::new();
+        loop {
+            match listener.accept() {
+                Ok((stream, _)) => {
+                    handler_threads.push(tokio_uring::spawn(move || handle_connection(stream, tx, ch_id)));
+                }
+                Err(e) => {
+                    error!( "{} TCP Error: {:?}", get_name(), e);
+                }
+            }
+        }
+
+        for handler in handler_threads {
+            handler.join().unwrap()?;
+        }
+
+        println!("Listener thread exiting");
+        Ok(())
+    }
+    fn handle_connection(mut stream: TcpStream, str_tx:Sender<Packet>, ch:u8) -> Result<()> {
+        //let mut buffer = [0; 1024];
+        let mut buffer:Vec<u8>;
+        let mut total_bytes_read = 0;
+        let mut timestamp_arr;
+        let start = SystemTime::now();
+        loop {
+            match stream.read(&mut buffer) {
+                Ok(bytes_read) if bytes_read > 0 => {
+                    total_bytes_read += bytes_read;
+                    timestamp_arr=start.elapsed().expect("Invalid timestamp").as_millis().to_be_bytes();
+                    buffer.insert(0, ch);
+                    buffer.insert(1, ((ControlMessageType::MEDIA_MESSAGE_DATA as u16) >> 8) as u8);
+                    buffer.insert(2, ((ControlMessageType::MEDIA_MESSAGE_DATA as u16) & 0xff) as u8);
+                    for i in 0..8
+                    {
+                        buffer.insert(3 + i, timestamp_arr[8 + i]);
+                    }
+                    let pkt_rsp = Packet {
+                        channel: ch,
+                        flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                        final_length: None,
+                        payload: buffer,
+                    };
+                    str_tx.send(pkt_rsp).expect("TODO: panic message");
+                }
+                Ok(0) => {
+                    break;
+                }
+                Err(e) => {
+                    error!( "{} TCP Error: {:?}", get_name(), e);
+                }
+                _ => {}
+            }
+        }
+        let bytes_str = if total_bytes_read < 1024 {
+            format!("{total_bytes_read}B")
+        } else {
+            format!("{}KiB", total_bytes_read / 1024)
+        };
+        info!("{} Read {} from client", get_name(), bytes_str);
+        Ok(())
     }
 }
 pub async fn th_media_sink_audio_guidance(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, acfg:AudioConfig)-> Result<()>{

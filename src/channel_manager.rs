@@ -903,7 +903,7 @@ pub async fn ch_proxy(
                             for idx in 0..srv_senders.len()
                             {
                                 let pkt_rsp = Packet {
-                                    channel: idx as u8,
+                                    channel: (idx + 1) as u8,
                                     flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                                     final_length: None,
                                     payload: payload.clone(),
