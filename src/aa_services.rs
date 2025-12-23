@@ -256,7 +256,7 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
                         if vcfg.resolution == VideoCodecResolution::Video_800x480
                         {
                             video_stream_started=true;
-                            let listener_thread = tokio_uring::spawn(listen_for_connections(tx_srv.clone(),ch_id));
+                            let listener_thread = tokio_uring::spawn(listen_for_connections(tx_srv.clone(),ch_id as u8));
 
                             // Wait for the listener to start
                             tokio::time::sleep(Duration::from_millis(1000)).await;
@@ -336,10 +336,12 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
             stream.set_nodelay(true).expect("TODO: panic message");
             let mut buffer:Vec<u8>;
             let mut total_bytes_read = 0;
+            let mut bytes_read = 0;
             let mut timestamp_arr;
             let start = SystemTime::now();
             loop {
-                let bytes_read= stream.read(&mut buffer);
+                let (read,_)= stream.read(&mut buffer).await;
+                bytes_read = read.unwrap_or(0);
                 if bytes_read > 0 {
                     total_bytes_read += bytes_read;
                     timestamp_arr = start.elapsed().expect("Invalid timestamp").as_millis().to_be_bytes();
@@ -354,7 +356,7 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
                         channel: ch_id,
                         flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                         final_length: None,
-                        payload: buffer,
+                        payload: buffer.clone(),
                     };
                     let _ = tx.send(pkt_rsp);
                 }
