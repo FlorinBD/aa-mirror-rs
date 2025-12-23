@@ -32,7 +32,7 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>
 
 const USB_ACCESSORY_PATH: &str = "/dev/usb_accessory";
 pub const BUFFER_LEN: usize = 16 * 1024;
-const TCP_CLIENT_TIMEOUT: Duration = Duration::new(30, 0);
+pub const TCP_CLIENT_TIMEOUT: Duration = Duration::new(30, 0);
 const COMP_APP_TCP_PORT: u16 = 9999;
 
 use crate::config::{Action, SharedConfig};

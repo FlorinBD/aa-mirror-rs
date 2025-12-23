@@ -37,8 +37,7 @@ use crate::aa_services::SensorType::*;
 use crate::aa_services::MediaCodecType::*;
 use protobuf::text_format::print_to_string_pretty;
 use protobuf::{Enum, EnumOrUnknown, Message, MessageDyn};
-use tokio::net::TcpListener;
-use tokio_uring::net::{TcpStream};
+use tokio_uring::net::{TcpStream, TcpListener};
 use protos::*;
 use protos::ControlMessageType::{self, *};
 use crate::aoa::AccessoryDeviceInfo;
@@ -315,47 +314,53 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
         let dev = "MediaSinkService Video";
         format!("<i><bright-black> aa-mirror/{}: </>", dev)
     }
-    fn listen_for_connections(mut tx: Receiver<()>, ch_id: u8) -> Result<()> {
+    async fn listen_for_connections(mut tx: Sender<Packet>, ch_id: u8) -> Result<()> {
         let bind_addr = format!("0.0.0.0:{}", TCP_VIDEO_PORT).parse().unwrap();
-        let listener = TcpListener::bind(bind_addr);
-        listener.set_nonblocking(true);
+        let mut listener =Some(TcpListener::bind(bind_addr).unwrap());
+        //listener.set_nonblocking(true);
         let mut total_bytes_read = 0;
         loop {
             info!("Server listening on port {}", TCP_VIDEO_PORT);
-            match listener.accept() {
-                Ok((stream, _)) => {
-                    let mut buffer:Vec<u8>;
-                    let mut total_bytes_read = 0;
-                    let mut timestamp_arr;
-                    let start = SystemTime::now();
-                    loop {
-                        let bytes_read= stream.read(&mut buffer);
-                            if bytes_read > 0 {
-                                total_bytes_read += bytes_read;
-                                timestamp_arr = start.elapsed().expect("Invalid timestamp").as_millis().to_be_bytes();
-                                buffer.insert(0, ch_id);
-                                buffer.insert(1, ((ControlMessageType::MEDIA_MESSAGE_DATA as u16) >> 8) as u8);
-                                buffer.insert(2, ((ControlMessageType::MEDIA_MESSAGE_DATA as u16) & 0xff) as u8);
-                                for i in 0..8
-                                {
-                                    buffer.insert(3 + i, timestamp_arr[8 + i]);
-                                }
-                                let pkt_rsp = Packet {
-                                    channel: ch_id,
-                                    flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                                    final_length: None,
-                                    payload: buffer,
-                                };
-                                let _ = tx.send(pkt_rsp);
-                            }
-                        else {
-                            info!( "{} Video stream finished", get_name());
-                            break;
-                        }
-                    }
+            let retval =listener.as_mut().unwrap().accept();
+            let (stream, addr) = match timeout(crate::io_uring::TCP_CLIENT_TIMEOUT, retval)
+                .await
+                .map_err(|e| std::io::Error::other(e))
+            {
+                Ok(Ok((stream, addr))) => (stream, addr),
+                Err(e) | Ok(Err(e)) => {
+                    error!("{} Video TCP server: {}, restarting...", get_name(), e);
+                    continue;
                 }
-                _ => {
-                    error!( "{} Video stream TCP Error", get_name());
+            };
+            info!("{} Video TCP server: new client connected: <b>{:?}</b>",get_name(), addr);
+            stream.set_nodelay(true).expect("TODO: panic message");
+            let mut buffer:Vec<u8>;
+            let mut total_bytes_read = 0;
+            let mut timestamp_arr;
+            let start = SystemTime::now();
+            loop {
+                let bytes_read= stream.read(&mut buffer);
+                if bytes_read > 0 {
+                    total_bytes_read += bytes_read;
+                    timestamp_arr = start.elapsed().expect("Invalid timestamp").as_millis().to_be_bytes();
+                    buffer.insert(0, ch_id);
+                    buffer.insert(1, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) >> 8) as u8);
+                    buffer.insert(2, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) & 0xff) as u8);
+                    for i in 0..8
+                    {
+                        buffer.insert(3 + i, timestamp_arr[8 + i]);
+                    }
+                    let pkt_rsp = Packet {
+                        channel: ch_id,
+                        flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                        final_length: None,
+                        payload: buffer,
+                    };
+                    let _ = tx.send(pkt_rsp);
+                }
+                else {
+                    info!( "{} Video stream finished", get_name());
+                    break;
                 }
             }
             let bytes_str = if total_bytes_read < 1024 {
