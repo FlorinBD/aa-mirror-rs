@@ -999,7 +999,7 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
 
                             //Send first frame
                             let mut payload: Vec<u8>;
-                            payload.append(wait_screen_first_frame);
+                            payload.append(&mut wait_screen_first_frame);
                             payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) >> 8) as u8);
                             payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) & 0xff) as u8);
                             payload.insert(2, 0);//timestamp 0.0
