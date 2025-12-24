@@ -984,7 +984,7 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
                                 });*/
 
                             //Send config frame
-                            let mut payload: Vec<u8>;
+                            let mut payload=Vec::new();
                             payload.append(&mut wait_screen_config_frame);
                             payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16) >> 8) as u8);
                             payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16) & 0xff) as u8);
@@ -998,7 +998,7 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
                             tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
 
                             //Send first frame
-                            let mut payload: Vec<u8>;
+                            let mut payload=Vec::new();
                             payload.append(&mut wait_screen_first_frame);
                             payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) >> 8) as u8);
                             payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) & 0xff) as u8);
