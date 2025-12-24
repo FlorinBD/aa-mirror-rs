@@ -984,7 +984,7 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
 
                             //Send config frame
                             let mut payload: Vec<u8>;
-                            payload.push(WAIT_SCREEN_CONFIG_FRAME);
+                            payload.extend_from_slice(WAIT_SCREEN_CONFIG_FRAME);
                             payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16) >> 8) as u8);
                             payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16) & 0xff) as u8);
 
@@ -998,10 +998,17 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
 
                             //Send first frame
                             let mut payload: Vec<u8>;
-                            payload.push(WAIT_SCREEN_FIRST_FRAME);
+                            payload.extend_from_slice(WAIT_SCREEN_FIRST_FRAME);
                             payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) >> 8) as u8);
                             payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) & 0xff) as u8);
-                            payload.insert(2, 0u64.to_be_bytes().into().unwrap());//timestamp 0.0
+                            payload.insert(2, 0);//timestamp 0.0
+                            payload.insert(3, 0);
+                            payload.insert(4, 0);
+                            payload.insert(5, 0);
+                            payload.insert(6, 0);
+                            payload.insert(7, 0);
+                            payload.insert(8, 0);
+                            payload.insert(9, 0);
                             let pkt_rsp = Packet {
                                 channel: ch_id as u8,
                                 flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
