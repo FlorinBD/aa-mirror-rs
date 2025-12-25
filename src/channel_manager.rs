@@ -27,6 +27,7 @@ use crate::channel_manager::ByeByeReason::USER_SELECTION;
 use crate::channel_manager::MediaMessageId::*;
 use crate::channel_manager::SensorMessageId::*;
 use crate::channel_manager::SensorType::*;
+use crate::channel_manager::MessageStatus::*;
 use protobuf::text_format::print_to_string_pretty;
 use protobuf::{Enum, EnumOrUnknown, Message, MessageDyn};
 use tokio::sync::mpsc;
