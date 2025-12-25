@@ -31,7 +31,6 @@ use tokio::sync::mpsc;
 use protos::ControlMessageType::{self, *};
 use crate::aa_services::{VideoCodecResolution::*, VideoFPS::*, AudioStream::*, VideoConfig, AudioConfig, AudioChConfiguration, MediaCodec, MediaCodec::*, AudioStream, ServiceType, CommandState, ServiceStatus, th_bluetooth};
 use crate::aa_services::{th_input_source, th_media_sink_audio_guidance, th_media_sink_audio_streaming, th_media_sink_video, th_media_source, th_sensor_source, th_vendor_extension};
-use crate::aa_services::CommandState::Done;
 use crate::config;
 use crate::config_types::HexdumpLevel;
 use crate::io_uring::Endpoint;
@@ -53,7 +52,7 @@ pub const HEADER_LENGTH: usize = 4;
 pub const FRAME_TYPE_FIRST: u8 = 1 << 0;
 pub const FRAME_TYPE_LAST: u8 = 1 << 1;
 pub const FRAME_TYPE_MASK: u8 = FRAME_TYPE_FIRST | FRAME_TYPE_LAST;
-const _CONTROL: u8 = 1 << 2;
+pub const FRAME_TYPE_CONTROL: u8 = 1 << 2;
 pub const ENCRYPTED: u8 = 1 << 3;
 
 // location for hu_/md_ private keys and certificates:
@@ -635,7 +634,10 @@ fn must_open_ch(arr:&Vec<ServiceStatus>, mut ch_open_done: &CmdStatus) ->(usize,
         }
         else if stat.open_ch_cmd == CommandState::NotDone
         {
-            next_idx=idx;
+            if next_idx == 255
+            {
+                next_idx=idx;
+            }
             all_ch_done=false;
         }
     }
@@ -888,7 +890,7 @@ pub async fn ch_proxy(
         error!( "{} ServiceDiscoveryResponse couldn't be parsed",get_name());
         return Err(Box::new("ServiceDiscoveryResponse couldn't be parsed")).expect("ServiceDiscoveryResponse");
     }
-    let mut all_ch_open=CmdStatus{status:Done};
+    let mut all_ch_open=CmdStatus{status:CommandState::NotDone};
     info!( "{} ServiceDiscovery done, starting AA Mirror loop",get_name());
     loop {
         let mut pkt = rx_srv.recv().await.ok_or("rx_srv channel hung up")?;

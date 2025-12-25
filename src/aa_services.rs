@@ -31,7 +31,7 @@ use protobuf::{Enum, EnumOrUnknown, Message, MessageDyn};
 use tokio_uring::net::{TcpStream, TcpListener};
 use protos::*;
 use protos::ControlMessageType::{self, *};
-use crate::channel_manager::{Packet, ENCRYPTED, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
+use crate::channel_manager::{Packet, ENCRYPTED, FRAME_TYPE_CONTROL, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
 use crate::config::{TCP_DHU_PORT, TCP_VIDEO_PORT};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -170,7 +170,7 @@ pub async fn th_sensor_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Re
 
                         let pkt_rsp = Packet {
                             channel: ch_id as u8,
-                            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                            flags: ENCRYPTED | FRAME_TYPE_CONTROL | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                             final_length: None,
                             payload: payload,
                         };
@@ -912,7 +912,7 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
 
                         let pkt_rsp = Packet {
                             channel: ch_id as u8,
-                            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                            flags: ENCRYPTED | FRAME_TYPE_CONTROL | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                             final_length: None,
                             payload: payload,
                         };
@@ -1173,7 +1173,7 @@ pub async fn th_media_sink_audio_guidance(ch_id: i32, tx_srv: Sender<Packet>, mu
 
                         let pkt_rsp = Packet {
                             channel: ch_id as u8,
-                            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                            flags: ENCRYPTED | FRAME_TYPE_CONTROL | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                             final_length: None,
                             payload: payload,
                         };
@@ -1278,7 +1278,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, tx_srv: Sender<Packet>, m
 
                         let pkt_rsp = Packet {
                             channel: ch_id as u8,
-                            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                            flags: ENCRYPTED | FRAME_TYPE_CONTROL | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                             final_length: None,
                             payload: payload,
                         };
@@ -1365,7 +1365,7 @@ pub async fn th_media_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Rec
 
                         let pkt_rsp = Packet {
                             channel: ch_id as u8,
-                            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                            flags: ENCRYPTED | FRAME_TYPE_CONTROL | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                             final_length: None,
                             payload: payload,
                         };
@@ -1426,7 +1426,7 @@ pub async fn th_input_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Rec
 
                         let pkt_rsp = Packet {
                             channel: ch_id as u8,
-                            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                            flags: ENCRYPTED | FRAME_TYPE_CONTROL | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                             final_length: None,
                             payload: payload,
                         };
@@ -1486,7 +1486,7 @@ pub async fn th_vendor_extension(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
 
                         let pkt_rsp = Packet {
                             channel: ch_id as u8,
-                            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                            flags: ENCRYPTED | FRAME_TYPE_CONTROL | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                             final_length: None,
                             payload: payload,
                         };
@@ -1547,7 +1547,7 @@ pub async fn th_bluetooth(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Receiv
 
                         let pkt_rsp = Packet {
                             channel: ch_id as u8,
-                            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                            flags: ENCRYPTED | FRAME_TYPE_CONTROL | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                             final_length: None,
                             payload: payload,
                         };
