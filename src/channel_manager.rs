@@ -41,6 +41,7 @@ use crate::config_types::HexdumpLevel;
 use crate::io_uring::Endpoint;
 use crate::io_uring::IoDevice;
 use crate::io_uring::BUFFER_LEN;
+use crate::usb_stream::new;
 
 // module name for logging engine
 fn get_name() -> String {
@@ -854,12 +855,17 @@ pub async fn ch_proxy(
         {
             if srv_senders.len() >= pkt.channel as usize
             {
+
+                let mut ch_data=Vec::new();
+                ch_data.append(&pkt.payload);
+
                 srv_senders[usize::from(pkt.channel - 1)].send(pkt).await.expect("Error sending message to service");
-                let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+
+                let message_id: i32 = u16::from_be_bytes(ch_data[0..=1].try_into()?).into();
                 let control = protos::ControlMessageType::from_i32(message_id);
                 match control.unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) {
                     MESSAGE_CHANNEL_OPEN_RESPONSE=>{
-                        let data = &pkt.payload[2..]; // start of message data, without message_id
+                        let data = &ch_data[2..]; // start of message data, without message_id
                         if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
                             if rsp.status() == MessageStatus::STATUS_SUCCESS
                             {
