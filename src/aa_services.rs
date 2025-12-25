@@ -943,7 +943,9 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
                             final_length: None,
                             payload: payload,
                         };
-                        tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+                        if let Err(_) = tx_srv.send(pkt_rsp).await{
+                            error!( "{} response send error",get_name());
+                        };
                     }
                 }
                 else {
@@ -1177,7 +1179,9 @@ pub async fn th_media_sink_audio_guidance(ch_id: i32, tx_srv: Sender<Packet>, mu
                             final_length: None,
                             payload: payload,
                         };
-                        tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+                        if let Err(_) = tx_srv.send(pkt_rsp).await{
+                            error!( "{} response send error",get_name());
+                        };
                     }
                 }
                 else {
@@ -1282,7 +1286,9 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, tx_srv: Sender<Packet>, m
                             final_length: None,
                             payload: payload,
                         };
-                        tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+                        if let Err(_) = tx_srv.send(pkt_rsp).await{
+                            error!( "{} response send error",get_name());
+                        };
                     }
                 }
                 else {
@@ -1369,7 +1375,9 @@ pub async fn th_media_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Rec
                             final_length: None,
                             payload: payload,
                         };
-                        tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+                        if let Err(_) = tx_srv.send(pkt_rsp).await{
+                            error!( "{} response send error",get_name());
+                        };
                     }
                 }
                 else {
@@ -1430,7 +1438,9 @@ pub async fn th_input_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Rec
                             final_length: None,
                             payload: payload,
                         };
-                        tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+                        if let Err(_) = tx_srv.send(pkt_rsp).await{
+                            error!( "{} response send error",get_name());
+                        };
                     }
                 }
                 else {
@@ -1490,7 +1500,9 @@ pub async fn th_vendor_extension(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
                             final_length: None,
                             payload: payload,
                         };
-                        tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+                        if let Err(_) = tx_srv.send(pkt_rsp).await{
+                            error!( "{} response send error",get_name());
+                        };
                     }
                 }
                 else {
@@ -1551,7 +1563,9 @@ pub async fn th_bluetooth(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Receiv
                             final_length: None,
                             payload: payload,
                         };
-                        tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+                        if let Err(_) = tx_srv.send(pkt_rsp).await{
+                            error!( "{} response send error",get_name());
+                        };
                     }
                 }
                 else {
