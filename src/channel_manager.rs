@@ -856,8 +856,7 @@ pub async fn ch_proxy(
             if srv_senders.len() >= pkt.channel as usize
             {
 
-                let mut ch_data=Vec::new();
-                ch_data.append(&pkt.payload);
+                let ch_data=pkt.payload.to_vec();
 
                 srv_senders[usize::from(pkt.channel - 1)].send(pkt).await.expect("Error sending message to service");
 
