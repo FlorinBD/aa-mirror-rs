@@ -4,6 +4,7 @@ use openssl::ssl::{ErrorCode, Ssl, SslContextBuilder, SslFiletype, SslMethod};
 use simplelog::*;
 use std::collections::VecDeque;
 use std::{fmt, thread};
+use std::cmp::PartialEq;
 use std::io::{Read, Write};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -28,7 +29,7 @@ use protobuf::text_format::print_to_string_pretty;
 use protobuf::{Enum, EnumOrUnknown, Message, MessageDyn};
 use tokio::sync::mpsc;
 use protos::ControlMessageType::{self, *};
-use crate::aa_services::{VideoCodecResolution::*, VideoFPS::*, AudioStream::*, VideoConfig, AudioConfig, AudioChConfiguration, MediaCodec, MediaCodec::*, AudioStream, ServiceType};
+use crate::aa_services::{VideoCodecResolution::*, VideoFPS::*, AudioStream::*, VideoConfig, AudioConfig, AudioChConfiguration, MediaCodec, MediaCodec::*, AudioStream, ServiceType, CommandState, ServiceStatus};
 use crate::aa_services::{th_input_source, th_media_sink_audio_guidance, th_media_sink_audio_streaming, th_media_sink_video, th_media_source, th_sensor_source, th_vendor_extension};
 use crate::config;
 use crate::config_types::HexdumpLevel;
@@ -598,7 +599,40 @@ fn check_control_msg_id(expected: protos::ControlMessageType, pkt: &Packet) -> R
         }
     }*/
 }
+///return index from services array
+fn get_service_index(arr:&Vec<ServiceStatus>, ch:i32)->usize
+{
+    for (idx,stat) in arr.iter().enumerate() {
+        if stat.ch_id == ch
+        {
+            return idx;
+        }
+    }
+    255
+}
 
+
+
+///Return ch index if OpenCh command is not already done
+fn must_open_ch(arr:&Vec<ServiceStatus>, ch_open_done:&bool)->usize
+{
+    if ch_open_done
+    {
+        return 255;
+    }
+    let mut next_idx= 255usize;
+    for (idx,stat) in arr.iter().enumerate() {
+        if stat.open_ch_cmd == CommandState::InProgress
+        {
+            return 255;
+        }
+        else if stat.open_ch_cmd == CommandState::NotDone
+        {
+            next_idx=idx;
+        }
+    }
+    next_idx
+}
 /// main thread doing all packet processing between HU and device
 pub async fn ch_proxy(
     mut rx_srv: Receiver<Packet>,
@@ -695,23 +729,23 @@ pub async fn ch_proxy(
     //let mut srv_senders:Vec<Option<Box<Sender<Packet>>>> = vec![];
     let mut srv_senders;
     let mut srv_tsk_handles;
-    let mut srv_types;
+    let mut channel_status;
     let data = &pkt.payload[2..]; // start of message data, without message_id
     if  let Ok(msg) = ServiceDiscoveryResponse::parse_from_bytes(&data){
         info!( "{} ServiceDiscoveryResponse parsed ok",get_name());
         //let srv_count=msg.services.len();
         srv_senders=Vec::with_capacity(msg.services.len());
         srv_tsk_handles=Vec::with_capacity(msg.services.len());
-        srv_types=Vec::with_capacity(msg.services.len());
+        channel_status =Vec::with_capacity(msg.services.len());
         //let mut tsk_srv_loop;
         for (_,proto_srv) in msg.services.iter().enumerate() {
             let ch_id=i32::from(proto_srv.id());
-            let idx=(ch_id-1) as usize;
+            //let idx=(ch_id-1) as usize;
             //info!( "SID {}, media sink: {}",ch_id, proto_srv.media_sink_service.is_some());
 
             if proto_srv.media_sink_service.is_some()
             {
-                srv_types.insert(idx,ServiceType::MediaSink);
+                channel_status.push(ServiceStatus{service_type:ServiceType::MediaSink,ch_id,..Default::default()});
                 if proto_srv.media_sink_service.audio_configs.len()>0
                 {
                     let srv_type=proto_srv.media_sink_service.audio_type();
@@ -729,8 +763,8 @@ pub async fn ch_proxy(
                             stream_type: AudioStream::GUIDANCE,
                         };
                         let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
-                        srv_senders.insert(idx,tx);
-                        srv_tsk_handles.insert(idx, tokio_uring::spawn(th_media_sink_audio_guidance(ch_id as i32, tx_srv.clone(), rx, audio_cfg)));
+                        srv_senders.push(tx);
+                        srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_audio_guidance(ch_id as i32, tx_srv.clone(), rx, audio_cfg)));
                     }
                     else if srv_type == AUDIO_STREAM_MEDIA
                     {
@@ -740,8 +774,8 @@ pub async fn ch_proxy(
                             stream_type: AudioStream::MEDIA,
                         };
                         let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
-                        srv_senders.insert(idx,tx);
-                        srv_tsk_handles.insert(idx, tokio_uring::spawn(th_media_sink_audio_streaming(ch_id, tx_srv.clone(), rx, audio_cfg)));
+                        srv_senders.push(tx);
+                        srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_audio_streaming(ch_id, tx_srv.clone(), rx, audio_cfg)));
                     }
                     else {
                         error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
@@ -750,7 +784,7 @@ pub async fn ch_proxy(
                 else if proto_srv.media_sink_service.video_configs.len()>0
                 {
                     let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
-                    srv_senders.insert(idx,tx);
+                    srv_senders.push(tx);
                     let vcr=match proto_srv.media_sink_service.video_configs[0].codec_resolution() {
                         VideoCodecResolutionType::VIDEO_800x480=>Video_800x480,
                         VideoCodecResolutionType::VIDEO_720x1280=>Video_720x1280,
@@ -776,41 +810,46 @@ pub async fn ch_proxy(
                         fps:vfps,
                     };
 
-                    srv_tsk_handles.insert(idx, tokio_uring::spawn(th_media_sink_video(ch_id, tx_srv.clone(), rx, video_cfg)));
+                    srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_video(ch_id, tx_srv.clone(), rx, video_cfg)));
                 }
                 else {
                     error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
                 }
-
-
             }
             else if proto_srv.media_source_service.is_some()
             {
-                srv_types.insert(idx,ServiceType::MediaSource);
+                channel_status.push(ServiceStatus{service_type:ServiceType::MediaSource,ch_id,..Default::default()});
                 let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
-                srv_senders.insert(idx,tx);
-                srv_tsk_handles.insert(idx, tokio_uring::spawn(th_media_source(ch_id, tx_srv.clone(), rx)));
+                srv_senders.push(tx);
+                srv_tsk_handles.push(tokio_uring::spawn(th_media_source(ch_id, tx_srv.clone(), rx)));
             }
             else if proto_srv.sensor_source_service.is_some()
             {
-                srv_types.insert(idx,ServiceType::SensorSource);
+                channel_status.push( ServiceStatus{service_type:ServiceType::SensorSource, open_ch_cmd:CommandState::Done, ch_id});
                 let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
-                srv_senders.insert(idx,tx);
-                srv_tsk_handles.insert(idx, tokio_uring::spawn(th_sensor_source(ch_id, tx_srv.clone(), rx)));
+                srv_senders.push(tx);
+                srv_tsk_handles.push(tokio_uring::spawn(th_sensor_source(ch_id, tx_srv.clone(), rx)));
             }
             else if proto_srv.input_source_service.is_some()
             {
-                srv_types.insert(idx,ServiceType::InputSource);
+                channel_status.push(ServiceStatus{service_type:ServiceType::InputSource,ch_id,..Default::default()});
                 let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
-                srv_senders.insert(idx,tx);
-                srv_tsk_handles.insert(idx, tokio_uring::spawn(th_input_source(ch_id, tx_srv.clone(), rx)));
+                srv_senders.push(tx);
+                srv_tsk_handles.push(tokio_uring::spawn(th_input_source(ch_id, tx_srv.clone(), rx)));
             }
             else if proto_srv.vendor_extension_service.is_some()
             {
-                srv_types.insert(idx,ServiceType::VendorExtension);
+                channel_status.push( ServiceStatus{service_type:ServiceType::VendorExtension,ch_id,..Default::default()});
                 let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
-                srv_senders.insert(idx,tx);
-                srv_tsk_handles.insert(idx, tokio_uring::spawn(th_vendor_extension(ch_id, tx_srv.clone(), rx)));
+                srv_senders.push(tx);
+                srv_tsk_handles.push(tokio_uring::spawn(th_vendor_extension(ch_id, tx_srv.clone(), rx)));
+            }
+            else if proto_srv.bluetooth_service.is_some()
+            {
+                channel_status.push(ServiceStatus{service_type:ServiceType::Bluetooth,ch_id,..Default::default()});
+                let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
+                srv_senders.push(tx);
+                srv_tsk_handles.push(tokio_uring::spawn(th_vendor_extension(ch_id, tx_srv.clone(), rx)));
             }
             else {
                 error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
@@ -840,18 +879,17 @@ pub async fn ch_proxy(
         error!( "{} ServiceDiscoveryResponse couldn't be parsed",get_name());
         return Err(Box::new("ServiceDiscoveryResponse couldn't be parsed")).expect("ServiceDiscoveryResponse");
     }
-
+    let mut ch_open_done=false;
     info!( "{} ServiceDiscovery done, starting AA Mirror loop",get_name());
-    let mut ch_open_index=0;
     loop {
         let mut pkt = rx_srv.recv().await.ok_or("rx_srv channel hung up")?;
         if pkt.channel !=0
         {
-            if srv_senders.len() >= pkt.channel as usize
+            let idx=get_service_index(&channel_status, pkt.channel as i32);
+            if idx !=255
             {
                 let ch_data=pkt.payload.to_vec();
-                srv_senders[usize::from(pkt.channel - 1)].send(pkt).await.expect("Error sending message to service");
-
+                srv_senders[idx].send(pkt).await.expect("Error sending message to service");
                 let message_id: i32 = u16::from_be_bytes(ch_data[0..=1].try_into()?).into();
                 let control = protos::ControlMessageType::from_i32(message_id);
                 match control.unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) {
@@ -860,30 +898,9 @@ pub async fn ch_proxy(
                         if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
                             if rsp.status() == MessageStatus::STATUS_SUCCESS
                             {
-                                ch_open_index+=1;
-                                //Open CH one by one
-                                let mut cmd_req= CustomCommandMessage::new();
-                                cmd_req.set_cmd(CustomCommand::CMD_OPEN_CH);
-
-                                let mut payload: Vec<u8>=cmd_req.write_to_bytes()?;
-                                payload.insert(0,((MESSAGE_CUSTOM_CMD as u16) >> 8) as u8);
-                                payload.insert( 1,((MESSAGE_CUSTOM_CMD as u16) & 0xff) as u8);
-                                let pkt_rsp = Packet {
-                                    channel: (ch_open_index + 1) as u8,
-                                    flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                                    final_length: None,
-                                    payload: payload.clone(),
-                                };
-                                if let Err(_) = srv_senders[ch_open_index].send(pkt_rsp).await{
-                                    error!( "{} custom command send error",get_name());
-                                };
-                                if ch_open_index == (srv_senders.len() - 1)
-                                {
-                                    ch_open_index=0;
-                                }
+                                channel_status[idx].open_ch_cmd = CommandState::Done;
                             }
                         }
-
                     }
                     _=>
                         {
@@ -958,6 +975,27 @@ pub async fn ch_proxy(
 
                 }
                 _ =>{ info!( "{} Unknown message ID: {} received for default channel",get_name(), message_id);}
+            };
+        }
+
+       let idx= must_open_ch(&channel_status,&ch_open_done);
+        if(idx !=255)
+        {
+            let mut cmd_req= CustomCommandMessage::new();
+            cmd_req.set_cmd(CustomCommand::CMD_OPEN_CH);
+
+            let mut payload: Vec<u8>=cmd_req.write_to_bytes()?;
+            payload.insert(0,((MESSAGE_CUSTOM_CMD as u16) >> 8) as u8);
+            payload.insert( 1,((MESSAGE_CUSTOM_CMD as u16) & 0xff) as u8);
+            let pkt_rsp = Packet {
+                channel: (channel_status[idx].ch_id) as u8,
+                flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                final_length: None,
+                payload: payload.clone(),
+            };
+            channel_status[idx].open_ch_cmd = CommandState::InProgress;
+            if let Err(_) = srv_senders[idx].send(pkt_rsp).await{
+                error!( "{} custom command send error",get_name());
             };
         }
     }

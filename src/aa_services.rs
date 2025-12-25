@@ -39,12 +39,38 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>
 #[derive(Copy, Clone, Debug)]
 pub enum ServiceType
 {
+    None,
     InputSource,
     MediaSink,
     MediaSource,
     SensorSource,
     VendorExtension,
+    Bluetooth,
 }
+
+impl Default for ServiceType {
+    fn default() -> Self { ServiceType::None }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum CommandState
+{
+    NotDone,
+    InProgress,
+    Done
+}
+impl Default for CommandState {
+    fn default() -> Self { CommandState::NotDone }
+}
+
+#[derive(Copy, Clone, Debug, Default)]
+pub struct ServiceStatus {
+    pub open_ch_cmd: CommandState,
+    pub service_type: ServiceType,
+    pub ch_id:i32,
+}
+
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum VideoCodecResolution {
     Video_800x480 = 1,
