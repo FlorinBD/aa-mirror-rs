@@ -14,8 +14,8 @@ use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::time::timeout;
 use tokio_uring::buf::BoundedBuf;
-//use ffmpeg_sidecar::command::FfmpegCommand;
-//use ffmpeg_sidecar::event::{FfmpegEvent, LogLevel};
+use ffmpeg_sidecar::command::FfmpegCommand;
+use ffmpeg_sidecar::event::{FfmpegEvent, LogLevel};
 use futures::SinkExt;
 
 // protobuf stuff:
