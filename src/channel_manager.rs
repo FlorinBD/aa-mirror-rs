@@ -15,7 +15,6 @@ use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::time::timeout;
 use tokio_uring::buf::BoundedBuf;
-use std::borrow::Borrow;
 
 // protobuf stuff:
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
@@ -776,7 +775,7 @@ pub async fn ch_proxy(
                         };
                         let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                         srv_senders.push(tx);
-                        srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_audio_guidance(ch_id, &tx_srv, rx, audio_cfg)));
+                        srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_audio_guidance(ch_id, tx_srv.clone(), rx, audio_cfg)));
                     }
                     else if srv_type == AUDIO_STREAM_MEDIA
                     {
@@ -787,7 +786,7 @@ pub async fn ch_proxy(
                         };
                         let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                         srv_senders.push(tx);
-                        srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_audio_streaming(ch_id, tx_srv.borrow(), rx, audio_cfg)));
+                        srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_audio_streaming(ch_id, tx_srv.clone(), rx, audio_cfg)));
                     }
                     else {
                         error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
@@ -822,7 +821,7 @@ pub async fn ch_proxy(
                         fps:vfps,
                     };
 
-                    srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_video(ch_id, tx_srv.borrow(), rx, video_cfg)));
+                    srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_video(ch_id, tx_srv.clone(), rx, video_cfg)));
                 }
                 else {
                     error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
@@ -833,35 +832,35 @@ pub async fn ch_proxy(
                 channel_status.push(ServiceStatus{service_type:ServiceType::MediaSource,ch_id,..Default::default()});
                 let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                 srv_senders.push(tx);
-                srv_tsk_handles.push(tokio_uring::spawn(th_media_source(ch_id, tx_srv.borrow(), rx)));
+                srv_tsk_handles.push(tokio_uring::spawn(th_media_source(ch_id, tx_srv.clone(), rx)));
             }
             else if proto_srv.sensor_source_service.is_some()
             {
                 channel_status.push( ServiceStatus{service_type:ServiceType::SensorSource, open_ch_cmd:CommandState::Done, ch_id});
                 let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                 srv_senders.push(tx);
-                srv_tsk_handles.push(tokio_uring::spawn(th_sensor_source(ch_id, tx_srv.borrow(), rx)));
+                srv_tsk_handles.push(tokio_uring::spawn(th_sensor_source(ch_id, tx_srv.clone(), rx)));
             }
             else if proto_srv.input_source_service.is_some()
             {
                 channel_status.push(ServiceStatus{service_type:ServiceType::InputSource,ch_id,..Default::default()});
                 let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                 srv_senders.push(tx);
-                srv_tsk_handles.push(tokio_uring::spawn(th_input_source(ch_id, tx_srv.borrow(), rx)));
+                srv_tsk_handles.push(tokio_uring::spawn(th_input_source(ch_id, tx_srv.clone(), rx)));
             }
             else if proto_srv.vendor_extension_service.is_some()
             {
                 channel_status.push( ServiceStatus{service_type:ServiceType::VendorExtension,ch_id,..Default::default()});
                 let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                 srv_senders.push(tx);
-                srv_tsk_handles.push(tokio_uring::spawn(th_vendor_extension(ch_id, tx_srv.borrow(), rx)));
+                srv_tsk_handles.push(tokio_uring::spawn(th_vendor_extension(ch_id, tx_srv.clone(), rx)));
             }
             else if proto_srv.bluetooth_service.is_some()
             {
                 channel_status.push(ServiceStatus{service_type:ServiceType::Bluetooth,ch_id,..Default::default()});
                 let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                 srv_senders.push(tx);
-                srv_tsk_handles.push(tokio_uring::spawn(th_bluetooth(ch_id, tx_srv.borrow(), rx)));
+                srv_tsk_handles.push(tokio_uring::spawn(th_bluetooth(ch_id, tx_srv.clone(), rx)));
             }
             else {
                 error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
