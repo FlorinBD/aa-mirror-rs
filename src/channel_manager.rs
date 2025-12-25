@@ -618,7 +618,7 @@ fn get_service_index(arr:&Vec<ServiceStatus>, ch:i32)->usize
 
 
 ///Return ch index if OpenCh command is not already done
-fn must_open_ch(arr:&Vec<ServiceStatus>, ch_open_done: &mut CmdStatus) ->usize
+fn must_open_ch(arr:&Vec<ServiceStatus>, mut ch_open_done: &mut CmdStatus) ->usize
 {
 
     if (ch_open_done.status == CommandState::Done) || (ch_open_done.status == CommandState::NotDone)
