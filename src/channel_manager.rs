@@ -890,7 +890,7 @@ pub async fn ch_proxy(
         error!( "{} ServiceDiscoveryResponse couldn't be parsed",get_name());
         return Err(Box::new("ServiceDiscoveryResponse couldn't be parsed")).expect("ServiceDiscoveryResponse");
     }
-    let mut all_ch_open=CmdStatus{status:CommandState::NotDone};
+    //let mut all_ch_open=CmdStatus{status:CommandState::NotDone};
     info!( "{} ServiceDiscovery done, starting AA Mirror loop",get_name());
     loop {
         let mut pkt = rx_srv.recv().await.ok_or("rx_srv channel hung up")?;
@@ -899,9 +899,9 @@ pub async fn ch_proxy(
             let idx=get_service_index(&channel_status, pkt.channel as i32);
             if idx !=255
             {
-                let ch_data=pkt.payload.to_vec();
+                //let ch_data=pkt.payload.to_vec();
                 srv_senders[idx].send(pkt).await.expect("Error sending message to service");
-                let message_id: i32 = u16::from_be_bytes(ch_data[0..=1].try_into()?).into();
+                /*let message_id: i32 = u16::from_be_bytes(ch_data[0..=1].try_into()?).into();
                 let control = protos::ControlMessageType::from_i32(message_id);
                 match control.unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) {
                     MESSAGE_CHANNEL_OPEN_RESPONSE=>{
@@ -917,7 +917,7 @@ pub async fn ch_proxy(
                         {
                             //we don't care about others ATM
                         }
-                }
+                }*/
 
             }
             else {
@@ -959,8 +959,28 @@ pub async fn ch_proxy(
                         if msg.focus_state() == AudioFocusStateType::AUDIO_FOCUS_STATE_GAIN
                         {
                             info!( "{} CMD OPEN_CHANNEL will be done next",get_name());
-                            //Open CH one by one
-                            all_ch_open.status= CommandState::InProgress;
+                            //Open CH for all
+                            //all_ch_open.status= CommandState::InProgress;
+                            for idx in srv_senders.len()
+                                {
+                                    info!( "{} Send custom CMD_OPEN_CH for ch {}",get_name(), channel_status[idx].ch_id);
+                                    let mut cmd_req= CustomCommandMessage::new();
+                                    cmd_req.set_cmd(CustomCommand::CMD_OPEN_CH);
+
+                                    let mut payload: Vec<u8>=cmd_req.write_to_bytes()?;
+                                    payload.insert(0,((MESSAGE_CUSTOM_CMD as u16) >> 8) as u8);
+                                    payload.insert( 1,((MESSAGE_CUSTOM_CMD as u16) & 0xff) as u8);
+                                    let pkt_rsp = Packet {
+                                        channel: (channel_status[idx].ch_id) as u8,
+                                        flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                                        final_length: None,
+                                        payload: payload.clone(),
+                                    };
+                                    channel_status[idx].open_ch_cmd = CommandState::InProgress;
+                                    if let Err(_) = srv_senders[idx].send(pkt_rsp).await{
+                                        error!( "{} custom command send error",get_name());
+                                    };
+                                }
                         }
 
                     }
@@ -973,7 +993,7 @@ pub async fn ch_proxy(
             };
         }
 
-       let (idx, all_open)= must_open_ch(&channel_status,&all_ch_open);
+       /*let (idx, all_open)= must_open_ch(&channel_status,&all_ch_open);
         if idx !=255
         {
             info!( "{} Send custom CMD_OPEN_CH for ch {}",get_name(), channel_status[idx].ch_id);
@@ -997,7 +1017,7 @@ pub async fn ch_proxy(
         if all_open
         {
             all_ch_open.status= CommandState::Done;
-        }
+        }*/
     }
     return Err(Box::new("proxy main loop ended ok")).expect("TODO");
 }
