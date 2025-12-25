@@ -31,6 +31,7 @@ use tokio::sync::mpsc;
 use protos::ControlMessageType::{self, *};
 use crate::aa_services::{VideoCodecResolution::*, VideoFPS::*, AudioStream::*, VideoConfig, AudioConfig, AudioChConfiguration, MediaCodec, MediaCodec::*, AudioStream, ServiceType, CommandState, ServiceStatus, th_bluetooth};
 use crate::aa_services::{th_input_source, th_media_sink_audio_guidance, th_media_sink_audio_streaming, th_media_sink_video, th_media_source, th_sensor_source, th_vendor_extension};
+use crate::aa_services::CommandState::Done;
 use crate::config;
 use crate::config_types::HexdumpLevel;
 use crate::io_uring::Endpoint;
@@ -618,7 +619,7 @@ fn get_service_index(arr:&Vec<ServiceStatus>, ch:i32)->usize
 
 
 ///Return ch index if OpenCh command is not already done
-fn must_open_ch(arr:&Vec<ServiceStatus>, mut ch_open_done: &mut CmdStatus) ->usize
+fn must_open_ch(arr:&Vec<ServiceStatus>, mut ch_open_done: &CmdStatus) ->usize
 {
 
     if (ch_open_done.status == CommandState::Done) || (ch_open_done.status == CommandState::NotDone)
@@ -641,7 +642,8 @@ fn must_open_ch(arr:&Vec<ServiceStatus>, mut ch_open_done: &mut CmdStatus) ->usi
     }
     if all_ch_done
     {
-        ch_open_done.status = CommandState::Done;
+        let new_state=CmdStatus{status:Done};
+        ch_open_done=&new_state;
         return 255;
     }
     next_idx
