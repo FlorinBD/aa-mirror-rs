@@ -961,7 +961,7 @@ pub async fn ch_proxy(
                             info!( "{} CMD OPEN_CHANNEL will be done next",get_name());
                             //Open CH for all
                             //all_ch_open.status= CommandState::InProgress;
-                            for idx in srv_senders.len()
+                            for idx in srv_senders.iter().enumerate()
                                 {
                                     info!( "{} Send custom CMD_OPEN_CH for ch {}",get_name(), channel_status[idx].ch_id);
                                     let mut cmd_req= CustomCommandMessage::new();
