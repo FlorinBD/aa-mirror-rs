@@ -33,7 +33,6 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>
 const USB_ACCESSORY_PATH: &str = "/dev/usb_accessory";
 pub const BUFFER_LEN: usize = 16 * 1024;
 pub const TCP_CLIENT_TIMEOUT: Duration = Duration::new(30, 0);
-const COMP_APP_TCP_PORT: u16 = 9999;
 
 use crate::config::{Action, SharedConfig};
 use crate::config::{TCP_DHU_PORT, TCP_SERVER_PORT};
@@ -187,57 +186,6 @@ async fn flatten<T>(handle: &mut JoinHandle<Result<T>>, dbg_info:String) -> Resu
     }
 }
 
-async fn tcp_bridge(remote_addr: &str, local_addr: &str) {
-    loop {
-        debug!(
-            "{} tcp_bridge: before connect, local={} remote={}",
-            NAME, local_addr, remote_addr
-        );
-        match TokioTcpStream::connect(remote_addr).await {
-            Ok(mut remote) => {
-                debug!(
-                    "{} tcp_bridge: remote side connected: ({})",
-                    NAME, remote_addr
-                );
-                match TokioTcpStream::connect(local_addr).await {
-                    Ok(mut local) => {
-                        debug!(
-                            "{} tcp_bridge: local side connected: ({})",
-                            NAME, local_addr
-                        );
-                        info!("{} Connected to companion app TCP server ({}), starting bidirectional transfer...", NAME, local_addr);
-                        match copy_bidirectional(&mut remote, &mut local).await {
-                            Ok((from_remote, from_local)) => {
-                                debug!(
-                                    "{} tcp_bridge: Connection closed: remote->local={} local->remote={}",
-                                    NAME, from_remote, from_local
-                                );
-                            }
-                            Err(e) => {
-                                error!("{} Error during bidirectional copy: {}", NAME, e);
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        debug!(
-                            "{} tcp_bridge: Failed to connect to local server {}: {}",
-                            NAME, local_addr, e
-                        );
-                    }
-                }
-            }
-            Err(e) => {
-                debug!(
-                    "{} tcp_bridge: Failed to connect to remote server {}: {}",
-                    NAME, remote_addr, e
-                );
-            }
-        }
-
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-    }
-}
-
 /// Asynchronously wait for an inbound TCP connection
 /// returning TcpStream of first client connected
 async fn tcp_wait_for_connection(listener: &mut TcpListener) -> Result<TcpStream> {
@@ -301,7 +249,7 @@ pub async fn io_loop(
 
         let mut hu_tcp = None;
         let mut hu_usb = None;
-        let mut dhu_listener = None;
+        let mut dhu_listener ;
         if config.dhu {
             info!("{} 🛰️ DHU TCP server: bind to local address",NAME);
             dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());

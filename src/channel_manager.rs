@@ -9,7 +9,6 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
-use dbus::blocking::stdintf::org_freedesktop_dbus::EmitsChangedSignal::False;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -18,29 +17,24 @@ use tokio_uring::buf::BoundedBuf;
 
 // protobuf stuff:
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
-use crate::channel_manager::protos::navigation_maneuver::NavigationType::*;
 use crate::channel_manager::protos::auth_response::Status::*;
 use crate::channel_manager::protos::*;
-use crate::channel_manager::sensor_source_service::Sensor;
 use crate::channel_manager::AudioStreamType::*;
 use crate::channel_manager::ByeByeReason::USER_SELECTION;
 use crate::channel_manager::MediaMessageId::*;
 use crate::channel_manager::SensorMessageId::*;
-use crate::channel_manager::SensorType::*;
 use crate::channel_manager::MessageStatus;
 use protobuf::text_format::print_to_string_pretty;
 use protobuf::{Enum, EnumOrUnknown, Message, MessageDyn};
 use tokio::sync::mpsc;
 use protos::ControlMessageType::{self, *};
-use crate::aa_services;
-use crate::aa_services::{VideoCodecResolution::*, VideoFPS::*, AudioStream::*, VideoConfig, AudioConfig, AudioChConfiguration, MediaCodec, MediaCodec::*, AudioStream};
+use crate::aa_services::{VideoCodecResolution::*, VideoFPS::*, AudioStream::*, VideoConfig, AudioConfig, AudioChConfiguration, MediaCodec, MediaCodec::*, AudioStream, ServiceType};
 use crate::aa_services::{th_input_source, th_media_sink_audio_guidance, th_media_sink_audio_streaming, th_media_sink_video, th_media_source, th_sensor_source, th_vendor_extension};
-use crate::config::{Action::Stop, AppConfig, SharedConfig};
+use crate::config;
 use crate::config_types::HexdumpLevel;
 use crate::io_uring::Endpoint;
 use crate::io_uring::IoDevice;
 use crate::io_uring::BUFFER_LEN;
-use crate::usb_stream::new;
 
 // module name for logging engine
 fn get_name() -> String {
@@ -63,12 +57,6 @@ pub const ENCRYPTED: u8 = 1 << 3;
 // location for hu_/md_ private keys and certificates:
 const KEYS_PATH: &str = "/etc/aa-mirror-rs";
 const RES_PATH: &str = "/etc/aa-mirror-rs/res";
-
-pub struct ModifyContext {
-    sensor_channel: Option<u8>,
-    nav_channel: Option<u8>,
-    audio_channels: Vec<u8>,
-}
 
 #[derive(PartialEq, Copy, Clone, Debug)]
 pub enum DeviceType {
@@ -364,7 +352,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
     mut hu_wr: IoDevice<A>,
     mut hu_rx: Receiver<Packet>,
     mut srv_rx: Receiver<Packet>,
-    mut srv_tx: Sender<Packet>,
+    srv_tx: Sender<Packet>,
     r_statistics: Arc<AtomicUsize>,
     w_statistics: Arc<AtomicUsize>,
     dmp_level:HexdumpLevel,
@@ -642,7 +630,7 @@ pub async fn ch_proxy(
         payload.push( ((MessageStatus::STATUS_SUCCESS  as u16) >> 8) as u8);
         payload.push( ((MessageStatus::STATUS_SUCCESS  as u16) & 0xff) as u8);
 
-    let mut pkt_rsp = Packet {
+    let pkt_rsp = Packet {
         channel: 0,
         flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
         final_length: None,
@@ -687,7 +675,7 @@ pub async fn ch_proxy(
     payload.insert(0,((MESSAGE_SERVICE_DISCOVERY_REQUEST as u16) >> 8) as u8);
     payload.insert( 1,((MESSAGE_SERVICE_DISCOVERY_REQUEST as u16) & 0xff) as u8);
 
-    let mut pkt_rsp = Packet {
+    let pkt_rsp = Packet {
         channel: 0,
         flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
         final_length: None,
@@ -707,20 +695,23 @@ pub async fn ch_proxy(
     //let mut srv_senders:Vec<Option<Box<Sender<Packet>>>> = vec![];
     let mut srv_senders;
     let mut srv_tsk_handles;
-
+    let mut srv_types;
     let data = &pkt.payload[2..]; // start of message data, without message_id
     if  let Ok(msg) = ServiceDiscoveryResponse::parse_from_bytes(&data){
         info!( "{} ServiceDiscoveryResponse parsed ok",get_name());
         //let srv_count=msg.services.len();
         srv_senders=Vec::with_capacity(msg.services.len());
         srv_tsk_handles=Vec::with_capacity(msg.services.len());
+        srv_types=Vec::with_capacity(msg.services.len());
         //let mut tsk_srv_loop;
         for (_,proto_srv) in msg.services.iter().enumerate() {
-            let ch_id=i32::from(proto_srv.id()) as usize;
+            let ch_id=i32::from(proto_srv.id());
+            let idx=(ch_id-1) as usize;
             //info!( "SID {}, media sink: {}",ch_id, proto_srv.media_sink_service.is_some());
 
             if proto_srv.media_sink_service.is_some()
             {
+                srv_types.insert(idx,ServiceType::MediaSink);
                 if proto_srv.media_sink_service.audio_configs.len()>0
                 {
                     let srv_type=proto_srv.media_sink_service.audio_type();
@@ -738,8 +729,8 @@ pub async fn ch_proxy(
                             stream_type: AudioStream::GUIDANCE,
                         };
                         let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
-                        srv_senders.insert(ch_id - 1,tx);
-                        srv_tsk_handles.insert(ch_id - 1, tokio_uring::spawn(th_media_sink_audio_guidance(ch_id as i32, tx_srv.clone(), rx, audio_cfg)));
+                        srv_senders.insert(idx,tx);
+                        srv_tsk_handles.insert(idx, tokio_uring::spawn(th_media_sink_audio_guidance(ch_id as i32, tx_srv.clone(), rx, audio_cfg)));
                     }
                     else if srv_type == AUDIO_STREAM_MEDIA
                     {
@@ -749,8 +740,8 @@ pub async fn ch_proxy(
                             stream_type: AudioStream::MEDIA,
                         };
                         let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
-                        srv_senders.insert(ch_id - 1,tx);
-                        srv_tsk_handles.insert(ch_id - 1, tokio_uring::spawn(th_media_sink_audio_streaming(ch_id as i32, tx_srv.clone(), rx, audio_cfg)));
+                        srv_senders.insert(idx,tx);
+                        srv_tsk_handles.insert(idx, tokio_uring::spawn(th_media_sink_audio_streaming(ch_id, tx_srv.clone(), rx, audio_cfg)));
                     }
                     else {
                         error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
@@ -759,7 +750,7 @@ pub async fn ch_proxy(
                 else if proto_srv.media_sink_service.video_configs.len()>0
                 {
                     let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
-                    srv_senders.insert(ch_id - 1,tx);
+                    srv_senders.insert(idx,tx);
                     let vcr=match proto_srv.media_sink_service.video_configs[0].codec_resolution() {
                         VideoCodecResolutionType::VIDEO_800x480=>Video_800x480,
                         VideoCodecResolutionType::VIDEO_720x1280=>Video_720x1280,
@@ -785,7 +776,7 @@ pub async fn ch_proxy(
                         fps:vfps,
                     };
 
-                    srv_tsk_handles.insert(ch_id - 1, tokio_uring::spawn(th_media_sink_video(ch_id as i32, tx_srv.clone(), rx, video_cfg)));
+                    srv_tsk_handles.insert(idx, tokio_uring::spawn(th_media_sink_video(ch_id, tx_srv.clone(), rx, video_cfg)));
                 }
                 else {
                     error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
@@ -795,27 +786,31 @@ pub async fn ch_proxy(
             }
             else if proto_srv.media_source_service.is_some()
             {
+                srv_types.insert(idx,ServiceType::MediaSource);
                 let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
-                srv_senders.insert(ch_id - 1,tx);
-                srv_tsk_handles.insert(ch_id - 1, tokio_uring::spawn(th_media_source(ch_id as i32, tx_srv.clone(), rx)));
+                srv_senders.insert(idx,tx);
+                srv_tsk_handles.insert(idx, tokio_uring::spawn(th_media_source(ch_id, tx_srv.clone(), rx)));
             }
             else if proto_srv.sensor_source_service.is_some()
             {
+                srv_types.insert(idx,ServiceType::SensorSource);
                 let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
-                srv_senders.insert(ch_id - 1,tx);
-                srv_tsk_handles.insert(ch_id - 1, tokio_uring::spawn(th_sensor_source(ch_id as i32, tx_srv.clone(), rx)));
+                srv_senders.insert(idx,tx);
+                srv_tsk_handles.insert(idx, tokio_uring::spawn(th_sensor_source(ch_id, tx_srv.clone(), rx)));
             }
             else if proto_srv.input_source_service.is_some()
             {
+                srv_types.insert(idx,ServiceType::InputSource);
                 let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
-                srv_senders.insert(ch_id - 1,tx);
-                srv_tsk_handles.insert(ch_id - 1, tokio_uring::spawn(th_input_source(ch_id as i32, tx_srv.clone(), rx)));
+                srv_senders.insert(idx,tx);
+                srv_tsk_handles.insert(idx, tokio_uring::spawn(th_input_source(ch_id, tx_srv.clone(), rx)));
             }
             else if proto_srv.vendor_extension_service.is_some()
             {
+                srv_types.insert(idx,ServiceType::VendorExtension);
                 let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
-                srv_senders.insert(ch_id - 1,tx);
-                srv_tsk_handles.insert(ch_id - 1, tokio_uring::spawn(th_vendor_extension(ch_id as i32, tx_srv.clone(), rx)));
+                srv_senders.insert(idx,tx);
+                srv_tsk_handles.insert(idx, tokio_uring::spawn(th_vendor_extension(ch_id, tx_srv.clone(), rx)));
             }
             else {
                 error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
@@ -830,7 +825,7 @@ pub async fn ch_proxy(
         payload.insert(0,((MESSAGE_AUDIO_FOCUS_REQUEST as u16) >> 8) as u8);
         payload.insert( 1,((MESSAGE_AUDIO_FOCUS_REQUEST as u16) & 0xff) as u8);
 
-        let mut pkt_rsp = Packet {
+        let pkt_rsp = Packet {
             channel: 0,
             flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
             final_length: None,
@@ -914,7 +909,7 @@ pub async fn ch_proxy(
                         let mut payload: Vec<u8>=pingrsp.write_to_bytes()?;
                         payload.insert(0,((MESSAGE_PING_RESPONSE as u16) >> 8) as u8);
                         payload.insert( 1,((MESSAGE_PING_RESPONSE as u16) & 0xff) as u8);
-                        let mut pkt_rsp = Packet {
+                        let pkt_rsp = Packet {
                             channel: 0,
                             flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                             final_length: None,

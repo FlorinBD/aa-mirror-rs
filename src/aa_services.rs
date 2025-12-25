@@ -1,22 +1,14 @@
 //! This crate provides service implementation for  [Android Open Accessory Protocol 1.0](https://source.android.com/devices/accessories/aoa)
-use log::log_enabled;
 use simplelog::*;
-use std::collections::VecDeque;
 use std::fmt;
 use std::io::{Read, Write};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::sync::Mutex;
 use std::time::{Duration, SystemTime};
-use nusb::DeviceInfo;
-use tokio::io::AsyncReadExt;
-use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::time::timeout;
 use tokio_uring::buf::BoundedBuf;
 use ffmpeg_sidecar::command::FfmpegCommand;
 use ffmpeg_sidecar::event::{FfmpegEvent, LogLevel};
-use futures::SinkExt;
 
 // protobuf stuff:
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
@@ -35,16 +27,12 @@ use crate::aa_services::GalVerificationVendorExtensionMessageId::*;
 use crate::aa_services::SensorMessageId::*;
 use crate::aa_services::SensorType::*;
 use crate::aa_services::MediaCodecType::*;
-use protobuf::text_format::print_to_string_pretty;
 use protobuf::{Enum, EnumOrUnknown, Message, MessageDyn};
 use tokio_uring::net::{TcpStream, TcpListener};
 use protos::*;
 use protos::ControlMessageType::{self, *};
-use crate::aoa::AccessoryDeviceInfo;
 use crate::channel_manager::{Packet, ENCRYPTED, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
 use crate::config::{TCP_DHU_PORT, TCP_VIDEO_PORT};
-use crate::io_uring::Endpoint;
-use crate::io_uring::IoDevice;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -146,7 +134,8 @@ pub async fn th_sensor_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Re
                 if let Ok(msg) = CustomCommandMessage::parse_from_bytes(&data) {
                     if msg.cmd() == CustomCommand::CMD_OPEN_CH
                     {
-                        let mut open_req = ChannelOpenRequest::new();
+                        //not available for SensorSource
+                        /*let mut open_req = ChannelOpenRequest::new();
                         open_req.set_priority(0);
                         open_req.set_service_id(ch_id);
                         let mut payload: Vec<u8> = open_req.write_to_bytes().expect("serialization failed");
@@ -159,7 +148,7 @@ pub async fn th_sensor_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Re
                             final_length: None,
                             payload: payload,
                         };
-                        tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+                        tx_srv.send(pkt_rsp).await.expect("TODO: panic message");*/
                     }
                 }
                 else {
@@ -178,8 +167,8 @@ pub async fn th_sensor_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Re
 }
 pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, vcfg:VideoConfig)-> Result<()>{
     //pre-rendered frames using openh264 lib from a C# app (1 frame out of static 800x480 bmp)
-    let mut wait_screen_config_frame: Vec<u8> = vec![0x00, 0x00, 0x00, 0x01, 0x67, 0x42, 0xC0, 0x1E, 0x8C, 0x8D, 0x40, 0x64, 0x1E, 0x90, 0x0F, 0x08, 0x84, 0x6A, 0x00, 0x00, 0x00, 0x01, 0x68, 0xCE, 0x3C, 0x80];
-    let mut wait_screen_first_frame: Vec<u8> = vec![0x00, 0x00, 0x00, 0x01, 0x65, 0xB8, 0x00, 0x04, 0x00, 0x00, 0x78, 0x8C, 0x50, 0x00, 0x27, 0x1C,
+    let wait_screen_config_frame: Vec<u8> = vec![0x00, 0x00, 0x00, 0x01, 0x67, 0x42, 0xC0, 0x1E, 0x8C, 0x8D, 0x40, 0x64, 0x1E, 0x90, 0x0F, 0x08, 0x84, 0x6A, 0x00, 0x00, 0x00, 0x01, 0x68, 0xCE, 0x3C, 0x80];
+    let wait_screen_first_frame: Vec<u8> = vec![0x00, 0x00, 0x00, 0x01, 0x65, 0xB8, 0x00, 0x04, 0x00, 0x00, 0x78, 0x8C, 0x50, 0x00, 0x27, 0x1C,
                                                     0x00, 0x04, 0x08, 0x23, 0x80, 0x00, 0x81, 0xEC, 0x9C, 0x9C, 0x9C, 0x9C, 0x9C, 0x9C, 0x9C, 0x9C,
                                                     0x9C, 0x9C, 0x9C, 0x9C, 0x9C, 0x9C, 0x9C, 0x9C, 0x9C, 0x9C, 0x9C, 0x9C, 0x9C, 0x9C, 0x9C, 0x9C,
                                                     0x9C, 0x9C, 0x9C, 0x9C, 0x9C, 0x9C, 0x9C, 0x9C, 0x9C, 0x9C, 0x9C, 0x9C, 0x9C, 0x9C, 0x9C, 0x9C,
@@ -1039,7 +1028,7 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
         let dev = "MediaSinkService Video";
         format!("<i><bright-black> aa-mirror/{}: </>", dev)
     }
-    async fn listen_for_connections(mut tx: Sender<Packet>, ch_id: u8) -> Result<()> {
+    async fn listen_for_connections(tx: Sender<Packet>, ch_id: u8) -> Result<()> {
         let bind_addr = format!("0.0.0.0:{}", TCP_VIDEO_PORT).parse().unwrap();
         let mut listener =Some(TcpListener::bind(bind_addr).unwrap());
         //listener.set_nonblocking(true);
