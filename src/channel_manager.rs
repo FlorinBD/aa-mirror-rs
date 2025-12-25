@@ -619,20 +619,19 @@ fn get_service_index(arr:&Vec<ServiceStatus>, ch:i32)->usize
 
 
 ///Return ch index if OpenCh command is not already done
-fn must_open_ch(arr:&Vec<ServiceStatus>, mut ch_open_done: &mut CmdStatus) ->usize
+fn must_open_ch(arr:&Vec<ServiceStatus>, mut ch_open_done: &CmdStatus) ->(usize, bool)
 {
 
     if (ch_open_done.status == CommandState::Done) || (ch_open_done.status == CommandState::NotDone)
     {
-        return 255;
+        return (255, false);
     }
     let mut next_idx= 255usize;
     let mut all_ch_done=true;
     for (idx,stat) in arr.iter().enumerate() {
         if stat.open_ch_cmd == CommandState::InProgress
         {
-            all_ch_done=false;
-            return 255;
+            return (255,false);
         }
         else if stat.open_ch_cmd == CommandState::NotDone
         {
@@ -640,12 +639,8 @@ fn must_open_ch(arr:&Vec<ServiceStatus>, mut ch_open_done: &mut CmdStatus) ->usi
             all_ch_done=false;
         }
     }
-    if all_ch_done
-    {
-        ch_open_done.status=CommandState::NotDone;
-        return 255;
-    }
-    next_idx
+    (next_idx, all_ch_done)
+
 }
 /// main thread doing all packet processing between HU and device
 pub async fn ch_proxy(
@@ -976,7 +971,7 @@ pub async fn ch_proxy(
             };
         }
 
-       let idx= must_open_ch(&channel_status,&all_ch_open);
+       let (idx, all_open)= must_open_ch(&channel_status,&all_ch_open);
         if idx !=255
         {
             info!( "{} Send custom CMD_OPEN_CH for ch {}",get_name(), channel_status[idx].ch_id);
@@ -996,6 +991,10 @@ pub async fn ch_proxy(
             if let Err(_) = srv_senders[idx].send(pkt_rsp).await{
                 error!( "{} custom command send error",get_name());
             };
+        }
+        if all_open
+        {
+            all_ch_open.status= CommandState::Done;
         }
     }
     return Err(Box::new("proxy main loop ended ok")).expect("TODO");
