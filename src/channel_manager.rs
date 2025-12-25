@@ -619,7 +619,7 @@ fn get_service_index(arr:&Vec<ServiceStatus>, ch:i32)->usize
 
 
 ///Return ch index if OpenCh command is not already done
-fn must_open_ch(arr:&Vec<ServiceStatus>, mut ch_open_done: &CmdStatus) ->usize
+fn must_open_ch(arr:&Vec<ServiceStatus>, mut ch_open_done: &mut CmdStatus) ->usize
 {
 
     if (ch_open_done.status == CommandState::Done) || (ch_open_done.status == CommandState::NotDone)
@@ -642,8 +642,7 @@ fn must_open_ch(arr:&Vec<ServiceStatus>, mut ch_open_done: &CmdStatus) ->usize
     }
     if all_ch_done
     {
-        let new_state=CmdStatus{status:Done};
-        ch_open_done=&new_state;
+        ch_open_done.status=CommandState::NotDone;
         return 255;
     }
     next_idx
@@ -894,7 +893,7 @@ pub async fn ch_proxy(
         error!( "{} ServiceDiscoveryResponse couldn't be parsed",get_name());
         return Err(Box::new("ServiceDiscoveryResponse couldn't be parsed")).expect("ServiceDiscoveryResponse");
     }
-    let mut all_ch_open:CmdStatus;
+    let mut all_ch_open=CmdStatus{status:Done};
     info!( "{} ServiceDiscovery done, starting AA Mirror loop",get_name());
     loop {
         let mut pkt = rx_srv.recv().await.ok_or("rx_srv channel hung up")?;
