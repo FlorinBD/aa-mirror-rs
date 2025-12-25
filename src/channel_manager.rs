@@ -873,7 +873,7 @@ pub async fn ch_proxy(
                                 payload.insert( 1,((MESSAGE_CUSTOM_CMD as u16) & 0xff) as u8);
                                 let pkt_rsp = Packet {
                                     channel: (ch_open_index + 1) as u8,
-                                    flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                                    flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                                     final_length: None,
                                     payload: payload.clone(),
                                 };
@@ -888,6 +888,10 @@ pub async fn ch_proxy(
                         }
 
                     }
+                    _=>
+                        {
+                            //we don't care about others ATM
+                        }
                 }
 
             }
@@ -940,7 +944,7 @@ pub async fn ch_proxy(
 
                             let pkt_rsp = Packet {
                                 channel: (ch_open_index + 1) as u8,
-                                flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                                flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                                 final_length: None,
                                 payload: payload.clone(),
                             };
