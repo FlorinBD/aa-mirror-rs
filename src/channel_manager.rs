@@ -776,7 +776,7 @@ pub async fn ch_proxy(
                         };
                         let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                         srv_senders.push(tx);
-                        srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_audio_guidance(ch_id, tx_srv.borrow(), rx, audio_cfg)));
+                        srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_audio_guidance(ch_id, &tx_srv, rx, audio_cfg)));
                     }
                     else if srv_type == AUDIO_STREAM_MEDIA
                     {
