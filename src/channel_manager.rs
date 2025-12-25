@@ -3,7 +3,7 @@ use log::log_enabled;
 use openssl::ssl::{ErrorCode, Ssl, SslContextBuilder, SslFiletype, SslMethod};
 use simplelog::*;
 use std::collections::VecDeque;
-use std::{fmt, thread};
+use std::{fmt, mem, thread};
 use std::cmp::PartialEq;
 use std::io::{Read, Write};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -65,6 +65,10 @@ pub enum DeviceType {
     MobileDevice,
 }
 
+#[derive(Copy, Clone, Debug, Default)]
+pub struct CmdStatus {
+    pub status: CommandState,
+}
 /// rust-openssl doesn't support BIO_s_mem
 /// This SslMemBuf is about to provide `Read` and `Write` implementations
 /// to be used with `openssl::ssl::SslStream`
@@ -614,22 +618,31 @@ fn get_service_index(arr:&Vec<ServiceStatus>, ch:i32)->usize
 
 
 ///Return ch index if OpenCh command is not already done
-fn must_open_ch(arr:&Vec<ServiceStatus>, ch_open_done:&bool)->usize
+fn must_open_ch(arr:&Vec<ServiceStatus>, ch_open_done: &mut CmdStatus) ->usize
 {
-    if ch_open_done
+
+    if ch_open_done.status == CommandState::Done
     {
         return 255;
     }
     let mut next_idx= 255usize;
+    let mut all_ch_done=true;
     for (idx,stat) in arr.iter().enumerate() {
         if stat.open_ch_cmd == CommandState::InProgress
         {
+            all_ch_done=false;
             return 255;
         }
         else if stat.open_ch_cmd == CommandState::NotDone
         {
             next_idx=idx;
+            all_ch_done=false;
         }
+    }
+    if all_ch_done
+    {
+        ch_open_done.status = CommandState::Done;
+        return 255;
     }
     next_idx
 }
@@ -879,7 +892,7 @@ pub async fn ch_proxy(
         error!( "{} ServiceDiscoveryResponse couldn't be parsed",get_name());
         return Err(Box::new("ServiceDiscoveryResponse couldn't be parsed")).expect("ServiceDiscoveryResponse");
     }
-    let mut ch_open_done=false;
+    let mut all_ch_open;
     info!( "{} ServiceDiscovery done, starting AA Mirror loop",get_name());
     loop {
         let mut pkt = rx_srv.recv().await.ok_or("rx_srv channel hung up")?;
@@ -947,25 +960,9 @@ pub async fn ch_proxy(
                         info!( "{} AUDIO_FOCUS_STATE received is: {:?}",get_name(), msg.focus_state());
                         if msg.focus_state() == AudioFocusStateType::AUDIO_FOCUS_STATE_GAIN
                         {
-                            info!( "{} Sending custom command OPEN_CHANNEL",get_name());
+                            info!( "{} CMD OPEN_CHANNEL will be done next",get_name());
                             //Open CH one by one
-                            let mut cmd_req= CustomCommandMessage::new();
-                            cmd_req.set_cmd(CustomCommand::CMD_OPEN_CH);
-
-                            let mut payload: Vec<u8>=cmd_req.write_to_bytes()?;
-                            payload.insert(0,((MESSAGE_CUSTOM_CMD as u16) >> 8) as u8);
-                            payload.insert( 1,((MESSAGE_CUSTOM_CMD as u16) & 0xff) as u8);
-
-                            let pkt_rsp = Packet {
-                                channel: (ch_open_index + 1) as u8,
-                                flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                                final_length: None,
-                                payload: payload.clone(),
-                            };
-                            if let Err(_) = srv_senders[ch_open_index].send(pkt_rsp).await{
-                                error!( "{} custom command send error",get_name());
-                            };
-
+                            all_ch_open.status= CommandState::InProgress;
                         }
 
                     }
@@ -978,8 +975,8 @@ pub async fn ch_proxy(
             };
         }
 
-       let idx= must_open_ch(&channel_status,&ch_open_done);
-        if(idx !=255)
+       let idx= must_open_ch(&channel_status,&all_ch_open);
+        if idx !=255
         {
             let mut cmd_req= CustomCommandMessage::new();
             cmd_req.set_cmd(CustomCommand::CMD_OPEN_CH);
