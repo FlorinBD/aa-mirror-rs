@@ -978,6 +978,7 @@ pub async fn ch_proxy(
        let idx= must_open_ch(&channel_status,&all_ch_open);
         if idx !=255
         {
+            info!( "{} Send custom CMD_OPEN_CH for ch {}",get_name(), channel_status[idx].ch_id);
             let mut cmd_req= CustomCommandMessage::new();
             cmd_req.set_cmd(CustomCommand::CMD_OPEN_CH);
 
