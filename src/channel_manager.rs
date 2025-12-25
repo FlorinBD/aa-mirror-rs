@@ -28,7 +28,6 @@ use crate::channel_manager::MediaMessageId::*;
 use crate::channel_manager::SensorMessageId::*;
 use crate::channel_manager::SensorType::*;
 use crate::channel_manager::MessageStatus;
-//use crate::channel_manager::MessageStatus::*;
 use protobuf::text_format::print_to_string_pretty;
 use protobuf::{Enum, EnumOrUnknown, Message, MessageDyn};
 use tokio::sync::mpsc;
@@ -855,9 +854,7 @@ pub async fn ch_proxy(
         {
             if srv_senders.len() >= pkt.channel as usize
             {
-
                 let ch_data=pkt.payload.to_vec();
-
                 srv_senders[usize::from(pkt.channel - 1)].send(pkt).await.expect("Error sending message to service");
 
                 let message_id: i32 = u16::from_be_bytes(ch_data[0..=1].try_into()?).into();
