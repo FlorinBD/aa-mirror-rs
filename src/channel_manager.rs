@@ -845,6 +845,7 @@ pub async fn ch_proxy(
     }
 
     info!( "{} ServiceDiscovery done, starting AA Mirror loop",get_name());
+    let mut ch_open_index=0;
     loop {
         let mut pkt = rx_srv.recv().await.ok_or("rx_srv channel hung up")?;
         if pkt.channel !=0
@@ -852,6 +853,41 @@ pub async fn ch_proxy(
             if srv_senders.len() >= pkt.channel as usize
             {
                 srv_senders[usize::from(pkt.channel - 1)].send(pkt).await.expect("Error sending message to service");
+                let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+                let control = protos::ControlMessageType::from_i32(message_id);
+                match control.unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) {
+                    MESSAGE_CHANNEL_OPEN_RESPONSE=>{
+                        let data = &pkt.payload[2..]; // start of message data, without message_id
+                        if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
+                            if rsp.status() == STATUS_SUCCESS
+                            {
+                                ch_open_index+=1;
+                                //Open CH one by one
+                                let mut cmd_req= CustomCommandMessage::new();
+                                cmd_req.set_cmd(CustomCommand::CMD_OPEN_CH);
+
+                                let mut payload: Vec<u8>=cmd_req.write_to_bytes()?;
+                                payload.insert(0,((MESSAGE_CUSTOM_CMD as u16) >> 8) as u8);
+                                payload.insert( 1,((MESSAGE_CUSTOM_CMD as u16) & 0xff) as u8);
+                                let pkt_rsp = Packet {
+                                    channel: (ch_open_index + 1) as u8,
+                                    flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                                    final_length: None,
+                                    payload: payload.clone(),
+                                };
+                                if let Err(_) = srv_senders[ch_open_index].send(pkt_rsp).await{
+                                    error!( "{} custom command send error",get_name());
+                                };
+                                if ch_open_index == (srv_senders.len() - 1)
+                                {
+                                    ch_open_index=0;
+                                }
+                            }
+                        }
+
+                    }
+                }
+
             }
             else {
                 error!( "{} Invalid channel {}",get_name(), pkt.channel);
@@ -892,6 +928,7 @@ pub async fn ch_proxy(
                         if msg.focus_state() == AudioFocusStateType::AUDIO_FOCUS_STATE_GAIN
                         {
                             info!( "{} Sending custom command OPEN_CHANNEL",get_name());
+                            //Open CH one by one
                             let mut cmd_req= CustomCommandMessage::new();
                             cmd_req.set_cmd(CustomCommand::CMD_OPEN_CH);
 
@@ -899,19 +936,15 @@ pub async fn ch_proxy(
                             payload.insert(0,((MESSAGE_CUSTOM_CMD as u16) >> 8) as u8);
                             payload.insert( 1,((MESSAGE_CUSTOM_CMD as u16) & 0xff) as u8);
 
-
-                            for idx in 0..srv_senders.len()
-                            {
-                                let pkt_rsp = Packet {
-                                    channel: (idx + 1) as u8,
-                                    flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                                    final_length: None,
-                                    payload: payload.clone(),
-                                };
-                                if let Err(_) = srv_senders[idx].send(pkt_rsp).await{
-                                    error!( "{} custom command send error",get_name());
-                                };
-                            }
+                            let pkt_rsp = Packet {
+                                channel: (ch_open_index + 1) as u8,
+                                flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                                final_length: None,
+                                payload: payload.clone(),
+                            };
+                            if let Err(_) = srv_senders[ch_open_index].send(pkt_rsp).await{
+                                error!( "{} custom command send error",get_name());
+                            };
 
                         }
 
