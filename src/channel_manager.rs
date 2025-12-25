@@ -27,7 +27,8 @@ use crate::channel_manager::ByeByeReason::USER_SELECTION;
 use crate::channel_manager::MediaMessageId::*;
 use crate::channel_manager::SensorMessageId::*;
 use crate::channel_manager::SensorType::*;
-use crate::channel_manager::MessageStatus::*;
+use crate::channel_manager::MessageStatus;
+//use crate::channel_manager::MessageStatus::*;
 use protobuf::text_format::print_to_string_pretty;
 use protobuf::{Enum, EnumOrUnknown, Message, MessageDyn};
 use tokio::sync::mpsc;
@@ -860,7 +861,7 @@ pub async fn ch_proxy(
                     MESSAGE_CHANNEL_OPEN_RESPONSE=>{
                         let data = &pkt.payload[2..]; // start of message data, without message_id
                         if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
-                            if rsp.status() == STATUS_SUCCESS
+                            if rsp.status() == MessageStatus::STATUS_SUCCESS
                             {
                                 ch_open_index+=1;
                                 //Open CH one by one
