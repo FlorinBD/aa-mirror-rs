@@ -29,7 +29,7 @@ use protobuf::text_format::print_to_string_pretty;
 use protobuf::{Enum, EnumOrUnknown, Message, MessageDyn};
 use tokio::sync::mpsc;
 use protos::ControlMessageType::{self, *};
-use crate::aa_services::{VideoCodecResolution::*, VideoFPS::*, AudioStream::*, VideoConfig, AudioConfig, AudioChConfiguration, MediaCodec, MediaCodec::*, AudioStream, ServiceType, CommandState, ServiceStatus};
+use crate::aa_services::{VideoCodecResolution::*, VideoFPS::*, AudioStream::*, VideoConfig, AudioConfig, AudioChConfiguration, MediaCodec, MediaCodec::*, AudioStream, ServiceType, CommandState, ServiceStatus, th_bluetooth};
 use crate::aa_services::{th_input_source, th_media_sink_audio_guidance, th_media_sink_audio_streaming, th_media_sink_video, th_media_source, th_sensor_source, th_vendor_extension};
 use crate::config;
 use crate::config_types::HexdumpLevel;
@@ -621,7 +621,7 @@ fn get_service_index(arr:&Vec<ServiceStatus>, ch:i32)->usize
 fn must_open_ch(arr:&Vec<ServiceStatus>, ch_open_done: &mut CmdStatus) ->usize
 {
 
-    if ch_open_done.status == CommandState::Done
+    if (ch_open_done.status == CommandState::Done) || (ch_open_done.status == CommandState::NotDone)
     {
         return 255;
     }
@@ -862,7 +862,7 @@ pub async fn ch_proxy(
                 channel_status.push(ServiceStatus{service_type:ServiceType::Bluetooth,ch_id,..Default::default()});
                 let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                 srv_senders.push(tx);
-                srv_tsk_handles.push(tokio_uring::spawn(th_vendor_extension(ch_id, tx_srv.clone(), rx)));
+                srv_tsk_handles.push(tokio_uring::spawn(th_bluetooth(ch_id, tx_srv.clone(), rx)));
             }
             else {
                 error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
@@ -892,7 +892,7 @@ pub async fn ch_proxy(
         error!( "{} ServiceDiscoveryResponse couldn't be parsed",get_name());
         return Err(Box::new("ServiceDiscoveryResponse couldn't be parsed")).expect("ServiceDiscoveryResponse");
     }
-    let mut all_ch_open;
+    let mut all_ch_open:CmdStatus;
     info!( "{} ServiceDiscovery done, starting AA Mirror loop",get_name());
     loop {
         let mut pkt = rx_srv.recv().await.ok_or("rx_srv channel hung up")?;

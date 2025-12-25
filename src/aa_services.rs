@@ -1507,3 +1507,64 @@ pub async fn th_vendor_extension(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
         format!("<i><bright-black> aa-mirror/{}: </>", dev)
     }
 }
+
+pub async fn th_bluetooth(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>)-> Result<()>{
+    info!( "{}: Starting...", get_name());
+    loop {
+        let pkt = rx_srv.recv().await.ok_or("service reader channel hung up")?;
+        if pkt.channel != ch_id as u8
+        {
+            error!( "{} Channel id {:?} is wrong, message discarded", get_name(), pkt.channel);
+        } else { //Channel messages
+            let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+            if message_id == MESSAGE_CHANNEL_OPEN_RESPONSE  as i32
+            {
+                info!("{} Received {} message", ch_id.to_string(), message_id);
+                let data = &pkt.payload[2..]; // start of message data, without message_id
+                if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
+                    if rsp.status() != STATUS_SUCCESS
+                    {
+                        error!( "{}, channel {:?}: Wrong message status received", get_name(), pkt.channel);
+                    }
+                }
+                else {
+                    error!( "{}, channel {:?}: Unable to parse received message", get_name(), pkt.channel);
+                }
+            }
+            else if message_id == MESSAGE_CUSTOM_CMD  as i32
+            {
+                info!("{} Received {} message", ch_id.to_string(), message_id);
+                let data = &pkt.payload[2..]; // start of message data, without message_id
+                if let Ok(msg) = CustomCommandMessage::parse_from_bytes(&data) {
+                    if msg.cmd() == CustomCommand::CMD_OPEN_CH
+                    {
+                        let mut open_req = ChannelOpenRequest::new();
+                        open_req.set_priority(0);
+                        open_req.set_service_id(ch_id);
+                        let mut payload: Vec<u8> = open_req.write_to_bytes().expect("serialization failed");
+                        payload.insert(0, ((MESSAGE_CHANNEL_OPEN_REQUEST as u16) >> 8) as u8);
+                        payload.insert(1, ((MESSAGE_CHANNEL_OPEN_REQUEST as u16) & 0xff) as u8);
+
+                        let pkt_rsp = Packet {
+                            channel: ch_id as u8,
+                            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                            final_length: None,
+                            payload: payload,
+                        };
+                        tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+                    }
+                }
+                else {
+                    error!( "{} CustomCommandMessage couldn't be parsed",get_name());
+                }
+            }
+            else {
+                info!( "{} Unknown message ID: {} received", get_name(), message_id);
+            }
+        }
+    }
+    fn get_name() -> String {
+        let dev = "BluetoothService";
+        format!("<i><bright-black> aa-mirror/{}: </>", dev)
+    }
+}
