@@ -15,6 +15,10 @@ on:
         options:
         - release
         - debug
+      generateBinary:
+        description: 'generate compiled binary as artifact'
+        required: false
+        type: boolean
       tags:
         description: 'Test scenario tags'
         required: false
@@ -49,6 +53,7 @@ jobs:
     - uses: actions/upload-artifact@v4
       with:
         name: aa-mirror-rs-${{ github.event.inputs.buildLevel }}
+        if: ${{ github.event.inputs.generateBinary }}
         path: ~/work/aa-mirror-rs/aa-mirror-rs/target/${{ matrix.target }}/${{ github.event.inputs.buildLevel }}/aa-mirror-rs
         
     #- name: Run tests
