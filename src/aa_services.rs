@@ -935,7 +935,7 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
                         payload.insert(1, ((ControlMessageType::MESSAGE_CHANNEL_OPEN_REQUEST as u16) & 0xff) as u8);
 
                         let pkt_rsp = Packet {
-                            channel: 0,
+                            channel: ch_id as u8,
                             flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                             final_length: None,
                             payload: payload,

@@ -491,7 +491,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                                 w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
                                 msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: transmit to HU failed", get_name()))?;
                             }
-                            Err(e) => {error!( "{} decrypt_payload error: {:?}", get_name(), e);},
+                            Err(e) => {error!( "{} encrypt_payload error: {:?}", get_name(), e);},
                         }
                     }
                 }
@@ -864,7 +864,7 @@ pub async fn ch_proxy(
                 error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
             }
         }
-        info!( "{} CMD OPEN_CHANNEL will be done next",get_name());
+        /*info!( "{} CMD OPEN_CHANNEL will be done next",get_name());
         tokio::time::sleep(Duration::from_millis(600)).await;//reconfiguration time for HU
         //Open CH for all
         //all_ch_open.status= CommandState::InProgress;
@@ -887,8 +887,8 @@ pub async fn ch_proxy(
             if let Err(_) = srv_senders[idx].send(pkt_rsp).await{
                 error!( "{} custom command send error",get_name());
             };
-        }
-        /*info!( "{} Sending AudioFocus request...",get_name());
+        }*/
+        info!( "{} Sending AudioFocus request...",get_name());
         let mut focus_req= AudioFocusRequestNotification::new();
         focus_req.set_request(AudioFocusRequestType::AUDIO_FOCUS_GAIN);
 
@@ -904,7 +904,7 @@ pub async fn ch_proxy(
         };
         if let Err(_) = tx_srv.send(pkt_rsp).await{
             error!( "{} tls proxy send error",get_name());
-        };*/
+        };
 
     }
     else {
@@ -979,7 +979,30 @@ pub async fn ch_proxy(
                         info!( "{} AUDIO_FOCUS_STATE received is: {:?}",get_name(), msg.focus_state());
                         if msg.focus_state() == AudioFocusStateType::AUDIO_FOCUS_STATE_GAIN
                         {
+                            info!( "{} CMD OPEN_CHANNEL will be done next",get_name());
+                            tokio::time::sleep(Duration::from_millis(600)).await; //reconfiguration time for HU
+                            //Open CH for all
+                            //all_ch_open.status= CommandState::InProgress;
+                            for (idx, _) in srv_senders.iter().enumerate()
+                            {
+                                info!( "{} Send custom CMD_OPEN_CH for ch {}",get_name(), channel_status[idx].ch_id);
+                                let mut cmd_req = CustomCommandMessage::new();
+                                cmd_req.set_cmd(CustomCommand::CMD_OPEN_CH);
 
+                                let mut payload: Vec<u8> = cmd_req.write_to_bytes()?;
+                                payload.insert(0, ((MESSAGE_CUSTOM_CMD as u16) >> 8) as u8);
+                                payload.insert(1, ((MESSAGE_CUSTOM_CMD as u16) & 0xff) as u8);
+                                let pkt_rsp = Packet {
+                                    channel: (channel_status[idx].ch_id) as u8,
+                                    flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                                    final_length: None,
+                                    payload: payload.clone(),
+                                };
+                                channel_status[idx].open_ch_cmd = CommandState::InProgress;
+                                if let Err(_) = srv_senders[idx].send(pkt_rsp).await{
+                                    error!( "{} custom command send error",get_name());
+                                };
+                            }
                         }
 
                     }
