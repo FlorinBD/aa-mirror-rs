@@ -7,7 +7,7 @@ on:
     #branches: [ "main" ]
   workflow_dispatch:
     inputs:
-      builLevel:
+      buildLevel:
         description: 'Build level'
         required: true
         default: 'release'
@@ -41,14 +41,14 @@ jobs:
         rustup target add aarch64-unknown-linux-gnu
         
     - name: Build Debug
-      if: ${{ contains(github.event.inputs.builLevel, 'debug') }}
+      if: ${{ contains(github.event.inputs.buildLevel, 'debug') }}
       run: cargo build --verbose --target aarch64-unknown-linux-gnu
     - name: Build Release
       if: ${{ github.event.inputs.builLevel }} == 'release'
       run: cargo build --release --verbose --target ${{ matrix.target }}
     - uses: actions/upload-artifact@v4
       with:
-        name: aa-mirror-rs-${{ github.event.inputs.builLevel }}
+        name: aa-mirror-rs-${{ github.event.inputs.buildLevel }}
         path: ~/work/aa-mirror-rs/aa-mirror-rs/target/${{ matrix.target }}/${{ github.event.inputs.builLevel }}/aa-mirror-rs
         
     #- name: Run tests
