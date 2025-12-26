@@ -39,17 +39,16 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu libc6-dev-arm64-cross
         rustup target add aarch64-unknown-linux-gnu
-    - name: Build Debug
+    - if: contains(['debug'],${{ github.event.inputs.builLevel }})
+      name: Build Debug
       run: cargo build --verbose --target aarch64-unknown-linux-gnu
-    - name: Build Release
+    - if: contains(['release'],${{ github.event.inputs.builLevel }})
+      name: Build Release
       run: cargo build --release --verbose --target ${{ matrix.target }}
     - uses: actions/upload-artifact@v4
       with:
-        name: app-debug
-        path: ~/work/aa-mirror-rs/aa-mirror-rs/target/${{ matrix.target }}/debug/aa-mirror-rs
-    - uses: actions/upload-artifact@v4
-      with:
-        name: app-release
-        path: ~/work/aa-mirror-rs/aa-mirror-rs/target/${{ matrix.target }}/release/aa-mirror-rs
+        name: aa-mirror-rs-${{ github.event.inputs.builLevel }}
+        path: ~/work/aa-mirror-rs/aa-mirror-rs/target/${{ matrix.target }}/${{ github.event.inputs.builLevel }}/aa-mirror-rs
+        
     #- name: Run tests
       #run: cargo test --verbose --target aarch64-unknown-linux-gnu
