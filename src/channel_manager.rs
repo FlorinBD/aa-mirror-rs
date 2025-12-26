@@ -959,6 +959,7 @@ pub async fn ch_proxy(
                         if msg.focus_state() == AudioFocusStateType::AUDIO_FOCUS_STATE_GAIN
                         {
                             info!( "{} CMD OPEN_CHANNEL will be done next",get_name());
+                            tokio::time::sleep(Duration::from_millis(500)).await;//reconfiguration time for HU
                             //Open CH for all
                             //all_ch_open.status= CommandState::InProgress;
                             for (idx,_) in srv_senders.iter().enumerate()
