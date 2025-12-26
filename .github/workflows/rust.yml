@@ -49,7 +49,7 @@ jobs:
     - uses: actions/upload-artifact@v4
       with:
         name: aa-mirror-rs-${{ github.event.inputs.buildLevel }}
-        path: ~/work/aa-mirror-rs/aa-mirror-rs/target/${{ matrix.target }}/${{ github.event.inputs.builLevel }}/aa-mirror-rs
+        path: ~/work/aa-mirror-rs/aa-mirror-rs/target/${{ matrix.target }}/${{ github.event.inputs.buildLevel }}/aa-mirror-rs
         
     #- name: Run tests
       #run: cargo test --verbose --target aarch64-unknown-linux-gnu
