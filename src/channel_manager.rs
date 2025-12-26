@@ -5,6 +5,7 @@ use simplelog::*;
 use std::collections::VecDeque;
 use std::{fmt};
 use std::cmp::PartialEq;
+use std::ffi::CString;
 use std::io::{Read, Write};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -216,6 +217,7 @@ pub async fn pkt_debug(
     hexdump: HexdumpLevel,
     hex_requested: HexdumpLevel,
     pkt: &Packet,
+    source:String,
 ) -> Result<()> {
     // don't run further if we are not in Debug mode
     if !log_enabled!(Level::Debug) {
@@ -231,7 +233,7 @@ pub async fn pkt_debug(
 
     // trying to obtain an Enum from message_id
     let control = protos::ControlMessageType::from_i32(message_id);
-    debug!("message_id = {:04X}, {:?}", message_id, control);
+    debug!("{}> ch: {} flags: {:04X} message_id = {:04X}, {:?}",source, pkt.channel,pkt.flags, message_id, control);
     if hex_requested >= hexdump {
         debug!("{} {:?} {}", get_name(), hexdump, pkt);
     }
@@ -391,6 +393,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                                     HexdumpLevel::DecryptedInput,
                                     dmp_level,
                                     &msg,
+                                    "HU".parse().unwrap()
                                 ).await;
                                 if let Err(_) = srv_tx.send(msg).await{
                                     error!( "{} tls proxy send to service error",get_name());
@@ -402,14 +405,14 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                 }
                 else
                 {
-                    let _ = pkt_debug(HexdumpLevel::DecryptedInput, dmp_level, &msg, ).await;
+                    let _ = pkt_debug(HexdumpLevel::DecryptedInput, dmp_level, &msg, "HU".parse().unwrap()).await;
                     // message_id is the first 2 bytes of payload
                     let message_id: i32 = u16::from_be_bytes(msg.payload[0..=1].try_into()?).into();
                     if !ssl_handshake_done && (protos::ControlMessageType::from_i32(message_id).unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) == MESSAGE_ENCAPSULATED_SSL)
                     {
                         // doing SSL handshake
                             //Step1: parse client hello
-                            let _ = pkt_debug(HexdumpLevel::RawInput, dmp_level, &msg).await;
+                            let _ = pkt_debug(HexdumpLevel::RawInput, dmp_level, &msg, "HU".parse().unwrap()).await;
                             msg.ssl_decapsulate_write(&mut mem_buf).await?;
                             ssl_check_failure(server.accept())?;
                             info!(
@@ -421,12 +424,12 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                             );
                             // Step2: send server hello
                             let pkt = ssl_encapsulate(mem_buf.clone()).await?;
-                            let _ = pkt_debug(HexdumpLevel::RawOutput, dmp_level, &pkt).await;
+                            let _ = pkt_debug(HexdumpLevel::RawOutput, dmp_level, &pkt,"MD".parse().unwrap()).await;
                             pkt.transmit(&mut hu_wr).await.with_context(|| format!("{}: transmit failed", get_name()))?;
 
                             //Step3: ClientKeyExchange
                             let pkt = hu_rx.recv().await.ok_or("hu reader channel hung up")?;
-                            let _ = pkt_debug(HexdumpLevel::RawInput, dmp_level, &pkt).await;
+                            let _ = pkt_debug(HexdumpLevel::RawInput, dmp_level, &pkt, "HU".parse().unwrap()).await;
                             pkt.ssl_decapsulate_write(&mut mem_buf).await?;
                             ssl_check_failure(server.accept())?;
                             info!(
@@ -446,7 +449,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                             }
                             //Step4: Change Cipher spec finished
                             let pkt = ssl_encapsulate(mem_buf.clone()).await?;
-                            let _ = pkt_debug(HexdumpLevel::RawOutput, dmp_level, &pkt).await;
+                            let _ = pkt_debug(HexdumpLevel::RawOutput, dmp_level, &pkt, "MD".parse().unwrap()).await;
                             pkt.transmit(&mut hu_wr).await.with_context(|| format!("{}: transmit failed", get_name()))?;
                     }
                     else {
@@ -483,6 +486,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                             HexdumpLevel::DecryptedOutput,
                             dmp_level,
                             &msg,
+                            "MD".parse().unwrap()
                         ).await;
                         match msg.encrypt_payload(&mut mem_buf, &mut server).await {
                             Ok(_) => {
@@ -500,6 +504,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                         HexdumpLevel::DecryptedOutput,
                         dmp_level,
                         &msg,
+                        "MD".parse().unwrap()
                     ).await;
                     // Increment byte counters for statistics
                     // fixme: compute final_len for precise stats
