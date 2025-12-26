@@ -7,14 +7,13 @@ on:
     #branches: [ "main" ]
   workflow_dispatch:
     inputs:
-      logLevel:
-        description: 'Log level'
+      builLevel:
+        description: 'Build level'
         required: true
-        default: 'warning'
+        default: 'release'
         type: choice
         options:
-        - info
-        - warning
+        - release
         - debug
       tags:
         description: 'Test scenario tags'
