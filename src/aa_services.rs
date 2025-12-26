@@ -2,7 +2,6 @@
 use simplelog::*;
 use std::fmt;
 use std::io::{Read, Write};
-use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::time::timeout;
@@ -13,7 +12,6 @@ use ffmpeg_sidecar::event::{FfmpegEvent, LogLevel};
 // protobuf stuff:
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use crate::aa_services::protos::navigation_maneuver::NavigationType::*;
-use crate::aa_services::protos::auth_response::Status::*;
 use crate::aa_services::protos::Config as ChConfig;
 use crate::aa_services::protos::ConfigStatus;
 use crate::aa_services::protos::ConfigStatus::*;
@@ -27,12 +25,12 @@ use crate::aa_services::GalVerificationVendorExtensionMessageId::*;
 use crate::aa_services::SensorMessageId::*;
 use crate::aa_services::SensorType::*;
 use crate::aa_services::MediaCodecType::*;
-use protobuf::{Enum, EnumOrUnknown, Message, MessageDyn};
+use protobuf::{Message};
 use tokio_uring::net::{TcpStream, TcpListener};
 use protos::*;
 use protos::ControlMessageType::{self, *};
 use crate::channel_manager::{Packet, ENCRYPTED, FRAME_TYPE_CONTROL, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
-use crate::config::{TCP_DHU_PORT, TCP_VIDEO_PORT};
+use crate::config::{TCP_VIDEO_PORT};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 

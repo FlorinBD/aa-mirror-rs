@@ -3,7 +3,7 @@ use log::log_enabled;
 use openssl::ssl::{ErrorCode, Ssl, SslContextBuilder, SslFiletype, SslMethod};
 use simplelog::*;
 use std::collections::VecDeque;
-use std::{fmt, mem, thread};
+use std::{fmt};
 use std::cmp::PartialEq;
 use std::io::{Read, Write};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -22,11 +22,9 @@ use crate::channel_manager::protos::auth_response::Status::*;
 use crate::channel_manager::protos::*;
 use crate::channel_manager::AudioStreamType::*;
 use crate::channel_manager::ByeByeReason::USER_SELECTION;
-use crate::channel_manager::MediaMessageId::*;
-use crate::channel_manager::SensorMessageId::*;
 use crate::channel_manager::MessageStatus;
 use protobuf::text_format::print_to_string_pretty;
-use protobuf::{Enum, EnumOrUnknown, Message, MessageDyn};
+use protobuf::{Enum, Message, MessageDyn};
 use tokio::sync::mpsc;
 use protos::ControlMessageType::{self, *};
 use crate::aa_services::{VideoCodecResolution::*, VideoFPS::*, AudioStream::*, VideoConfig, AudioConfig, AudioChConfiguration, MediaCodec, MediaCodec::*, AudioStream, ServiceType, CommandState, ServiceStatus, th_bluetooth};
@@ -618,7 +616,7 @@ fn get_service_index(arr:&Vec<ServiceStatus>, ch:i32)->usize
 
 
 ///Return ch index if OpenCh command is not already done
-fn must_open_ch(arr:&Vec<ServiceStatus>, mut ch_open_done: &CmdStatus) ->(usize, bool)
+fn must_open_ch(arr:&Vec<ServiceStatus>, ch_open_done: &CmdStatus) ->(usize, bool)
 {
 
     if (ch_open_done.status == CommandState::Done) || (ch_open_done.status == CommandState::NotDone)
@@ -656,7 +654,7 @@ pub async fn ch_proxy(
    // waiting for initial version frame (HU is starting transmission)
     info!( "{} Waiting for HU version request...",get_name());
     //let pkt = rx_hu.recv().await.ok_or("reader channel hung up")?;
-    let mut pkt = rx_srv.recv().await.ok_or("rx_srv channel hung up")?;
+    let pkt = rx_srv.recv().await.ok_or("rx_srv channel hung up")?;
     let chk = check_control_msg_id(MESSAGE_VERSION_REQUEST,&pkt);
     match chk {
         Ok(_v) => info!( "{} HU version request received, sending VersionResponse back...",get_name()),
@@ -687,7 +685,7 @@ pub async fn ch_proxy(
 
 
     info!( "{} Waiting for HU MESSAGE_AUTH_COMPLETE...",get_name());
-    let mut pkt = rx_srv.recv().await.ok_or("rx_srv channel hung up")?;
+    let pkt = rx_srv.recv().await.ok_or("rx_srv channel hung up")?;
     let chk = check_control_msg_id(MESSAGE_AUTH_COMPLETE,&pkt);
     match chk {
         Ok(_v) => info!( "{} MESSAGE_AUTH_COMPLETE received",get_name()),
@@ -731,7 +729,7 @@ pub async fn ch_proxy(
     };
 
     info!( "{} Waiting for HU MESSAGE_SERVICE_DISCOVERY_RESPONSE...",get_name());
-    let mut pkt = rx_srv.recv().await.ok_or("rx_srv channel hung up")?;
+    let pkt = rx_srv.recv().await.ok_or("rx_srv channel hung up")?;
     let chk = check_control_msg_id(MESSAGE_SERVICE_DISCOVERY_RESPONSE,&pkt);
     match chk {
         Ok(_v) => info!( "{} MESSAGE_SERVICE_DISCOVERY_RESPONSE received",get_name()),

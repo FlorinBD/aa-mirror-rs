@@ -7,8 +7,6 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use tokio::io::copy_bidirectional;
-use tokio::net::TcpStream as TokioTcpStream;
 use tokio::sync::broadcast::Sender as BroadcastSender;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::{mpsc, Mutex, Notify};
@@ -36,8 +34,6 @@ pub const TCP_CLIENT_TIMEOUT: Duration = Duration::new(30, 0);
 
 use crate::config::{Action, SharedConfig};
 use crate::config::{TCP_DHU_PORT, TCP_SERVER_PORT};
-use crate::ev::spawn_ev_client_task;
-use crate::ev::EvTaskCommand;
 use crate::channel_manager::{endpoint_reader,ch_proxy, packet_tls_proxy};
 use crate::channel_manager::Packet;
 use crate::usb_stream::{UsbStreamRead, UsbStreamWrite};
