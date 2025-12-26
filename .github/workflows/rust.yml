@@ -51,9 +51,9 @@ jobs:
       if: ${{ github.event.inputs.buildLevel == 'release' }}
       run: cargo build --release --verbose --target ${{ matrix.target }}
     - uses: actions/upload-artifact@v4
+      if: ${{ github.event.inputs.generateBinary }}
       with:
         name: aa-mirror-rs-${{ github.event.inputs.buildLevel }}
-        if: ${{ github.event.inputs.generateBinary }}
         path: ~/work/aa-mirror-rs/aa-mirror-rs/target/${{ matrix.target }}/${{ github.event.inputs.buildLevel }}/aa-mirror-rs
         
     #- name: Run tests
