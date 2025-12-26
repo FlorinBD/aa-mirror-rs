@@ -158,8 +158,7 @@ pub async fn th_sensor_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Re
                 if let Ok(msg) = CustomCommandMessage::parse_from_bytes(&data) {
                     if msg.cmd() == CustomCommand::CMD_OPEN_CH
                     {
-                        //not available for SensorSource
-                        /*let mut open_req = ChannelOpenRequest::new();
+                        let mut open_req = ChannelOpenRequest::new();
                         open_req.set_priority(0);
                         open_req.set_service_id(ch_id);
                         let mut payload: Vec<u8> = open_req.write_to_bytes().expect("serialization failed");
@@ -172,7 +171,7 @@ pub async fn th_sensor_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Re
                             final_length: None,
                             payload: payload,
                         };
-                        tx_srv.send(pkt_rsp).await.expect("TODO: panic message");*/
+                        tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
                     }
                 }
                 else {

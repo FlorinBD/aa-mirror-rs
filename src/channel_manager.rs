@@ -865,7 +865,7 @@ pub async fn ch_proxy(
             }
         }
         info!( "{} CMD OPEN_CHANNEL will be done next",get_name());
-        tokio::time::sleep(Duration::from_millis(200)).await;//reconfiguration time for HU
+        tokio::time::sleep(Duration::from_millis(600)).await;//reconfiguration time for HU
         //Open CH for all
         //all_ch_open.status= CommandState::InProgress;
         for (idx,_) in srv_senders.iter().enumerate()
