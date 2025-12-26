@@ -45,6 +45,6 @@ jobs:
     - uses: actions/upload-artifact@v4
       with:
         name: binary-artifact
-        path: target/release/aa-mirror-rs
+        path: ~/target/release/aa-mirror-rs
     #- name: Run tests
       #run: cargo test --verbose --target aarch64-unknown-linux-gnu
