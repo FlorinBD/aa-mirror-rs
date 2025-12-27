@@ -1216,6 +1216,7 @@ enum ConfigStatus {
 
 enum CustomCommand{
     CMD_OPEN_CH=1;
+    CMD_SETUP_CH=2;
 }
 
 enum ControlMessageType {

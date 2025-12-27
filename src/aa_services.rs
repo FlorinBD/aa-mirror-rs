@@ -901,7 +901,7 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
                         error!( "{}, channel {:?}: Wrong message status received", get_name(), pkt.channel);
                     }
                     else {
-                        let mut cfg_req= Setup::new();
+                        /*let mut cfg_req= Setup::new();
                         cfg_req.set_type(MediaCodecType::MEDIA_CODEC_VIDEO_H264_BP);
 
                         let mut payload: Vec<u8>=cfg_req.write_to_bytes().expect("serialization failed");
@@ -914,7 +914,7 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
                             final_length: None,
                             payload: payload,
                         };
-                        tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+                        tx_srv.send(pkt_rsp).await.expect("TODO: panic message");*/
                     }
                 }
                 else {
@@ -944,6 +944,23 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
                         if let Err(_) = tx_srv.send(pkt_rsp).await{
                             error!( "{} response send error",get_name());
                         };
+                    }
+                    else if msg.cmd() == CustomCommand::CMD_SETUP_CH
+                    {
+                        let mut cfg_req= Setup::new();
+                        cfg_req.set_type(MediaCodecType::MEDIA_CODEC_VIDEO_H264_BP);
+
+                        let mut payload: Vec<u8>=cfg_req.write_to_bytes().expect("serialization failed");
+                        payload.insert(0,((MediaMessageId::MEDIA_MESSAGE_SETUP as u16) >> 8) as u8);
+                        payload.insert( 1,((MediaMessageId::MEDIA_MESSAGE_SETUP as u16) & 0xff) as u8);
+
+                        let pkt_rsp = Packet {
+                            channel: ch_id as u8,
+                            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                            final_length: None,
+                            payload: payload,
+                        };
+                        tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
                     }
                 }
                 else {
@@ -1137,20 +1154,7 @@ pub async fn th_media_sink_audio_guidance(ch_id: i32, tx_srv: Sender<Packet>, mu
                         error!( "{}, channel {:?}: Wrong message status received", get_name(), pkt.channel);
                     }
                     else {
-                        let mut cfg_req= Setup::new();
-                        cfg_req.set_type(MEDIA_CODEC_VIDEO_H264_BP);
-
-                        let mut payload: Vec<u8>=cfg_req.write_to_bytes().expect("serialization failed");
-                        payload.insert(0,((MEDIA_MESSAGE_SETUP as u16) >> 8) as u8);
-                        payload.insert( 1,((MEDIA_MESSAGE_SETUP as u16) & 0xff) as u8);
-
-                        let pkt_rsp = Packet {
-                            channel: ch_id as u8,
-                            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                            final_length: None,
-                            payload: payload,
-                        };
-                        tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+                       
                     }
                 }
                 else {
@@ -1164,7 +1168,7 @@ pub async fn th_media_sink_audio_guidance(ch_id: i32, tx_srv: Sender<Packet>, mu
                 if let Ok(msg) = CustomCommandMessage::parse_from_bytes(&data) {
                     if msg.cmd() == CustomCommand::CMD_OPEN_CH
                     {
-                        /*let mut open_req = ChannelOpenRequest::new();
+                        let mut open_req = ChannelOpenRequest::new();
                         open_req.set_priority(0);
                         open_req.set_service_id(ch_id);
                         let mut payload: Vec<u8> = open_req.write_to_bytes().expect("serialization failed");
@@ -1179,7 +1183,24 @@ pub async fn th_media_sink_audio_guidance(ch_id: i32, tx_srv: Sender<Packet>, mu
                         };
                         if let Err(_) = tx_srv.send(pkt_rsp).await{
                             error!( "{} response send error",get_name());
-                        };*/
+                        };
+                    }
+                    else if msg.cmd() == CustomCommand::CMD_SETUP_CH
+                    {
+                        let mut cfg_req= Setup::new();
+                        cfg_req.set_type(MediaCodecType::MEDIA_CODEC_AUDIO_PCM);
+
+                        let mut payload: Vec<u8>=cfg_req.write_to_bytes().expect("serialization failed");
+                        payload.insert(0,((MediaMessageId::MEDIA_MESSAGE_SETUP as u16) >> 8) as u8);
+                        payload.insert( 1,((MediaMessageId::MEDIA_MESSAGE_SETUP as u16) & 0xff) as u8);
+
+                        let pkt_rsp = Packet {
+                            channel: ch_id as u8,
+                            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                            final_length: None,
+                            payload: payload,
+                        };
+                        tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
                     }
                 }
                 else {
@@ -1244,7 +1265,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, tx_srv: Sender<Packet>, m
                         error!( "{}, channel {:?}: Wrong message status received", get_name(), pkt.channel);
                     }
                     else {
-                        let mut cfg_req= Setup::new();
+                        /*let mut cfg_req= Setup::new();
                         cfg_req.set_type(MEDIA_CODEC_VIDEO_H264_BP);
 
                         let mut payload: Vec<u8>=cfg_req.write_to_bytes().expect("serialization failed");
@@ -1257,7 +1278,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, tx_srv: Sender<Packet>, m
                             final_length: None,
                             payload: payload,
                         };
-                        tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+                        tx_srv.send(pkt_rsp).await.expect("TODO: panic message");*/
                     }
                 }
                 else {
@@ -1271,7 +1292,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, tx_srv: Sender<Packet>, m
                 if let Ok(msg) = CustomCommandMessage::parse_from_bytes(&data) {
                     if msg.cmd() == CustomCommand::CMD_OPEN_CH
                     {
-                        /*let mut open_req = ChannelOpenRequest::new();
+                        let mut open_req = ChannelOpenRequest::new();
                         open_req.set_priority(0);
                         open_req.set_service_id(ch_id);
                         let mut payload: Vec<u8> = open_req.write_to_bytes().expect("serialization failed");
@@ -1286,7 +1307,24 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, tx_srv: Sender<Packet>, m
                         };
                         if let Err(_) = tx_srv.send(pkt_rsp).await{
                             error!( "{} response send error",get_name());
-                        };*/
+                        };
+                    }
+                    else if msg.cmd() == CustomCommand::CMD_SETUP_CH
+                    {
+                        let mut cfg_req= Setup::new();
+                        cfg_req.set_type(MediaCodecType::MEDIA_CODEC_AUDIO_PCM);
+
+                        let mut payload: Vec<u8>=cfg_req.write_to_bytes().expect("serialization failed");
+                        payload.insert(0,((MediaMessageId::MEDIA_MESSAGE_SETUP as u16) >> 8) as u8);
+                        payload.insert( 1,((MediaMessageId::MEDIA_MESSAGE_SETUP as u16) & 0xff) as u8);
+
+                        let pkt_rsp = Packet {
+                            channel: ch_id as u8,
+                            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                            final_length: None,
+                            payload: payload,
+                        };
+                        tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
                     }
                 }
                 else {
