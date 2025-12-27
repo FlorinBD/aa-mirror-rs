@@ -652,9 +652,6 @@ pub async fn ch_proxy(
     mut tx_srv: Sender<Packet>,
 ) -> Result<()> {
     info!( "{} Entering channel manager",get_name());
-
-
-    // initial phase: passing version and doing SSL handshake
    // waiting for initial version frame (HU is starting transmission)
     info!( "{} Waiting for HU version request...",get_name());
     //let pkt = rx_hu.recv().await.ok_or("reader channel hung up")?;
@@ -686,7 +683,6 @@ pub async fn ch_proxy(
     if let Err(_) = tx_srv.send(pkt_rsp).await{
         error!( "{} tls proxy send error",get_name());
     };
-
 
     info!( "{} Waiting for HU MESSAGE_AUTH_COMPLETE...",get_name());
     let pkt = rx_srv.recv().await.ok_or("rx_srv channel hung up")?;

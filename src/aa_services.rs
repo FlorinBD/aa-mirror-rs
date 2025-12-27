@@ -66,6 +66,7 @@ pub struct ServiceStatus {
     pub open_ch_cmd: CommandState,
     pub service_type: ServiceType,
     pub ch_id:i32,
+    ///Send Setup and all other subsequent commands
     pub enabled:bool,
 }
 
@@ -1154,7 +1155,7 @@ pub async fn th_media_sink_audio_guidance(ch_id: i32, tx_srv: Sender<Packet>, mu
                         error!( "{}, channel {:?}: Wrong message status received", get_name(), pkt.channel);
                     }
                     else {
-                       
+
                     }
                 }
                 else {
@@ -1555,7 +1556,6 @@ pub async fn th_vendor_extension(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
         format!("<i><bright-black> aa-mirror/{}: </>", dev)
     }
 }
-
 pub async fn th_bluetooth(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>)-> Result<()>{
     info!( "{}: Starting...", get_name());
     loop {
