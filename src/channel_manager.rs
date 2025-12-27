@@ -254,6 +254,7 @@ pub async fn pkt_debug(
         MESSAGE_CHANNEL_OPEN_REQUEST => &ChannelOpenRequest::parse_from_bytes(data)?,
         MESSAGE_AUDIO_FOCUS_REQUEST => &AudioFocusRequestNotification::parse_from_bytes(data)?,
         MESSAGE_AUDIO_FOCUS_NOTIFICATION => &AudioFocusNotification::parse_from_bytes(data)?,
+        MEDIA_MESSAGE_SETUP =>&Setup::parse_from_bytes(data)?,
         _ => return Ok(()),
     };
     // show pretty string from the message
