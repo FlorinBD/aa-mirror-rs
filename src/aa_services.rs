@@ -884,6 +884,7 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
                                                     0xEB, 0xAE, 0xBA, 0xEB, 0xAE, 0xBA, 0xEB, 0xAE, 0xBA, 0xEB, 0xAE, 0xBA, 0xEB, 0xAE, 0xBA, 0xEB, 0xAF];
     info!( "{}: Starting...", get_name());
     let mut video_stream_started:bool=false;
+    let mut session_id=1;
     loop {
         let pkt=  rx_srv.recv().await.ok_or("service reader channel hung up")?;
         if pkt.channel !=ch_id as u8
@@ -976,6 +977,40 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
                 {
                     info!( "{}, channel {:?}: Message status: {:?}", get_name(), pkt.channel, rsp.status());
                     if rsp.status() == ConfigStatus::STATUS_READY
+                    {
+                        info!( "{}, channel {:?}: Starting START command", get_name(), pkt.channel);
+                        session_id +=1;
+                        let mut start_req = Start::new();
+                        start_req.set_session_id(session_id);
+                        start_req.set_configuration_index(0);
+                        let mut payload: Vec<u8> = start_req.write_to_bytes().expect("serialization failed");
+                        payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_START as u16) >> 8) as u8);
+                        payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_START as u16) & 0xff) as u8);
+
+                        let pkt_rsp = Packet {
+                            channel: ch_id as u8,
+                            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                            final_length: None,
+                            payload: payload,
+                        };
+                        if let Err(_) = tx_srv.send(pkt_rsp).await{
+                            error!( "{} response send error",get_name());
+                        };
+                    }
+                }
+                else
+                {
+                    error!( "{}, channel {:?}: Unable to parse received message", get_name(), pkt.channel);
+                }
+            }
+            else if message_id == MediaMessageId::MEDIA_MESSAGE_VIDEO_FOCUS_NOTIFICATION  as i32
+            {
+                info!("{} Received {} message", ch_id.to_string(), message_id);
+                let data = &pkt.payload[2..]; // start of message data, without message_id
+                if  let Ok(rsp) = VideoFocusNotification::parse_from_bytes(&data)
+                {
+                    info!( "{}, channel {:?}: Message status: {:?}", get_name(), pkt.channel, rsp.status());
+                    if rsp.focus() == VideoFocusMode::VIDEO_FOCUS_NATIVE
                     {
                         info!( "{}, channel {:?}: Starting video capture", get_name(), pkt.channel);
                         if vcfg.resolution == VideoCodecResolution::Video_800x480
