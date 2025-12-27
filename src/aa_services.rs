@@ -1497,7 +1497,7 @@ pub async fn th_input_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, m
                 if let Ok(msg) = CustomCommandMessage::parse_from_bytes(&data) {
                     if msg.cmd() == CustomCommand::CMD_OPEN_CH
                     {
-                        /*let mut open_req = ChannelOpenRequest::new();
+                        let mut open_req = ChannelOpenRequest::new();
                         open_req.set_priority(0);
                         open_req.set_service_id(ch_id);
                         let mut payload: Vec<u8> = open_req.write_to_bytes().expect("serialization failed");
@@ -1512,7 +1512,7 @@ pub async fn th_input_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, m
                         };
                         if let Err(_) = tx_srv.send(pkt_rsp).await{
                             error!( "{} response send error",get_name());
-                        };*/
+                        };
                     }
                 }
                 else {
@@ -1559,7 +1559,7 @@ pub async fn th_vendor_extension(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                 if let Ok(msg) = CustomCommandMessage::parse_from_bytes(&data) {
                     if msg.cmd() == CustomCommand::CMD_OPEN_CH
                     {
-                        /*let mut open_req = ChannelOpenRequest::new();
+                        let mut open_req = ChannelOpenRequest::new();
                         open_req.set_priority(0);
                         open_req.set_service_id(ch_id);
                         let mut payload: Vec<u8> = open_req.write_to_bytes().expect("serialization failed");
@@ -1574,7 +1574,7 @@ pub async fn th_vendor_extension(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         };
                         if let Err(_) = tx_srv.send(pkt_rsp).await{
                             error!( "{} response send error",get_name());
-                        };*/
+                        };
                     }
                 }
                 else {
@@ -1621,7 +1621,7 @@ pub async fn th_bluetooth(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut 
                 if let Ok(msg) = CustomCommandMessage::parse_from_bytes(&data) {
                     if msg.cmd() == CustomCommand::CMD_OPEN_CH
                     {
-                        /*let mut open_req = ChannelOpenRequest::new();
+                        let mut open_req = ChannelOpenRequest::new();
                         open_req.set_priority(0);
                         open_req.set_service_id(ch_id);
                         let mut payload: Vec<u8> = open_req.write_to_bytes().expect("serialization failed");
@@ -1636,7 +1636,7 @@ pub async fn th_bluetooth(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut 
                         };
                         if let Err(_) = tx_srv.send(pkt_rsp).await{
                             error!( "{} response send error",get_name());
-                        };*/
+                        };
                     }
                 }
                 else {

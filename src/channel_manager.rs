@@ -620,7 +620,7 @@ fn get_service_index(arr:&Vec<ServiceStatus>, ch:i32)->usize
     255
 }
 
-///Return ch index if OpenCh command is not already done
+///Return true when all channels have been opened
 fn all_ch_opened(arr:&Vec<ServiceStatus>, ch_open_done: CmdStatus) ->bool
 {
 
@@ -916,23 +916,16 @@ pub async fn ch_proxy(
                 srv_senders[idx].send(pkt).await.expect("Error sending message to service");
                 //check channel open cmd done
                 let message_id: i32 = u16::from_be_bytes(ch_data[0..=1].try_into()?).into();
-                let control = protos::ControlMessageType::from_i32(message_id);
-                match control.unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) {
-                    MESSAGE_CHANNEL_OPEN_RESPONSE=>{
-                        let data = &ch_data[2..]; // start of message data, without message_id
-                        if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
-                            if rsp.status() == MessageStatus::STATUS_SUCCESS
-                            {
-                                channel_status[idx].open_ch_cmd = CommandState::Done;
-                            }
+                if message_id == ControlMessageType::MESSAGE_CHANNEL_OPEN_RESPONSE  as i32
+                {
+                    let data = &ch_data[2..]; // start of message data, without message_id
+                    if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
+                        if rsp.status() == MessageStatus::STATUS_SUCCESS
+                        {
+                            channel_status[idx].open_ch_cmd = CommandState::Done;
                         }
                     }
-                    _=>
-                        {
-                            //we don't care about others ATM
-                        }
                 }
-
             }
             else {
                 error!( "{} Invalid channel {}",get_name(), pkt.channel);
@@ -942,7 +935,7 @@ pub async fn ch_proxy(
             let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
             let control = protos::ControlMessageType::from_i32(message_id);
             match control.unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) {
-                MESSAGE_PING_REQUEST =>{
+                ControlMessageType::MESSAGE_PING_REQUEST =>{
                     let data = &pkt.payload[2..]; // start of message data, without message_id
                     if let Ok(msg) = PingRequest::parse_from_bytes(&data) {
                         let mut pingrsp= PingResponse::new();
@@ -965,7 +958,7 @@ pub async fn ch_proxy(
                     }
 
                 }
-                MESSAGE_AUDIO_FOCUS_NOTIFICATION =>{
+                ControlMessageType::MESSAGE_AUDIO_FOCUS_NOTIFICATION =>{
                     let data = &pkt.payload[2..]; // start of message data, without message_id
                     if let Ok(msg) = AudioFocusNotification::parse_from_bytes(&data) {
                         info!( "{} AUDIO_FOCUS_STATE received is: {:?}",get_name(), msg.focus_state());
