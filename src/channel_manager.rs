@@ -622,7 +622,7 @@ fn get_service_index(arr:&Vec<ServiceStatus>, ch:i32)->usize
 ///Check response of OpenChannel CMD and close the request
 fn check_ch_open_rsp(arr:&Vec<ServiceStatus>,idx:usize, rsp:Vec<u8>)
 {
-    let message_id: i32 = u16::from_be_bytes(rsp[0..=1].into()).into();
+    let message_id: i32 = u16::from_be_bytes(rsp[0..1].into()).into();
     let control = protos::ControlMessageType::from_i32(message_id);
     match control.unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) {
         MESSAGE_CHANNEL_OPEN_RESPONSE=>{
