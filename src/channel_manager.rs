@@ -21,6 +21,7 @@ use tokio_uring::buf::BoundedBuf;
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use crate::channel_manager::protos::auth_response::Status::*;
 use crate::channel_manager::protos::*;
+use crate::channel_manager::protos::Config as ChConfig;
 use crate::channel_manager::AudioStreamType::*;
 use crate::channel_manager::ByeByeReason::USER_SELECTION;
 use crate::channel_manager::MessageStatus;
@@ -257,6 +258,7 @@ pub async fn pkt_debug(
         MESSAGE_AUDIO_FOCUS_NOTIFICATION => &AudioFocusNotification::parse_from_bytes(data)?,
         MEDIA_MESSAGE_SETUP =>&Setup::parse_from_bytes(data)?,
         MEDIA_MESSAGE_START =>&Start::parse_from_bytes(data)?,
+        MEDIA_MESSAGE_CONFIG =>&ChConfig::parse_from_bytes(data)?,
         _ => return Ok(()),
     };
     // show pretty string from the message
@@ -1004,7 +1006,7 @@ pub async fn ch_proxy(
         if all_ch_opened(&channel_status, all_ch_open)
         {
             all_ch_open.status= CommandState::Done;
-            info!( "{} All channels opened, send SETUP cmd for all enabled channels",get_name());
+            /*info!( "{} All channels opened, send SETUP cmd for all enabled channels",get_name());
             for (idx, _) in srv_senders.iter().enumerate()
             {
                 //info!( "{} Send custom CMD_SETUP_CH for ch {}",get_name(), channel_status[idx].ch_id);
@@ -1024,7 +1026,7 @@ pub async fn ch_proxy(
                 if let Err(_) = srv_senders[idx].send(pkt_rsp).await{
                     error!( "{} custom command send error",get_name());
                 };
-            }
+            }*/
 
         }
     }
