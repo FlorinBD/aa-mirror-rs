@@ -130,7 +130,7 @@ impl fmt::Display for ServiceType {
         // fmt::Debug::fmt(self, f)
     }
 }
-pub async fn th_sensor_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>) -> Result<()> {
+pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>) -> Result<()> {
     info!( "{}: Starting...", get_name());
     loop {
         let pkt = rx_srv.recv().await.ok_or("service reader channel hung up")?;
@@ -190,7 +190,7 @@ pub async fn th_sensor_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Re
         format!("<i><bright-black> aa-mirror/{}: </>", dev)
     }
 }
-pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, vcfg:VideoConfig)-> Result<()>{
+pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, vcfg:VideoConfig)-> Result<()>{
     //pre-rendered frames using openh264 lib from a C# app (1 frame out of static 800x480 bmp)
     let wait_screen_config_frame: Vec<u8> = vec![0x00, 0x00, 0x00, 0x01, 0x67, 0x42, 0xC0, 0x1E, 0x8C, 0x8D, 0x40, 0x64, 0x1E, 0x90, 0x0F, 0x08, 0x84, 0x6A, 0x00, 0x00, 0x00, 0x01, 0x68, 0xCE, 0x3C, 0x80];
     let wait_screen_first_frame: Vec<u8> = vec![0x00, 0x00, 0x00, 0x01, 0x65, 0xB8, 0x00, 0x04, 0x00, 0x00, 0x78, 0x8C, 0x50, 0x00, 0x27, 0x1C,
@@ -947,7 +947,7 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
                             error!( "{} response send error",get_name());
                         };
                     }
-                    else if msg.cmd() == CustomCommand::CMD_SETUP_CH
+                    else if (msg.cmd() == CustomCommand::CMD_SETUP_CH) && enabled
                     {
                         let mut cfg_req= Setup::new();
                         cfg_req.set_type(MediaCodecType::MEDIA_CODEC_VIDEO_H264_BP);
@@ -1009,7 +1009,7 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
                 let data = &pkt.payload[2..]; // start of message data, without message_id
                 if  let Ok(rsp) = VideoFocusNotification::parse_from_bytes(&data)
                 {
-                    info!( "{}, channel {:?}: Message status: {:?}", get_name(), pkt.channel, rsp.status());
+                    info!( "{}, channel {:?}: Message status: {:?}", get_name(), pkt.channel, rsp.focus());
                     if rsp.focus() == VideoFocusMode::VIDEO_FOCUS_NATIVE
                     {
                         info!( "{}, channel {:?}: Starting video capture", get_name(), pkt.channel);
@@ -1169,7 +1169,7 @@ pub async fn th_media_sink_video(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
     }
 
 }
-pub async fn th_media_sink_audio_guidance(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, acfg:AudioConfig)-> Result<()>{
+pub async fn th_media_sink_audio_guidance(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, acfg:AudioConfig)-> Result<()>{
     info!( "{}: Starting...", get_name());
     let mut audio_stream_started:bool=false;
     loop {
@@ -1221,7 +1221,7 @@ pub async fn th_media_sink_audio_guidance(ch_id: i32, tx_srv: Sender<Packet>, mu
                             error!( "{} response send error",get_name());
                         };
                     }
-                    else if msg.cmd() == CustomCommand::CMD_SETUP_CH
+                    else if (msg.cmd() == CustomCommand::CMD_SETUP_CH) && enabled
                     {
                         let mut cfg_req= Setup::new();
                         cfg_req.set_type(MediaCodecType::MEDIA_CODEC_AUDIO_PCM);
@@ -1280,7 +1280,7 @@ pub async fn th_media_sink_audio_guidance(ch_id: i32, tx_srv: Sender<Packet>, mu
         format!("<i><bright-black> aa-mirror/{}: </>", dev)
     }
 }
-pub async fn th_media_sink_audio_streaming(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, acfg:AudioConfig)-> Result<()>{
+pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, acfg:AudioConfig)-> Result<()>{
     info!( "{}: Starting...", get_name());
     let mut audio_stream_started:bool=false;
     loop {
@@ -1345,7 +1345,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, tx_srv: Sender<Packet>, m
                             error!( "{} response send error",get_name());
                         };
                     }
-                    else if msg.cmd() == CustomCommand::CMD_SETUP_CH
+                    else if (msg.cmd() == CustomCommand::CMD_SETUP_CH) && enabled
                     {
                         let mut cfg_req= Setup::new();
                         cfg_req.set_type(MediaCodecType::MEDIA_CODEC_AUDIO_PCM);
@@ -1404,7 +1404,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, tx_srv: Sender<Packet>, m
         format!("<i><bright-black> aa-mirror/{}: </>", dev)
     }
 }
-pub async fn th_media_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>)-> Result<()>{
+pub async fn th_media_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>)-> Result<()>{
     info!( "{}: Starting...", get_name());
     loop {
         let pkt = rx_srv.recv().await.ok_or("service reader channel hung up")?;
@@ -1467,7 +1467,7 @@ pub async fn th_media_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Rec
         format!("<i><bright-black> aa-mirror/{}: </>", dev)
     }
 }
-pub async fn th_input_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>)-> Result<()>{
+pub async fn th_input_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>)-> Result<()>{
     info!( "{}: Starting...", get_name());
     loop {
         let pkt = rx_srv.recv().await.ok_or("service reader channel hung up")?;
@@ -1529,7 +1529,7 @@ pub async fn th_input_source(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Rec
         format!("<i><bright-black> aa-mirror/{}: </>", dev)
     }
 }
-pub async fn th_vendor_extension(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>)-> Result<()>{
+pub async fn th_vendor_extension(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>)-> Result<()>{
     info!( "{}: Starting...", get_name());
     loop {
         let pkt = rx_srv.recv().await.ok_or("service reader channel hung up")?;
@@ -1591,7 +1591,7 @@ pub async fn th_vendor_extension(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv:
         format!("<i><bright-black> aa-mirror/{}: </>", dev)
     }
 }
-pub async fn th_bluetooth(ch_id: i32, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>)-> Result<()>{
+pub async fn th_bluetooth(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>)-> Result<()>{
     info!( "{}: Starting...", get_name());
     loop {
         let pkt = rx_srv.recv().await.ok_or("service reader channel hung up")?;
