@@ -17,6 +17,8 @@ pub const TCP_SERVER_PORT: i32 = 5288;
 pub const TCP_DHU_PORT: i32 = 5277;
 pub const TCP_VIDEO_PORT: i32 = 5291;
 pub const TCP_AUDIO_PORT: i32 = 5292;
+///Delay after SDR to allow HU to configure its AV system, codecs, etc
+pub const HU_CONFIG_DELAY_MS: i32 = 600;
 
 pub type SharedConfig = Arc<RwLock<AppConfig>>;
 pub type SharedConfigJson = Arc<RwLock<ConfigJson>>;
