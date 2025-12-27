@@ -619,28 +619,6 @@ fn get_service_index(arr:&Vec<ServiceStatus>, ch:i32)->usize
     255
 }
 
-///Check response of OpenChannel CMD and close the request
-fn check_ch_open_rsp(arr:&Vec<ServiceStatus>,idx:usize, rsp:Vec<u8>)
-{
-    //let message_id: i32 = u16::from_be_bytes(rsp[0..=1].try_into().unwrap()).into();
-    let message_id =((rsp[0] as i32) << 8) | rsp[1] as i32;
-    let control = protos::ControlMessageType::from_i32(message_id);
-    match control.unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) {
-        MESSAGE_CHANNEL_OPEN_RESPONSE=>{
-            let data = &rsp[2..]; // start of message data, without message_id
-            if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
-                if rsp.status() == MessageStatus::STATUS_SUCCESS
-                {
-                    arr[idx].open_ch_cmd = CommandState::Done;
-                }
-            }
-        }
-        _=>
-            {
-                //we don't care about others ATM
-            }
-    }
-}
 ///Return ch index if OpenCh command is not already done
 fn must_open_ch(arr:&Vec<ServiceStatus>, ch_open_done: CmdStatus) ->(usize, bool)
 {
@@ -948,8 +926,8 @@ pub async fn ch_proxy(
             {
                 let ch_data=pkt.payload.to_vec();
                 srv_senders[idx].send(pkt).await.expect("Error sending message to service");
-                check_ch_open_rsp(&channel_status,idx,ch_data);
-                /*let message_id: i32 = u16::from_be_bytes(ch_data[0..=1].try_into()?).into();
+                //check channel open cmd done
+                let message_id: i32 = u16::from_be_bytes(ch_data[0..=1].try_into()?).into();
                 let control = protos::ControlMessageType::from_i32(message_id);
                 match control.unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) {
                     MESSAGE_CHANNEL_OPEN_RESPONSE=>{
@@ -965,7 +943,7 @@ pub async fn ch_proxy(
                         {
                             //we don't care about others ATM
                         }
-                }*/
+                }
 
             }
             else {
