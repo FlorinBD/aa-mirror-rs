@@ -66,6 +66,7 @@ pub struct ServiceStatus {
     pub open_ch_cmd: CommandState,
     pub service_type: ServiceType,
     pub ch_id:i32,
+    pub enabled:bool,
 }
 
 

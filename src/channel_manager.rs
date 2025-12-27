@@ -618,10 +618,29 @@ fn get_service_index(arr:&Vec<ServiceStatus>, ch:i32)->usize
     255
 }
 
-
-
+///Check response of OpenChannel CMD and close the request
+fn check_ch_open_rsp(arr:&Vec<ServiceStatus>,idx:u8, rsp:Vec<u8>)
+{
+    let message_id: i32 = u16::from_be_bytes(rsp[0..=1].try_into()?).into();
+    let control = protos::ControlMessageType::from_i32(message_id);
+    match control.unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) {
+        MESSAGE_CHANNEL_OPEN_RESPONSE=>{
+            let data = &rsp[2..]; // start of message data, without message_id
+            if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
+                if rsp.status() == MessageStatus::STATUS_SUCCESS
+                {
+                    arr[idx].open_ch_cmd = CommandState::Done;
+                }
+            }
+        }
+        _=>
+            {
+                //we don't care about others ATM
+            }
+    }
+}
 ///Return ch index if OpenCh command is not already done
-fn must_open_ch(arr:&Vec<ServiceStatus>, ch_open_done: &CmdStatus) ->(usize, bool)
+fn must_open_ch(arr:&Vec<ServiceStatus>, ch_open_done: CmdStatus) ->(usize, bool)
 {
 
     if (ch_open_done.status == CommandState::Done) || (ch_open_done.status == CommandState::NotDone)
@@ -635,7 +654,7 @@ fn must_open_ch(arr:&Vec<ServiceStatus>, ch_open_done: &CmdStatus) ->(usize, boo
         {
             return (255,false);
         }
-        else if stat.open_ch_cmd == CommandState::NotDone
+        else if (stat.open_ch_cmd == CommandState::NotDone) && stat.enabled
         {
             if next_idx == 255
             {
@@ -759,7 +778,7 @@ pub async fn ch_proxy(
 
             if proto_srv.media_sink_service.is_some()
             {
-                channel_status.push(ServiceStatus{service_type:ServiceType::MediaSink,ch_id,..Default::default()});
+                channel_status.push(ServiceStatus{service_type:ServiceType::MediaSink, ch_id, enabled:true, open_ch_cmd: CommandState::NotDone });
                 if proto_srv.media_sink_service.audio_configs.len()>0
                 {
                     let srv_type=proto_srv.media_sink_service.audio_type();
@@ -832,35 +851,35 @@ pub async fn ch_proxy(
             }
             else if proto_srv.media_source_service.is_some()
             {
-                channel_status.push(ServiceStatus{service_type:ServiceType::MediaSource,ch_id,..Default::default()});
+                channel_status.push(ServiceStatus{service_type:ServiceType::MediaSource,ch_id,enabled:false, open_ch_cmd: CommandState::NotDone});
                 let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                 srv_senders.push(tx);
                 srv_tsk_handles.push(tokio_uring::spawn(th_media_source(ch_id, tx_srv.clone(), rx)));
             }
             else if proto_srv.sensor_source_service.is_some()
             {
-                channel_status.push( ServiceStatus{service_type:ServiceType::SensorSource, open_ch_cmd:CommandState::Done, ch_id});
+                channel_status.push( ServiceStatus{service_type:ServiceType::SensorSource,ch_id, enabled:false, open_ch_cmd: CommandState::NotDone});
                 let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                 srv_senders.push(tx);
                 srv_tsk_handles.push(tokio_uring::spawn(th_sensor_source(ch_id, tx_srv.clone(), rx)));
             }
             else if proto_srv.input_source_service.is_some()
             {
-                channel_status.push(ServiceStatus{service_type:ServiceType::InputSource,ch_id,..Default::default()});
+                channel_status.push(ServiceStatus{service_type:ServiceType::InputSource,ch_id,enabled:false, open_ch_cmd: CommandState::NotDone});
                 let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                 srv_senders.push(tx);
                 srv_tsk_handles.push(tokio_uring::spawn(th_input_source(ch_id, tx_srv.clone(), rx)));
             }
             else if proto_srv.vendor_extension_service.is_some()
             {
-                channel_status.push( ServiceStatus{service_type:ServiceType::VendorExtension,ch_id,..Default::default()});
+                channel_status.push( ServiceStatus{service_type:ServiceType::VendorExtension,ch_id,enabled:false, open_ch_cmd: CommandState::NotDone});
                 let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                 srv_senders.push(tx);
                 srv_tsk_handles.push(tokio_uring::spawn(th_vendor_extension(ch_id, tx_srv.clone(), rx)));
             }
             else if proto_srv.bluetooth_service.is_some()
             {
-                channel_status.push(ServiceStatus{service_type:ServiceType::Bluetooth,ch_id,..Default::default()});
+                channel_status.push(ServiceStatus{service_type:ServiceType::Bluetooth,ch_id,enabled:false, open_ch_cmd: CommandState::NotDone});
                 let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                 srv_senders.push(tx);
                 srv_tsk_handles.push(tokio_uring::spawn(th_bluetooth(ch_id, tx_srv.clone(), rx)));
@@ -916,7 +935,7 @@ pub async fn ch_proxy(
         error!( "{} ServiceDiscoveryResponse couldn't be parsed",get_name());
         return Err(Box::new("ServiceDiscoveryResponse couldn't be parsed")).expect("ServiceDiscoveryResponse");
     }
-    //let mut all_ch_open=CmdStatus{status:CommandState::NotDone};
+    let mut all_ch_open=CmdStatus{status:CommandState::NotDone};
     info!( "{} ServiceDiscovery done, starting AA Mirror loop",get_name());
     loop {
         let mut pkt = rx_srv.recv().await.ok_or("rx_srv channel hung up")?;
@@ -925,8 +944,9 @@ pub async fn ch_proxy(
             let idx=get_service_index(&channel_status, pkt.channel as i32);
             if idx !=255
             {
-                //let ch_data=pkt.payload.to_vec();
+                let ch_data=pkt.payload.to_vec();
                 srv_senders[idx].send(pkt).await.expect("Error sending message to service");
+                check_ch_open_rsp(&channel_status,idx,ch_data);
                 /*let message_id: i32 = u16::from_be_bytes(ch_data[0..=1].try_into()?).into();
                 let control = protos::ControlMessageType::from_i32(message_id);
                 match control.unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) {
@@ -987,8 +1007,8 @@ pub async fn ch_proxy(
                             info!( "{} CMD OPEN_CHANNEL will be done next",get_name());
                             tokio::time::sleep(Duration::from_millis(600)).await; //reconfiguration time for HU
                             //Open CH for all
-                            //all_ch_open.status= CommandState::InProgress;
-                            for (idx, _) in srv_senders.iter().enumerate()
+                            all_ch_open.status= CommandState::InProgress;
+                            /*for (idx, _) in srv_senders.iter().enumerate()
                             {
                                 info!( "{} Send custom CMD_OPEN_CH for ch {}",get_name(), channel_status[idx].ch_id);
                                 let mut cmd_req = CustomCommandMessage::new();
@@ -1007,7 +1027,7 @@ pub async fn ch_proxy(
                                 if let Err(_) = srv_senders[idx].send(pkt_rsp).await{
                                     error!( "{} custom command send error",get_name());
                                 };
-                            }
+                            }*/
                         }
 
                     }
@@ -1020,7 +1040,7 @@ pub async fn ch_proxy(
             };
         }
 
-       /*let (idx, all_open)= must_open_ch(&channel_status,&all_ch_open);
+       let (idx, all_open)= must_open_ch(&channel_status, all_ch_open);
         if idx !=255
         {
             info!( "{} Send custom CMD_OPEN_CH for ch {}",get_name(), channel_status[idx].ch_id);
@@ -1044,7 +1064,7 @@ pub async fn ch_proxy(
         if all_open
         {
             all_ch_open.status= CommandState::Done;
-        }*/
+        }
     }
     return Err(Box::new("proxy main loop ended ok")).expect("TODO");
 }
