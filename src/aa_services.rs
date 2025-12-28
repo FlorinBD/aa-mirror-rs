@@ -3,8 +3,9 @@ use simplelog::*;
 use std::fmt;
 use std::io::{Read, Write};
 use std::time::{Duration, SystemTime};
-use std::sync::mpsc;
-use std::sync::mpsc::{Receiver, Sender};
+use tokio::sync::mpsc::{Receiver, Sender};
+use std::sync::mpsc as std_mpsc;
+//use std::sync::mpsc::{Receiver as std_Receiver, Sender as std_Sender};
 use tokio::time::timeout;
 use tokio_uring::buf::BoundedBuf;
 use ffmpeg_sidecar::command::FfmpegCommand;
@@ -1129,7 +1130,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
     async fn tsk_adb(tx: Sender<Packet>, ch_id: u8) -> Result<()> {
         info!("{}: ADB task started",get_name());
         // Create a channel to receive discovered devices information
-        let (sender, mut receiver) = mpsc::channel::<MDNSDevice>();
+        let (sender, mut receiver) = std_mpsc::channel::<MDNSDevice>();
 
         // Create and start the discovery service
         let mut discovery = MDNSDiscoveryService::new()?;
