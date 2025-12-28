@@ -3,11 +3,13 @@ use simplelog::*;
 use std::fmt;
 use std::io::{Read, Write};
 use std::time::{Duration, SystemTime};
-use tokio::sync::mpsc::{Receiver, Sender};
+use std::sync::mpsc;
+use std::sync::mpsc::{Receiver, Sender};
 use tokio::time::timeout;
 use tokio_uring::buf::BoundedBuf;
 use ffmpeg_sidecar::command::FfmpegCommand;
 use ffmpeg_sidecar::event::{FfmpegEvent, LogLevel};
+use adb_client::mdns::{MDNSDevice, MDNSDiscoveryService};
 
 // protobuf stuff:
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
@@ -1019,8 +1021,8 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         if vcfg.resolution == VideoCodecResolution::Video_800x480
                         {
                             video_stream_started=true;
-                           /* let listener_thread = tokio_uring::spawn(listen_for_connections(tx_srv.clone(),ch_id as u8));
-
+                            let listener_thread = tokio_uring::spawn(tsk_adb(tx_srv.clone(),ch_id as u8));
+                           /*let listener_thread = tokio_uring::spawn(listen_for_connections(tx_srv.clone(),ch_id as u8));
                             // Wait for the listener to start
                             tokio::time::sleep(Duration::from_millis(1000)).await;
                             // Prepare an FFmpeg command with separate outputs for video, audio, and subtitles.
@@ -1123,6 +1125,20 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
     fn get_name() -> String {
         let dev = "MediaSinkService Video";
         format!("<i><bright-black> aa-mirror/{}: </>", dev)
+    }
+    async fn tsk_adb(tx: Sender<Packet>, ch_id: u8) -> Result<()> {
+        info!("{}: ADB task started",get_name());
+        // Create a channel to receive discovered devices information
+        let (sender, mut receiver) = mpsc::channel::<MDNSDevice>();
+
+        // Create and start the discovery service
+        let mut discovery = MDNSDiscoveryService::new()?;
+        discovery.start(sender)?;
+        loop {
+            let device = receiver.recv()?;
+            info!("{}: ADB device found: {}",get_name(), device);
+            tokio::time::sleep(Duration::from_secs(5)).await;
+        }
     }
     async fn listen_for_connections(tx: Sender<Packet>, ch_id: u8) -> Result<()> {
         let bind_addr = format!("0.0.0.0:{}", TCP_VIDEO_PORT).parse().unwrap();

@@ -19,7 +19,7 @@ futures = "0.3.31"
 kobject-uevent = "0.1.1"
 netlink-sys = "0.8.6"
 protobuf = "3.7.1"
-tokio = { version = "1.41.0", features = ["full"] }
+tokio = { version = "1.48.0", features = ["full"] }
 tokio-fd = "0.3.0"
 tokio-uring = "0.5.0"
 mac_address = "1.1.7"
@@ -31,7 +31,8 @@ log = "0.4.22"
 netif = "0.1.6"
 openssl = { version = "0.10", features = ["vendored"] }
 nusb = { git = "https://github.com/kevinmehall/nusb"}
-rust-adb = { git = "https://github.com/ImKKingshuk/Rust-ADB" }
+#rust-adb = { git = "https://github.com/ImKKingshuk/Rust-ADB" }
+adb_client={git = "https://github.com/cocool97/adb_client", version = "2.1.19", features = ["mdns"] }
 thiserror = "2.0.12"
 byteorder = "1.5.0"
 config = "0.14"
@@ -41,7 +42,7 @@ serde_with = { version = "3" }
 axum = "0.6"
 hyper = { version = "0.14", features = ["full"] }
 toml_edit = "0.22"
-chrono = "0.4.41"
+chrono = "0.4.42"
 hex = "0.4.3"
 indexmap = { version = "2", features = ["serde"] }
 regex = "1"
