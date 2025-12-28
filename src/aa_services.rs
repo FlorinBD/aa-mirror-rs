@@ -1127,7 +1127,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
         let dev = "MediaSinkService Video";
         format!("<i><bright-black> aa-mirror/{}: </>", dev)
     }
-    async fn tsk_adb(tx: Sender<Packet>, ch_id: u8) -> Result<()> {
+    async fn tsk_adb(tx_srv: Sender<Packet>, ch_id: u8) -> Result<()> {
         info!("{}: ADB task started",get_name());
         // Create a channel to receive discovered devices information
         let (sender, mut receiver) = std_mpsc::channel::<MDNSDevice>();
@@ -1138,7 +1138,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
         loop {
             let device = receiver.recv()?;
             info!("{}: ADB device found: {}",get_name(), device);
-            tokio::time::sleep(Duration::from_secs(5)).await;
+            //tokio::time::sleep(Duration::from_secs(5)).await;//not needed, recv() is blocking
         }
     }
     async fn listen_for_connections(tx: Sender<Packet>, ch_id: u8) -> Result<()> {
