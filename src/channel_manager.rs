@@ -623,24 +623,6 @@ fn get_service_index(arr:&Vec<ServiceStatus>, ch:i32)->usize
     255
 }
 
-///Return true when all channels have been opened
-fn all_ch_opened(arr:&Vec<ServiceStatus>, ch_open_done: CmdStatus) ->bool
-{
-
-    if (ch_open_done.status == CommandState::Done) || (ch_open_done.status == CommandState::NotDone)
-    {
-        return false;
-    }
-    for (idx,stat) in arr.iter().enumerate() {
-        if (stat.open_ch_cmd == CommandState::InProgress) || (stat.open_ch_cmd == CommandState::NotDone)
-        {
-            return false;
-        }
-
-    }
-    return true;
-
-}
 /// main thread doing all packet processing between HU and device
 pub async fn ch_proxy(
     mut rx_srv: Receiver<Packet>,
@@ -859,30 +841,6 @@ pub async fn ch_proxy(
                 error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
             }
         }
-        /*info!( "{} CMD OPEN_CHANNEL will be done next",get_name());
-        tokio::time::sleep(Duration::from_millis(600)).await;//reconfiguration time for HU
-        //Open CH for all
-        //all_ch_open.status= CommandState::InProgress;
-        for (idx,_) in srv_senders.iter().enumerate()
-        {
-            info!( "{} Send custom CMD_OPEN_CH for ch {}",get_name(), channel_status[idx].ch_id);
-            let mut cmd_req= CustomCommandMessage::new();
-            cmd_req.set_cmd(CustomCommand::CMD_OPEN_CH);
-
-            let mut payload: Vec<u8>=cmd_req.write_to_bytes()?;
-            payload.insert(0,((MESSAGE_CUSTOM_CMD as u16) >> 8) as u8);
-            payload.insert( 1,((MESSAGE_CUSTOM_CMD as u16) & 0xff) as u8);
-            let pkt_rsp = Packet {
-                channel: (channel_status[idx].ch_id) as u8,
-                flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                final_length: None,
-                payload: payload.clone(),
-            };
-            channel_status[idx].open_ch_cmd = CommandState::InProgress;
-            if let Err(_) = srv_senders[idx].send(pkt_rsp).await{
-                error!( "{} custom command send error",get_name());
-            };
-        }*/
         info!( "{} Sending AudioFocus request...",get_name());
         let mut focus_req= AudioFocusRequestNotification::new();
         focus_req.set_request(AudioFocusRequestType::AUDIO_FOCUS_GAIN);
@@ -906,7 +864,6 @@ pub async fn ch_proxy(
         error!( "{} ServiceDiscoveryResponse couldn't be parsed",get_name());
         return Err(Box::new("ServiceDiscoveryResponse couldn't be parsed")).expect("ServiceDiscoveryResponse");
     }
-    let mut all_ch_open=CmdStatus{status:CommandState::NotDone};
     info!( "{} ServiceDiscovery done, starting AA Mirror loop",get_name());
     loop {
         let mut pkt = rx_srv.recv().await.ok_or("rx_srv channel hung up")?;
@@ -915,20 +872,7 @@ pub async fn ch_proxy(
             let idx=get_service_index(&channel_status, pkt.channel as i32);
             if idx !=255
             {
-                let ch_data=pkt.payload.to_vec();
                 srv_senders[idx].send(pkt).await.expect("Error sending message to service");
-                //check channel open cmd done
-                let message_id: i32 = u16::from_be_bytes(ch_data[0..=1].try_into()?).into();
-                if message_id == ControlMessageType::MESSAGE_CHANNEL_OPEN_RESPONSE  as i32
-                {
-                    let data = &ch_data[2..]; // start of message data, without message_id
-                    if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
-                        if rsp.status() == MessageStatus::STATUS_SUCCESS
-                        {
-                            channel_status[idx].open_ch_cmd = CommandState::Done;
-                        }
-                    }
-                }
             }
             else {
                 error!( "{} Invalid channel {}",get_name(), pkt.channel);
@@ -1001,33 +945,6 @@ pub async fn ch_proxy(
                 }
                 _ =>{ info!( "{} Unknown message ID: {} received for default channel",get_name(), message_id);}
             };
-        }
-
-        if all_ch_opened(&channel_status, all_ch_open)
-        {
-            all_ch_open.status= CommandState::Done;
-            /*info!( "{} All channels opened, send SETUP cmd for all enabled channels",get_name());
-            for (idx, _) in srv_senders.iter().enumerate()
-            {
-                //info!( "{} Send custom CMD_SETUP_CH for ch {}",get_name(), channel_status[idx].ch_id);
-                let mut cmd_req = CustomCommandMessage::new();
-                cmd_req.set_cmd(CustomCommand::CMD_SETUP_CH);
-
-                let mut payload: Vec<u8> = cmd_req.write_to_bytes()?;
-                payload.insert(0, ((MESSAGE_CUSTOM_CMD as u16) >> 8) as u8);
-                payload.insert(1, ((MESSAGE_CUSTOM_CMD as u16) & 0xff) as u8);
-                let pkt_rsp = Packet {
-                    channel: (channel_status[idx].ch_id) as u8,
-                    flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                    final_length: None,
-                    payload: payload.clone(),
-                };
-                channel_status[idx].open_ch_cmd = CommandState::InProgress;
-                if let Err(_) = srv_senders[idx].send(pkt_rsp).await{
-                    error!( "{} custom command send error",get_name());
-                };
-            }*/
-
         }
     }
     return Err(Box::new("proxy main loop ended ok")).expect("TODO");

@@ -1098,6 +1098,20 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                     error!( "{}, channel {:?}: Unable to parse received message", get_name(), pkt.channel);
                 }
             }
+            else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK  as i32
+            {
+                info!("{} Received {} message", ch_id.to_string(), message_id);
+                let data = &pkt.payload[2..]; // start of message data, without message_id
+                if  let Ok(rsp) = Ack::parse_from_bytes(&data)
+                {
+                    info!( "{}, channel {:?}: ACK, timestamp_ns: {:?}", get_name(), pkt.channel, rsp.receive_timestamp_ns());
+                    //FIXME send next frames
+                }
+                else
+                {
+                    error!( "{}, channel {:?}: Unable to parse received message", get_name(), pkt.channel);
+                }
+            }
             else
             {
                 info!( "{} Unknown message ID: {} received", get_name(), message_id);
@@ -1288,6 +1302,20 @@ pub async fn th_media_sink_audio_guidance(ch_id: i32, enabled:bool, tx_srv: Send
                     error!( "{}, channel {:?}: Unable to parse received message", get_name(), pkt.channel);
                 }
             }
+            else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK  as i32
+            {
+                info!("{} Received {} message", ch_id.to_string(), message_id);
+                let data = &pkt.payload[2..]; // start of message data, without message_id
+                if  let Ok(rsp) = Ack::parse_from_bytes(&data)
+                {
+                    info!( "{}, channel {:?}: ACK, timestamp_ns: {:?}", get_name(), pkt.channel, rsp.receive_timestamp_ns());
+                    //FIXME send next frames
+                }
+                else
+                {
+                    error!( "{}, channel {:?}: Unable to parse received message", get_name(), pkt.channel);
+                }
+            }
             else
             {
                 info!( "{} Unknown message ID: {} received", get_name(), message_id);
@@ -1409,6 +1437,20 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                             error!( "{}: Unsupported audio codec detected", get_name());
                         }
                     }
+                }
+                else
+                {
+                    error!( "{}, channel {:?}: Unable to parse received message", get_name(), pkt.channel);
+                }
+            }
+            else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK  as i32
+            {
+                info!("{} Received {} message", ch_id.to_string(), message_id);
+                let data = &pkt.payload[2..]; // start of message data, without message_id
+                if  let Ok(rsp) = Ack::parse_from_bytes(&data)
+                {
+                    info!( "{}, channel {:?}: ACK, timestamp_ns: {:?}", get_name(), pkt.channel, rsp.receive_timestamp_ns());
+                    //FIXME send next frames
                 }
                 else
                 {
