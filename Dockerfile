@@ -6,7 +6,6 @@ ENV GH_BRANCH=${GH_BRANCH}
 # crosscompile stuff
 RUN apt update && apt upgrade -y
 RUN apt install -y gcc-arm-linux-gnueabihf
-RUN rustup update
 RUN rustup target add arm-unknown-linux-gnueabihf
 # cloning and building
 WORKDIR /usr/src/app
