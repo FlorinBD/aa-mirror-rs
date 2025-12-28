@@ -1107,7 +1107,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                 let data = &pkt.payload[2..]; // start of message data, without message_id
                 if  let Ok(rsp) = Ack::parse_from_bytes(&data)
                 {
-                    info!( "{}, channel {:?}: ACK, timestamp_ns: {:?}", get_name(), pkt.channel, rsp.receive_timestamp_ns());
+                    info!( "{}, channel {:?}: ACK, timestamp_ns: {:?}", get_name(), pkt.channel, rsp.receive_timestamp_ns[0]);
                     //FIXME send next frames
                 }
                 else
@@ -1325,7 +1325,7 @@ pub async fn th_media_sink_audio_guidance(ch_id: i32, enabled:bool, tx_srv: Send
                 let data = &pkt.payload[2..]; // start of message data, without message_id
                 if  let Ok(rsp) = Ack::parse_from_bytes(&data)
                 {
-                    info!( "{}, channel {:?}: ACK, timestamp_ns: {:?}", get_name(), pkt.channel, rsp.receive_timestamp_ns());
+                    info!( "{}, channel {:?}: ACK, timestamp_ns: {:?}", get_name(), pkt.channel, rsp.receive_timestamp_ns[0]);
                     //FIXME send next frames
                 }
                 else
@@ -1466,7 +1466,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                 let data = &pkt.payload[2..]; // start of message data, without message_id
                 if  let Ok(rsp) = Ack::parse_from_bytes(&data)
                 {
-                    info!( "{}, channel {:?}: ACK, timestamp_ns: {:?}", get_name(), pkt.channel, rsp.receive_timestamp_ns());
+                    info!( "{}, channel {:?}: ACK, timestamp_ns: {:?}", get_name(), pkt.channel, rsp.receive_timestamp_ns[0]);
                     //FIXME send next frames
                 }
                 else
