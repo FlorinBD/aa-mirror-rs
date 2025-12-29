@@ -1137,7 +1137,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
         let mut server = ADBServer::new(SocketAddrV4::new(server_ip, server_port));
         let device_ip = Ipv4Addr::new(10, 0, 0, 14);
         loop {
-             let conn=server.connect_device(SocketAddrV4::new(device_ip, 5555)).expect("TODO: panic message");
+             let conn=server.connect_device(SocketAddrV4::new(device_ip, 5555));
             match conn {
                 Ok(_)=>{
                     let device = server.get_device().expect("cannot get device");
