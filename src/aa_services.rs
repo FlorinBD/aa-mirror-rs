@@ -1135,11 +1135,22 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
         let server_ip = Ipv4Addr::new(127, 0, 0, 1);
         let server_port = 5037;
         let mut server = ADBServer::new(SocketAddrV4::new(server_ip, server_port));
-
+        let device_ip = Ipv4Addr::new(10, 0, 0, 14);
         loop {
-            let device = server.get_device().expect("cannot get device");
-            info!("{}: ADB device found: {:?}",get_name(), device.identifier);
+             let conn=server.connect_device(SocketAddrV4::new(device_ip, 5555)).expect("TODO: panic message");
+            match conn {
+                Ok(..)=>{
+                    let device = server.get_device().expect("cannot get device");
+                    info!("{}: ADB device found: {:?}",get_name(), device.identifier);
+                    server.disconnect_device(SocketAddrV4::new(device_ip, 5555));
+                },
+                Err(e)=>{
+                    error!("{}: ADB device not found",get_name());
+                }
+            }
+
             tokio::time::sleep(Duration::from_secs(5)).await;
+            info!("{}: ADB server trying again",get_name());
         }
     }
     async fn listen_for_connections(tx: Sender<Packet>, ch_id: u8) -> Result<()> {
