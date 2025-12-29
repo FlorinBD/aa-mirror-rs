@@ -37,7 +37,7 @@ const USB_ACCESSORY_PATH: &str = "/dev/usb_accessory";
 pub const BUFFER_LEN: usize = 16 * 1024;
 pub const TCP_CLIENT_TIMEOUT: Duration = Duration::new(30, 0);
 
-use crate::config::{Action, AppConfig, SharedConfig, ADB_SERVER_PORT};
+use crate::config::{Action, AppConfig, SharedConfig, ADB_DEVICE_PORT, ADB_SERVER_PORT};
 use crate::config::{TCP_DHU_PORT, TCP_MD_SERVER_PORT};
 use crate::channel_manager::{endpoint_reader,ch_proxy, packet_tls_proxy};
 use crate::channel_manager::Packet;
@@ -260,21 +260,22 @@ async fn get_first_adb_device(adb: &mut ADBServer, config: AppConfig,) ->Option<
     info!("Found hosts:");
     for outcome in occupied {
         info!("{:?}", outcome.target_ip);
-        let conn=adb.connect_device(SocketAddrV4::new(outcome.target_ip, 5555));
+        let conn=adb.connect_device(SocketAddrV4::new(outcome.target_ip, ADB_DEVICE_PORT));
         match conn {
             Ok(_)=>{
                 let device = adb.get_device().expect("cannot get device");
                 //info!("{}: ADB device found: {:?}",NAME, device.identifier);
-                adb.disconnect_device(SocketAddrV4::new(outcome.target_ip, 5555)).expect("TODO: panic message");
+                adb.disconnect_device(SocketAddrV4::new(outcome.target_ip, ADB_DEVICE_PORT)).expect("TODO: panic message");
                 return Some(device);
             },
             _ => {}
         }
     }
     info!("Scan took {:?}", scan_duration);
+    None
 }
 
-async fn tsk_adb_scrcpy<A: Endpoint<A>>(
+async fn tsk_adb_scrcpy(
     /*srv_rx: Receiver<Packet>,
     video_tx: Sender<Packet>,
     audio_tx: Sender<Packet>,*/
