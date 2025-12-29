@@ -276,20 +276,16 @@ async fn tsk_adb_scrcpy<A: Endpoint<A>>(
             .into_iter()
             .filter(|outcome| outcome.status == ProbeStatus::Occupied);
         let scan_duration = start.elapsed();
-
-        {
-            let mut stdout = std::io::stdout().lock();
-            writeln!(stdout, "Found hosts:").unwrap();
-            for outcome in occupied {
-                writeln!(stdout, "{:?}", outcome).unwrap();
-            }
-            writeln!(stdout, "Scan took {:?}", scan_duration).unwrap();
+        info!("Found hosts:");
+        for outcome in occupied {
+            info!("{:?}", outcome.target_ip);
         }
+        info!("Scan took {:?}", scan_duration);
     }
     else {
         error!("{}: Unable to find WiFi interface, exiting", NAME)
     }
-    Err(Box::new(()))
+    Err(Box::new("Unable to find WiFi interface"))
 
 }
 
