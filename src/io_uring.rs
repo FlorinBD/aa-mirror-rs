@@ -2,6 +2,7 @@ use bytesize::ByteSize;
 use humantime::format_duration;
 use simplelog::*;
 use std::cell::RefCell;
+use std::io::stderr;
 use std::marker::PhantomData;
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::rc::Rc;
@@ -249,27 +250,19 @@ async fn tsk_adb_scrcpy<A: Endpoint<A>>(
     config: AppConfig,
 ) -> Result<()> {
     info!("{}: ADB task started",NAME);
-    let wifi_itf;
-    for ifa in netif::up().unwrap() {
-        match ifa.name() {
-            val if val == config.iface => {
-                wifi_itf = ifa.clone();
-            }
-            _ => (),
-        }
-    }
-    if let Some(itf)=wifi_itf
+    loop
     {
+        let interface = arp_common::interface_from(&config.iface);
         let client = Client::new(
-            ClientConfigBuilder::new(&itf)
+            ClientConfigBuilder::new(&config.iface)
                 .with_response_timeout(Duration::from_millis(500))
                 .build(),
         )?;
-        let spinner = ClientSpinner::new(client).with_retries(9);
-        let net = arp_common::net_from(&itf).unwrap();
+        let spinner = ClientSpinner::new(client).with_retries(3);
+        let net = arp_common::net_from(&interface).unwrap();
         let start = Instant::now();
         let outcomes = spinner
-            .probe_batch(&arp_common::generate_probe_inputs(net, itf))
+            .probe_batch(&arp_common::generate_probe_inputs(net, interface))
             .await;
 
         let occupied = outcomes?
@@ -281,12 +274,9 @@ async fn tsk_adb_scrcpy<A: Endpoint<A>>(
             info!("{:?}", outcome.target_ip);
         }
         info!("Scan took {:?}", scan_duration);
+        tokio::time::sleep(Duration::from_secs(5)).await;
     }
-    else {
-        error!("{}: Unable to find WiFi interface, exiting", NAME)
-    }
-    Err(Box::new("Unable to find WiFi interface"))
-
+    //Err(Box::new(stderr()))
 }
 
 pub async fn io_loop(
