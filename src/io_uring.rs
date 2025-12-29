@@ -9,7 +9,7 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use adb_client::ADBServer;
+use adb_client::{ADBServer, ADBServerDevice};
 use tokio::sync::broadcast::Sender as BroadcastSender;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::{mpsc, Mutex, Notify};
@@ -238,9 +238,40 @@ async fn tcp_wait_for_md_connection(listener: &mut TcpListener) -> Result<TcpStr
     Ok(stream)
 }
 
-fn get_first_adb_device( adb:ADBServer)
+async fn get_first_adb_device(adb: &mut ADBServer, config: AppConfig,) -> ADBServerDevice
 {
+    let interface = arp_common::interface_from(&config.iface);
+    let client = Client::new(
+        ClientConfigBuilder::new(&config.iface)
+            .with_response_timeout(Duration::from_millis(500))
+            .build(),
+    ).unwrap();
+    let spinner = ClientSpinner::new(client).with_retries(3);
+    let net = arp_common::net_from(&interface).unwrap();
+    let start = Instant::now();
+    let outcomes = spinner
+        .probe_batch(&arp_common::generate_probe_inputs(net, interface))
+        .await;
 
+    let occupied = outcomes.unwrap()
+        .into_iter()
+        .filter(|outcome| outcome.status == ProbeStatus::Occupied);
+    let scan_duration = start.elapsed();
+    info!("Found hosts:");
+    for outcome in occupied {
+        info!("{:?}", outcome.target_ip);
+        let conn=adb.connect_device(SocketAddrV4::new(outcome.target_ip, 5555));
+        match conn {
+            Ok(_)=>{
+                let device = adb.get_device().expect("cannot get device");
+                //info!("{}: ADB device found: {:?}",NAME, device.identifier);
+                adb.disconnect_device(SocketAddrV4::new(outcome.target_ip, 5555)).expect("TODO: panic message");
+                return device;
+            },
+            _ => {}
+        }
+    }
+    info!("Scan took {:?}", scan_duration);
 }
 
 async fn tsk_adb_scrcpy<A: Endpoint<A>>(
@@ -250,30 +281,17 @@ async fn tsk_adb_scrcpy<A: Endpoint<A>>(
     config: AppConfig,
 ) -> Result<()> {
     info!("{}: ADB task started",NAME);
+
+    let server_ip = Ipv4Addr::new(127, 0, 0, 1);
+    let mut server = ADBServer::new(SocketAddrV4::new(server_ip, ADB_SERVER_PORT));
     loop
     {
-        let interface = arp_common::interface_from(&config.iface);
-        let client = Client::new(
-            ClientConfigBuilder::new(&config.iface)
-                .with_response_timeout(Duration::from_millis(500))
-                .build(),
-        )?;
-        let spinner = ClientSpinner::new(client).with_retries(3);
-        let net = arp_common::net_from(&interface).unwrap();
-        let start = Instant::now();
-        let outcomes = spinner
-            .probe_batch(&arp_common::generate_probe_inputs(net, interface))
-            .await;
-
-        let occupied = outcomes?
-            .into_iter()
-            .filter(|outcome| outcome.status == ProbeStatus::Occupied);
-        let scan_duration = start.elapsed();
-        info!("Found hosts:");
-        for outcome in occupied {
-            info!("{:?}", outcome.target_ip);
+        if let Some(device)=get_first_adb_device(&mut server, config.clone()).await {
+            info!("{}: ADB device found: {:?}",NAME, device.identifier);
         }
-        info!("Scan took {:?}", scan_duration);
+        else {
+            error!("{}: No device with ADB connection found, trying again...", NAME)
+        }
         tokio::time::sleep(Duration::from_secs(5)).await;
     }
     //Err(Box::new(stderr()))
