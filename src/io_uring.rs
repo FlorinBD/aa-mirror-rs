@@ -3,10 +3,12 @@ use humantime::format_duration;
 use simplelog::*;
 use std::cell::RefCell;
 use std::marker::PhantomData;
+use std::net::{Ipv4Addr, SocketAddrV4};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use adb_client::ADBServer;
 use tokio::sync::broadcast::Sender as BroadcastSender;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::{mpsc, Mutex, Notify};
@@ -20,6 +22,8 @@ use tokio_uring::net::TcpListener;
 use tokio_uring::net::TcpStream;
 use tokio_uring::BufResult;
 use tokio_uring::UnsubmittedWrite;
+use async_arp::{Client, ClientConfigBuilder, ClientSpinner, ProbeInput, ProbeInputBuilder, ProbeStatus, Result as ArpResult};
+use crate::arp_common;
 
 // module name for logging engine
 const NAME: &str = "<i><bright-black> io_uring: </>";
@@ -32,10 +36,11 @@ const USB_ACCESSORY_PATH: &str = "/dev/usb_accessory";
 pub const BUFFER_LEN: usize = 16 * 1024;
 pub const TCP_CLIENT_TIMEOUT: Duration = Duration::new(30, 0);
 
-use crate::config::{Action, SharedConfig};
-use crate::config::{TCP_DHU_PORT, TCP_SERVER_PORT};
+use crate::config::{Action, AppConfig, SharedConfig, ADB_SERVER_PORT};
+use crate::config::{TCP_DHU_PORT, TCP_MD_SERVER_PORT};
 use crate::channel_manager::{endpoint_reader,ch_proxy, packet_tls_proxy};
 use crate::channel_manager::Packet;
+use crate::config_types::HexdumpLevel;
 use crate::usb_stream::{UsbStreamRead, UsbStreamWrite};
 
 // tokio_uring::fs::File and tokio_uring::net::TcpStream are using different
@@ -184,7 +189,7 @@ async fn flatten<T>(handle: &mut JoinHandle<Result<T>>, dbg_info:String) -> Resu
 
 /// Asynchronously wait for an inbound TCP connection
 /// returning TcpStream of first client connected
-async fn tcp_wait_for_connection(listener: &mut TcpListener) -> Result<TcpStream> {
+async fn tcp_wait_for_hu_connection(listener: &mut TcpListener) -> Result<TcpStream> {
     let retval = listener.accept();
     let (stream, addr) = match timeout(TCP_CLIENT_TIMEOUT, retval)
         .await
@@ -192,12 +197,12 @@ async fn tcp_wait_for_connection(listener: &mut TcpListener) -> Result<TcpStream
     {
         Ok(Ok((stream, addr))) => (stream, addr),
         Err(e) | Ok(Err(e)) => {
-            error!("{} 📵 TCP server: {}, restarting...", NAME, e);
+            error!("{} 📵 HU TCP server: {}, restarting...", NAME, e);
             return Err(Box::new(e));
         }
     };
     info!(
-        "{} 📳 TCP server: new client connected: <b>{:?}</b>",
+        "{} 📳 HU TCP server: new client connected: <b>{:?}</b>",
         NAME, addr
     );
 
@@ -205,6 +210,87 @@ async fn tcp_wait_for_connection(listener: &mut TcpListener) -> Result<TcpStream
     // even if there is only a small amount of data
     stream.set_nodelay(true)?;
     Ok(stream)
+}
+
+/// Asynchronously wait for an inbound TCP connection
+/// returning TcpStream of first client connected
+async fn tcp_wait_for_md_connection(listener: &mut TcpListener) -> Result<TcpStream> {
+    let retval = listener.accept();
+    let (stream, addr) = match timeout(TCP_CLIENT_TIMEOUT, retval)
+        .await
+        .map_err(|e| std::io::Error::other(e))
+    {
+        Ok(Ok((stream, addr))) => (stream, addr),
+        Err(e) | Ok(Err(e)) => {
+            error!("{} 📵 MD TCP server: {}, restarting...", NAME, e);
+            return Err(Box::new(e));
+        }
+    };
+    info!(
+        "{} 📳 MD TCP server: new client connected: <b>{:?}</b>",
+        NAME, addr
+    );
+
+    // disable Nagle algorithm, so segments are always sent as soon as possible,
+    // even if there is only a small amount of data
+    stream.set_nodelay(true)?;
+    Ok(stream)
+}
+
+fn get_first_adb_device( adb:ADBServer)
+{
+
+}
+
+async fn tsk_adb_scrcpy<A: Endpoint<A>>(
+    srv_rx: Receiver<Packet>,
+    video_tx: Sender<Packet>,
+    audio_tx: Sender<Packet>,
+    config: AppConfig,
+) -> Result<()> {
+    info!("{}: ADB task started",NAME);
+    let wifi_itf;
+    for ifa in netif::up().unwrap() {
+        match ifa.name() {
+            val if val == config.iface => {
+                wifi_itf = ifa.clone();
+            }
+            _ => (),
+        }
+    }
+    if let Some(itf)=wifi_itf
+    {
+        let client = Client::new(
+            ClientConfigBuilder::new(&itf)
+                .with_response_timeout(Duration::from_millis(500))
+                .build(),
+        )?;
+        let spinner = ClientSpinner::new(client).with_retries(9);
+        let net = arp_common::net_from(&itf).unwrap();
+        let start = Instant::now();
+        let outcomes = spinner
+            .probe_batch(&arp_common::generate_probe_inputs(net, itf))
+            .await;
+
+        let occupied = outcomes?
+            .into_iter()
+            .filter(|outcome| outcome.status == ProbeStatus::Occupied);
+        let scan_duration = start.elapsed();
+
+        {
+            let mut stdout = std::io::stdout().lock();
+            writeln!(stdout, "Found hosts:").unwrap();
+            for outcome in occupied {
+                writeln!(stdout, "{:?}", outcome).unwrap();
+            }
+            writeln!(stdout, "Scan took {:?}", scan_duration).unwrap();
+        }
+    }
+    else {
+        error!("{}: Unable to find WiFi interface, exiting", NAME)
+    }
+    Err(Box::new(()))
+
 }
 
 pub async fn io_loop(
@@ -250,7 +336,7 @@ pub async fn io_loop(
             info!("{} 🛰️ DHU TCP server: bind to local address",NAME);
             dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
             info!("{} 🛰️ DHU TCP server: listening for `Desktop Head Unit` connection...",NAME);
-            if let Ok(s) = tcp_wait_for_connection(&mut dhu_listener.as_mut().unwrap()).await {
+            if let Ok(s) = tcp_wait_for_hu_connection(&mut dhu_listener.as_mut().unwrap()).await {
                 hu_tcp = Some(s);
             } else {
                 // notify main loop to restart
@@ -377,11 +463,7 @@ pub async fn io_loop(
         let mut sc_lock = sensor_channel.lock().await;
         *sc_lock = None;
 
-        info!(
-            "{} ⌛ session time: {}",
-            NAME,
-            format_duration(started.elapsed()).to_string()
-        );
+        info!("{} ⌛ session time: {}", NAME, format_duration(started.elapsed()).to_string());
         // obtain action for passing it to broadcast sender
         let action = shared_config.read().await.action_requested.clone();
         // stream(s) closed, notify main loop to restart

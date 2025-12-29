@@ -59,6 +59,9 @@ sha2 = "0.10.9"
 libc = "0.2.177"
 time = { version = "0.3", features = ["parsing"] }
 ffmpeg-sidecar = "2.3.0"
+async-arp = "0.4.0"
+ipnet = "2.11.0"
+pnet = "0.35.0"
 
 [build-dependencies]
 protoc-bin-vendored = "3.1.0"

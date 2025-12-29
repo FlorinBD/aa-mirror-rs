@@ -3,7 +3,7 @@ use aa_mirror_rs::config::SharedConfig;
 use aa_mirror_rs::config::SharedConfigJson;
 use aa_mirror_rs::config::WifiConfig;
 use aa_mirror_rs::config::{Action, AppConfig};
-use aa_mirror_rs::config::{DEFAULT_WLAN_ADDR, TCP_SERVER_PORT};
+use aa_mirror_rs::config::{DEFAULT_WLAN_ADDR, TCP_MD_SERVER_PORT};
 use aa_mirror_rs::io_uring::io_loop;
 use aa_mirror_rs::led::{LedColor, LedManager, LedMode};
 use aa_mirror_rs::channel_manager::Packet;
@@ -103,7 +103,7 @@ fn init_wifi_config(cfg: &AppConfig) -> WifiConfig {
 
     WifiConfig {
         ip_addr,
-        port: TCP_SERVER_PORT,
+        port: TCP_MD_SERVER_PORT,
         ssid: cfg.ssid.clone(),
         bssid,
         wpa_key: cfg.wpa_passphrase.clone(),
