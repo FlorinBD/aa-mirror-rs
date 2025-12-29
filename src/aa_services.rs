@@ -145,7 +145,7 @@ pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, 
             let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
             if message_id == MESSAGE_CHANNEL_OPEN_RESPONSE  as i32
             {
-                info!("{} Received {} message", ch_id.to_string(), message_id);
+                info!("Ch {} Received message id: {}", ch_id.to_string(), message_id);
                 let data = &pkt.payload[2..]; // start of message data, without message_id
                 if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
                     if rsp.status() != STATUS_SUCCESS
@@ -1108,7 +1108,8 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                 let data = &pkt.payload[2..]; // start of message data, without message_id
                 if  let Ok(rsp) = Ack::parse_from_bytes(&data)
                 {
-                    info!( "{}, channel {:?}: ACK, timestamp_ns: {:?}", get_name(), pkt.channel, rsp.receive_timestamp_ns[0]);
+                    //info!( "{}, channel {:?}: ACK, timestamp_ns: {:?}", get_name(), pkt.channel, rsp.receive_timestamp_ns[0]);
+                    info!( "{}, channel {:?}: video ACK received, sending next frame", get_name(), pkt.channel);
                     //FIXME send next frames
                 }
                 else
@@ -1444,7 +1445,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                     info!( "{}, channel {:?}: Message status: {:?}", get_name(), pkt.channel, rsp.status());
                     if rsp.status() == STATUS_READY
                     {
-                        info!( "{}, channel {:?}: Starting video capture", get_name(), pkt.channel);
+                        info!( "{}, channel {:?}: Starting audio capture", get_name(), pkt.channel);
                         if acfg.codec == MediaCodec::AUDIO_PCM
                         {
                             audio_stream_started =true;
