@@ -238,7 +238,7 @@ async fn tcp_wait_for_md_connection(listener: &mut TcpListener) -> Result<TcpStr
     Ok(stream)
 }
 
-async fn get_first_adb_device(adb: &mut ADBServer, config: AppConfig,) -> ADBServerDevice
+async fn get_first_adb_device(adb: &mut ADBServer, config: AppConfig,) ->Option<ADBServerDevice>
 {
     let interface = arp_common::interface_from(&config.iface);
     let client = Client::new(
@@ -266,7 +266,7 @@ async fn get_first_adb_device(adb: &mut ADBServer, config: AppConfig,) -> ADBSer
                 let device = adb.get_device().expect("cannot get device");
                 //info!("{}: ADB device found: {:?}",NAME, device.identifier);
                 adb.disconnect_device(SocketAddrV4::new(outcome.target_ip, 5555)).expect("TODO: panic message");
-                return device;
+                return Some(device);
             },
             _ => {}
         }
@@ -275,9 +275,9 @@ async fn get_first_adb_device(adb: &mut ADBServer, config: AppConfig,) -> ADBSer
 }
 
 async fn tsk_adb_scrcpy<A: Endpoint<A>>(
-    srv_rx: Receiver<Packet>,
+    /*srv_rx: Receiver<Packet>,
     video_tx: Sender<Packet>,
-    audio_tx: Sender<Packet>,
+    audio_tx: Sender<Packet>,*/
     config: AppConfig,
 ) -> Result<()> {
     info!("{}: ADB task started",NAME);
@@ -382,6 +382,7 @@ pub async fn io_loop(
         let stats_w_bytes = Arc::new(AtomicUsize::new(0));
         let stats_r_bytes = Arc::new(AtomicUsize::new(0));
 
+        let mut tsk_adb;
         let mut tsk_ch_manager;
         let mut tsk_hu_read;
         let mut tsk_packet_proxy;
@@ -423,6 +424,10 @@ pub async fn io_loop(
             rx_srv,
             txr_srv,
         ));
+
+        tsk_adb = tokio_uring::spawn(tsk_adb_scrcpy(
+            cfg
+        ));
         
         // Thread for monitoring transfer
         let mut tsk_monitor = tokio::spawn(transfer_monitor(
@@ -438,7 +443,8 @@ pub async fn io_loop(
             flatten(&mut tsk_hu_read, "tsk_hu_read".into()),
             flatten(&mut tsk_ch_manager, "tsk_ch_manager".into()),
             flatten(&mut tsk_monitor,"tsk_monitor".into()),
-            flatten(&mut tsk_packet_proxy,"tsk_pkt_proxy".into())
+            flatten(&mut tsk_packet_proxy,"tsk_pkt_proxy".into()),
+            flatten(&mut tsk_adb,"tsk_adb_scrcpy".into())
         );
 
         if let Err(e) = res {
@@ -452,7 +458,7 @@ pub async fn io_loop(
         tsk_hu_read.abort();
         tsk_ch_manager.abort();
         tsk_monitor.abort();
-
+        tsk_adb.abort();
 
         // make sure TCP connections are closed before next connection attempts
         if let Some(stream) = hu_tcp_stream {
