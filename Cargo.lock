@@ -29,7 +29,6 @@ dependencies = [
  "libc",
  "log",
  "mac_address",
- "mdns-sd",
  "netif",
  "netlink-sys",
  "nix 0.30.1",
@@ -939,8 +938,6 @@ version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "da0e4dd2a88388a1f4ccc7c9ce104604dab68d9f408dc34cd45823d5a9069095"
 dependencies = [
- "futures-core",
- "futures-sink",
  "spin",
 ]
 

@@ -2,6 +2,7 @@
 use simplelog::*;
 use std::fmt;
 use std::io::{Read, Write};
+use std::net::{Ipv4Addr, SocketAddrV4};
 use std::time::{Duration, SystemTime};
 use tokio::sync::mpsc::{Receiver, Sender};
 use std::sync::mpsc as std_mpsc;
@@ -10,7 +11,7 @@ use tokio::time::timeout;
 use tokio_uring::buf::BoundedBuf;
 use ffmpeg_sidecar::command::FfmpegCommand;
 use ffmpeg_sidecar::event::{FfmpegEvent, LogLevel};
-use adb_client::mdns::{MDNSDevice, MDNSDiscoveryService};
+use adb_client::{ADBServer, ADBDeviceExt};
 
 // protobuf stuff:
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
@@ -1129,14 +1130,13 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
     }
     async fn tsk_adb(tx_srv: Sender<Packet>, ch_id: u8) -> Result<()> {
         info!("{}: ADB task started",get_name());
-        // Create a channel to receive discovered devices information
-        let (sender, mut receiver) = std_mpsc::channel::<MDNSDevice>();
+        // A custom server address can be provided
+        let server_ip = Ipv4Addr::new(127, 0, 0, 1);
+        let server_port = 5037;
+        let mut server = ADBServer::new(SocketAddrV4::new(server_ip, server_port));
 
-        // Create and start the discovery service
-        let mut discovery = MDNSDiscoveryService::new()?;
-        discovery.start(sender)?;
         loop {
-            let device = receiver.recv()?;
+            let device = server.get_device().expect("cannot get device");
             info!("{}: ADB device found: {}",get_name(), device);
             //tokio::time::sleep(Duration::from_secs(5)).await;//not needed, recv() is blocking
         }
