@@ -1139,12 +1139,12 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
         loop {
              let conn=server.connect_device(SocketAddrV4::new(device_ip, 5555)).expect("TODO: panic message");
             match conn {
-                Ok(..)=>{
+                Ok(())=>{
                     let device = server.get_device().expect("cannot get device");
                     info!("{}: ADB device found: {:?}",get_name(), device.identifier);
                     server.disconnect_device(SocketAddrV4::new(device_ip, 5555));
                 },
-                Err(e)=>{
+                Err(())=>{
                     error!("{}: ADB device not found",get_name());
                 }
             }
