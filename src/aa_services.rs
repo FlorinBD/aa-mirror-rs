@@ -1138,7 +1138,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
         loop {
             let device = server.get_device().expect("cannot get device");
             info!("{}: ADB device found: {:?}",get_name(), device.identifier);
-            //tokio::time::sleep(Duration::from_secs(5)).await;//not needed, recv() is blocking
+            tokio::time::sleep(Duration::from_secs(5)).await;
         }
     }
     async fn listen_for_connections(tx: Sender<Packet>, ch_id: u8) -> Result<()> {
