@@ -1023,7 +1023,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         if vcfg.resolution == VideoCodecResolution::Video_800x480
                         {
                             video_stream_started=true;
-                            let listener_thread = tokio_uring::spawn(tsk_adb(tx_srv.clone(),ch_id as u8));
+                            //let listener_thread = tokio_uring::spawn(tsk_adb(tx_srv.clone(),ch_id as u8));
                            /*let listener_thread = tokio_uring::spawn(listen_for_connections(tx_srv.clone(),ch_id as u8));
                             // Wait for the listener to start
                             tokio::time::sleep(Duration::from_millis(1000)).await;

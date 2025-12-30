@@ -319,7 +319,11 @@ pub async fn io_loop(
     let bind_addr = format!("0.0.0.0:{}", TCP_DHU_PORT).parse().unwrap();
     //let mut dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
     info!("{} 🛰️ DHU TCP server bound to: <u>{}</u>", NAME, bind_addr);
-
+    let cfg = shared_config.read().await.clone();
+    let mut tsk_adb;
+    tsk_adb = tokio_uring::spawn(tsk_adb_scrcpy(
+        cfg
+    ));
     loop {
         // reload new config
         let config = config.read().await.clone();
@@ -383,7 +387,7 @@ pub async fn io_loop(
         let stats_w_bytes = Arc::new(AtomicUsize::new(0));
         let stats_r_bytes = Arc::new(AtomicUsize::new(0));
 
-        let mut tsk_adb;
+
         let mut tsk_ch_manager;
         let mut tsk_hu_read;
         let mut tsk_packet_proxy;
@@ -412,7 +416,6 @@ pub async fn io_loop(
             hu_w = IoDevice::TcpStreamIo(hu.clone());
             hu_tcp_stream = Some(hu.clone());
         }
-        let cfg = shared_config.read().await.clone();
         let hex_requested = cfg.hexdump_level;
         //service packet proxy
         tsk_packet_proxy = tokio_uring::spawn(packet_tls_proxy(hu_w, rxr_hu, rxr_srv, tx_srv, stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested));
@@ -424,10 +427,6 @@ pub async fn io_loop(
         tsk_ch_manager = tokio_uring::spawn(ch_proxy(
             rx_srv,
             txr_srv,
-        ));
-
-        tsk_adb = tokio_uring::spawn(tsk_adb_scrcpy(
-            cfg
         ));
         
         // Thread for monitoring transfer
