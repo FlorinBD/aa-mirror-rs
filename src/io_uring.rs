@@ -320,6 +320,7 @@ pub async fn io_loop(
     //let mut dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
     info!("{} 🛰️ DHU TCP server bound to: <u>{}</u>", NAME, bind_addr);
     let cfg = shared_config.read().await.clone();
+    let hex_requested = cfg.hexdump_level;
     let mut tsk_adb;
     tsk_adb = tokio_uring::spawn(tsk_adb_scrcpy(
         cfg
@@ -416,7 +417,7 @@ pub async fn io_loop(
             hu_w = IoDevice::TcpStreamIo(hu.clone());
             hu_tcp_stream = Some(hu.clone());
         }
-        let hex_requested = cfg.hexdump_level;
+
         //service packet proxy
         tsk_packet_proxy = tokio_uring::spawn(packet_tls_proxy(hu_w, rxr_hu, rxr_srv, tx_srv, stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested));
 
