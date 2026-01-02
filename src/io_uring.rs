@@ -348,7 +348,7 @@ pub async fn io_loop(
             } else {
                 // notify main loop to restart
                 let _ = need_restart.send(None);
-                //tokio::time::sleep(Duration::from_secs(2)).await;
+                tokio::time::sleep(Duration::from_secs(1)).await;
                 continue;
             }
         } else {
@@ -368,6 +368,7 @@ pub async fn io_loop(
                     error!("{} 🔴 Error opening USB accessory: {}", NAME, e);
                     // notify main loop to restart
                     let _ = need_restart.send(None);
+                    tokio::time::sleep(Duration::from_secs(1)).await;
                     continue;
                 }
             }
