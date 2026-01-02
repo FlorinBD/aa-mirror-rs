@@ -241,16 +241,6 @@ pub async fn battery_handler(
 
     info!("{} Received battery data: {:?}", NAME, data);
 
-    if let Some(ch) = *state.sensor_channel.lock().await {
-        if let Some(tx) = state.tx.lock().await.clone() {
-            if let Err(e) = send_ev_data(tx.clone(), ch, data).await {
-                error!("{} EV model error: {}", NAME, e);
-            }
-        }
-    } else {
-        warn!("{} Not sending packet because no sensor channel yet", NAME);
-    }
-
     (StatusCode::OK, "OK").into_response()
 }
 

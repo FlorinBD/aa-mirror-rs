@@ -300,11 +300,8 @@ async fn tsk_adb_scrcpy(
 
 pub async fn io_loop(
     need_restart: BroadcastSender<Option<Action>>,
-    tcp_start: Arc<Notify>,
     config: SharedConfig,
     tx: Arc<Mutex<Option<Sender<Packet>>>>,
-    sensor_channel: Arc<Mutex<Option<u8>>>,
-    md_connected: Arc<AtomicBool>,
 ) -> Result<()> {
     let shared_config = config.clone();
     #[allow(unused_variables)]
@@ -350,8 +347,8 @@ pub async fn io_loop(
                 hu_tcp = Some(s);
             } else {
                 // notify main loop to restart
-                //let _ = need_restart.send(None);
-                tokio::time::sleep(Duration::from_secs(2)).await;
+                let _ = need_restart.send(None);
+                //tokio::time::sleep(Duration::from_secs(2)).await;
                 continue;
             }
         } else {
@@ -472,8 +469,7 @@ pub async fn io_loop(
         // set webserver context EV stuff to None
         let mut tx_lock = tx.lock().await;
         *tx_lock = None;
-        let mut sc_lock = sensor_channel.lock().await;
-        *sc_lock = None;
+
 
         info!("{} ⌛ session time: {}", NAME, format_duration(started.elapsed()).to_string());
         // obtain action for passing it to broadcast sender

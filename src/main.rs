@@ -184,12 +184,10 @@ async fn tokio_main(
     config: SharedConfig,
     config_json: SharedConfigJson,
     restart_tx: BroadcastSender<Option<Action>>,
-    tcp_start: Arc<Notify>,
     config_file: PathBuf,
     tx: Arc<Mutex<Option<Sender<Packet>>>>,
     sensor_channel: Arc<Mutex<Option<u8>>>,
     led_support: bool,
-    profile_connected: Arc<AtomicBool>,
 ) -> Result<()> {
     let accessory_started = Arc::new(Notify::new());
     let accessory_started_cloned = accessory_started.clone();
@@ -272,14 +270,7 @@ async fn tokio_main(
             }
         }
 
-        if change_usb_order {
-            enable_usb_if_present(&mut usb, accessory_started.clone()).await;
-        }
-
-        
-        if !change_usb_order {
-            enable_usb_if_present(&mut usb, accessory_started.clone()).await;
-        }
+        enable_usb_if_present(&mut usb, accessory_started.clone()).await;
 
         // inform via LED about successful connection
         if let Some(ref mut leds) = led_manager {
@@ -300,7 +291,7 @@ async fn tokio_main(
             );
         }
 
-        // TODO: make proper main loop with cancelation
+        // TODO: make proper main loop with cancellation
         // re-read config
         cfg = config.read().await.clone();
     }
@@ -503,8 +494,6 @@ fn main() -> Result<()> {
 
     // notify for syncing threads
     let (restart_tx, _) = broadcast::channel(1);
-    let tcp_start = Arc::new(Notify::new());
-    let tcp_start_cloned = tcp_start.clone();
     let config = Arc::new(RwLock::new(config));
     let config_json = Arc::new(RwLock::new(config_json));
     let config_cloned = config.clone();
@@ -512,23 +501,19 @@ fn main() -> Result<()> {
     let tx_cloned = tx.clone();
     let sensor_channel = Arc::new(Mutex::new(None));
     let sensor_channel_cloned = sensor_channel.clone();
-    let profile_connected = Arc::new(AtomicBool::new(false));
-
     // build and spawn main tokio runtime
     let runtime = Builder::new_multi_thread().enable_all().build().unwrap();
     let restart_tx_cloned = restart_tx.clone();
-    let profile_connected_cloned = profile_connected.clone();
+
     runtime.spawn(async move {
         tokio_main(
             config_cloned,
             config_json.clone(),
             restart_tx_cloned,
-            tcp_start,
             args.config.clone(),
             tx_cloned,
             sensor_channel_cloned,
             led_support,
-            profile_connected_cloned,
         )
         .await
     });
@@ -536,11 +521,8 @@ fn main() -> Result<()> {
     // start tokio_uring runtime simultaneously
     let _ = tokio_uring::start(io_loop(
         restart_tx,
-        tcp_start_cloned,
         config,
         tx,
-        sensor_channel,
-        profile_connected,
     ));
 
     info!(
