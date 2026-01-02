@@ -268,10 +268,12 @@ async fn get_first_adb_device(adb: &mut ADBServer, config: AppConfig,) ->Option<
                 adb.disconnect_device(SocketAddrV4::new(outcome.target_ip, ADB_DEVICE_PORT)).expect("TODO: panic message");
                 return Some(device);
             },
-            _ => {}
+            _ => {
+                info!("{:?} does not have ADB daemon running", outcome.target_ip);
+            }
         }
     }
-    info!("Scan took {:?}", scan_duration);
+    info!("ADB Scan took {:?} seconds", scan_duration.as_secs());
     None
 }
 
