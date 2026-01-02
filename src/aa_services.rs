@@ -9,9 +9,6 @@ use std::sync::mpsc as std_mpsc;
 //use std::sync::mpsc::{Receiver as std_Receiver, Sender as std_Sender};
 use tokio::time::timeout;
 use tokio_uring::buf::BoundedBuf;
-//use ffmpeg_sidecar::command::FfmpegCommand;
-//use ffmpeg_sidecar::event::{FfmpegEvent, LogLevel};
-use adb_client::{ADBServer, ADBDeviceExt};
 
 // protobuf stuff:
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
@@ -1094,30 +1091,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
         let dev = "MediaSinkService Video";
         format!("<i><bright-black> aa-mirror/{}: </>", dev)
     }
-    async fn tsk_adb(tx_srv: Sender<Packet>, ch_id: u8) -> Result<()> {
-        info!("{}: ADB task started",get_name());
-        // A custom server address can be provided
-        let server_ip = Ipv4Addr::new(127, 0, 0, 1);
-        let server_port = 5037;
-        let mut server = ADBServer::new(SocketAddrV4::new(server_ip, server_port));
-        let device_ip = Ipv4Addr::new(10, 0, 0, 14);
-        loop {
-             let conn=server.connect_device(SocketAddrV4::new(device_ip, 5555));
-            match conn {
-                Ok(_)=>{
-                    let device = server.get_device().expect("cannot get device");
-                    info!("{}: ADB device found: {:?}",get_name(), device.identifier);
-                    server.disconnect_device(SocketAddrV4::new(device_ip, 5555)).expect("TODO: panic message");
-                },
-                Err(_)=>{
-                    error!("{}: ADB device not found",get_name());
-                }
-            }
 
-            tokio::time::sleep(Duration::from_secs(5)).await;
-            info!("{}: ADB server trying again",get_name());
-        }
-    }
     async fn listen_for_connections(tx: Sender<Packet>, ch_id: u8) -> Result<()> {
         let bind_addr = format!("0.0.0.0:{}", TCP_VIDEO_PORT).parse().unwrap();
         let mut listener =Some(TcpListener::bind(bind_addr).unwrap());

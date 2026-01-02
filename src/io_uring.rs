@@ -257,9 +257,9 @@ async fn get_first_adb_device(config: AppConfig,) ->Option<AdbDevice<&'static st
         .into_iter()
         .filter(|outcome| outcome.status == ProbeStatus::Occupied);
     let scan_duration = start.elapsed();
-    info!("Found hosts:");
+    info!("Found hosts: {}", occupied.iter().clone().count());
     for outcome in occupied {
-        info!("{:?}", outcome.target_ip);
+        info!("ADB try to connect to {:?}", outcome.target_ip);
 
         let mut client = AdbClient::new(SocketAddrV4::new(outcome.target_ip, ADB_SERVER_PORT));
         if(client.list_devices().iter().len()>0)
