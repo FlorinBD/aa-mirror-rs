@@ -268,7 +268,7 @@ async fn get_first_adb_device(config: AppConfig,) ->Option<AdbDevice<&'static st
         if(client.list_devices().iter().len()>0)
         {
             info!("ADB Scan took {:?} seconds", scan_duration.as_secs());
-            return Some(client.list_devices().await.ok()?.into_iter().next());
+            return Some(client.list_devices()[0]);
         }
         else {
             info!("{:?} does not have ADB daemon running", outcome.target_ip);
@@ -291,7 +291,6 @@ async fn tsk_adb_scrcpy(
     adb = AdbClientBuilder::new();
     adb.timeout(Duration::from_secs(5));
     adb.build_async().await?;*/
-
     loop
     {
         if let Some(device)=get_first_adb_device(config.clone()).await {
