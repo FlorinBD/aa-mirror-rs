@@ -257,7 +257,7 @@ async fn get_first_adb_device(config: AppConfig,) ->Option<AdbDevice<&'static st
         .into_iter()
         .filter(|outcome| outcome.status == ProbeStatus::Occupied);
     let scan_duration = start.elapsed();
-    info!("Found hosts: {}", occupied.iter().clone().count());
+    info!("Found hosts: {}", occupied.clone().count());
     for outcome in occupied {
         info!("ADB try to connect to {:?}", outcome.target_ip);
 
@@ -265,7 +265,7 @@ async fn get_first_adb_device(config: AppConfig,) ->Option<AdbDevice<&'static st
         if(client.list_devices().iter().len()>0)
         {
             info!("ADB Scan took {:?} seconds", scan_duration.as_secs());
-            return Some(client.iter_devices().iter()[0]);
+            return Some(client.list_devices()[0]);
         }
         else {
             info!("{:?} does not have ADB daemon running", outcome.target_ip);
