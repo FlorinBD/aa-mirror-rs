@@ -9,7 +9,7 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use adb_client::{ADBServer, ADBServerDevice};
+use radb::{AdbDevice, AdbClient};
 use tokio::sync::broadcast::Sender as BroadcastSender;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::{mpsc, Mutex, Notify};
@@ -238,7 +238,7 @@ async fn tcp_wait_for_md_connection(listener: &mut TcpListener) -> Result<TcpStr
     Ok(stream)
 }
 
-async fn get_first_adb_device(adb: &mut ADBServer, config: AppConfig,) ->Option<ADBServerDevice>
+async fn get_first_adb_device(config: AppConfig,) ->Option<AdbDevice<&'static str>>
 {
     let interface = arp_common::interface_from(&config.iface);
     let client = Client::new(
@@ -261,25 +261,14 @@ async fn get_first_adb_device(adb: &mut ADBServer, config: AppConfig,) ->Option<
     for outcome in occupied {
         info!("{:?}", outcome.target_ip);
 
-        let result = tokio::task::spawn_blocking(|| {
-            let conn=adb.connect_device(SocketAddrV4::new(outcome.target_ip, ADB_DEVICE_PORT));
-            match conn {
-                Ok(_)=>{
-                    let device = adb.get_device().expect("cannot get device");
-                    //info!("{}: ADB device found: {:?}",NAME, device.identifier);
-                    adb.disconnect_device(SocketAddrV4::new(outcome.target_ip, ADB_DEVICE_PORT)).expect("TODO: panic message");
-                    Some(device)
-                },
-                _ => {
-                    info!("{:?} does not have ADB daemon running", outcome.target_ip);
-                    None
-                }
-            }
-        }).await.expect("Blocking task panicked");
-        if result.is_some()
+        let mut client = AdbClient::new(SocketAddrV4::new(outcome.target_ip, ADB_SERVER_PORT));
+        if(client.list_devices().iter().len()>0)
         {
             info!("ADB Scan took {:?} seconds", scan_duration.as_secs());
-            return result;
+            return Some(client.iter_devices().iter()[0]);
+        }
+        else {
+            info!("{:?} does not have ADB daemon running", outcome.target_ip);
         }
 
     }
@@ -295,12 +284,11 @@ async fn tsk_adb_scrcpy(
 ) -> Result<()> {
     info!("{}: ADB task started",NAME);
 
-    let server_ip = Ipv4Addr::new(127, 0, 0, 1);
-    let mut server = ADBServer::new(SocketAddrV4::new(server_ip, ADB_SERVER_PORT));
+
     loop
     {
-        if let Some(device)=get_first_adb_device(&mut server, config.clone()).await {
-            info!("{}: ADB device found: {:?}",NAME, device.identifier);
+        if let Some(device)=get_first_adb_device(config.clone()).await {
+            info!("{}: ADB device found: {:?}, serial: {:?}",NAME, device.addr, device.serial);
         }
         else {
             error!("{}: No device with ADB connection found, trying again...", NAME)
