@@ -350,7 +350,8 @@ pub async fn io_loop(
                 hu_tcp = Some(s);
             } else {
                 // notify main loop to restart
-                let _ = need_restart.send(None);
+                //let _ = need_restart.send(None);
+                tokio::time::sleep(Duration::from_secs(2)).await;
                 continue;
             }
         } else {
