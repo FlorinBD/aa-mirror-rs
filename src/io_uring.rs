@@ -260,18 +260,28 @@ async fn get_first_adb_device(adb: &mut ADBServer, config: AppConfig,) ->Option<
     info!("Found hosts:");
     for outcome in occupied {
         info!("{:?}", outcome.target_ip);
-        let conn=adb.connect_device(SocketAddrV4::new(outcome.target_ip, ADB_DEVICE_PORT));
-        match conn {
-            Ok(_)=>{
-                let device = adb.get_device().expect("cannot get device");
-                //info!("{}: ADB device found: {:?}",NAME, device.identifier);
-                adb.disconnect_device(SocketAddrV4::new(outcome.target_ip, ADB_DEVICE_PORT)).expect("TODO: panic message");
-                return Some(device);
-            },
-            _ => {
-                info!("{:?} does not have ADB daemon running", outcome.target_ip);
+
+        let result = tokio::task::spawn_blocking(|| {
+            let conn=adb.connect_device(SocketAddrV4::new(outcome.target_ip, ADB_DEVICE_PORT));
+            match conn {
+                Ok(_)=>{
+                    let device = adb.get_device().expect("cannot get device");
+                    //info!("{}: ADB device found: {:?}",NAME, device.identifier);
+                    adb.disconnect_device(SocketAddrV4::new(outcome.target_ip, ADB_DEVICE_PORT)).expect("TODO: panic message");
+                    Some(device)
+                },
+                _ => {
+                    info!("{:?} does not have ADB daemon running", outcome.target_ip);
+                    None
+                }
             }
+        }).await.expect("Blocking task panicked");
+        if result.is_some()
+        {
+            info!("ADB Scan took {:?} seconds", scan_duration.as_secs());
+            return result;
         }
+
     }
     info!("ADB Scan took {:?} seconds", scan_duration.as_secs());
     None
@@ -316,7 +326,7 @@ pub async fn io_loop(
     info!("{} 🛰️ MD TCP server bound to: <u>{}</u>", NAME, bind_addr);*/
     info!("{} 🛰️ Starting TCP server for DHU...", NAME);
     let bind_addr = format!("0.0.0.0:{}", TCP_DHU_PORT).parse().unwrap();
-    //let mut dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
+    let mut dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
     info!("{} 🛰️ DHU TCP server bound to: <u>{}</u>", NAME, bind_addr);
     let cfg = shared_config.read().await.clone();
     let hex_requested = cfg.hexdump_level;
@@ -340,10 +350,10 @@ pub async fn io_loop(
 
         let mut hu_tcp = None;
         let mut hu_usb = None;
-        let mut dhu_listener ;
+        //let mut dhu_listener ;
         if config.dhu {
-            info!("{} 🛰️ DHU TCP server: bind to local address",NAME);
-            dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
+            //info!("{} 🛰️ DHU TCP server: bind to local address",NAME);
+            //dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
             info!("{} 🛰️ DHU TCP server: listening for `Desktop Head Unit` connection...",NAME);
             if let Ok(s) = tcp_wait_for_hu_connection(&mut dhu_listener.as_mut().unwrap()).await {
                 hu_tcp = Some(s);

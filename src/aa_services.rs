@@ -9,8 +9,8 @@ use std::sync::mpsc as std_mpsc;
 //use std::sync::mpsc::{Receiver as std_Receiver, Sender as std_Sender};
 use tokio::time::timeout;
 use tokio_uring::buf::BoundedBuf;
-use ffmpeg_sidecar::command::FfmpegCommand;
-use ffmpeg_sidecar::event::{FfmpegEvent, LogLevel};
+//use ffmpeg_sidecar::command::FfmpegCommand;
+//use ffmpeg_sidecar::event::{FfmpegEvent, LogLevel};
 use adb_client::{ADBServer, ADBDeviceExt};
 
 // protobuf stuff:
@@ -1023,41 +1023,6 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         if vcfg.resolution == VideoCodecResolution::Video_800x480
                         {
                             video_stream_started=true;
-                            //let listener_thread = tokio_uring::spawn(tsk_adb(tx_srv.clone(),ch_id as u8));
-                           /*let listener_thread = tokio_uring::spawn(listen_for_connections(tx_srv.clone(),ch_id as u8));
-                            // Wait for the listener to start
-                            tokio::time::sleep(Duration::from_millis(1000)).await;
-                            // Prepare an FFmpeg command with separate outputs for video, audio, and subtitles.
-                            FfmpegCommand::new()
-                                // Global flags
-                                .hide_banner()
-                                // Generate test video
-                                //Video Input
-                                .arg("-framerate 1/30")
-                                .input("/etc/aa-mirror-rs/res/130dpi.png")
-                                // Video output
-                                //.map("0:v")
-                                .codec_video("libx264")
-                                .arg("-profile:v baseline")
-                                .arg("-level:v 4.0")
-                                .duration("12:00:00")
-                                .format("mpegts")
-                                .output(format!("tcp://0.0.0.0:{TCP_VIDEO_PORT}"))
-                                .print_command()
-                                .spawn()?
-                                .iter()?
-                                .for_each(|event| match event {
-                                    // Log any unexpected errors
-                                    FfmpegEvent::Log(LogLevel::Warning | LogLevel::Error | LogLevel::Fatal, msg) => {
-                                        error!("{msg}");
-                                    }
-
-                                    // _ => {}
-                                    e => {
-                                        error!("FFMpeg error: {e:?}");
-                                    }
-                                });*/
-
                             //Send config frame
                             let mut payload=wait_screen_config_frame.to_vec();
                             payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16) >> 8) as u8);
@@ -1142,7 +1107,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                 Ok(_)=>{
                     let device = server.get_device().expect("cannot get device");
                     info!("{}: ADB device found: {:?}",get_name(), device.identifier);
-                    server.disconnect_device(SocketAddrV4::new(device_ip, 5555));
+                    server.disconnect_device(SocketAddrV4::new(device_ip, 5555)).expect("TODO: panic message");
                 },
                 Err(_)=>{
                     error!("{}: ADB device not found",get_name());
