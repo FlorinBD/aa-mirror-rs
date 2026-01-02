@@ -24,6 +24,7 @@ use tokio_uring::net::TcpStream;
 use tokio_uring::BufResult;
 use tokio_uring::UnsubmittedWrite;
 use async_arp::{Client, ClientConfigBuilder, ClientSpinner, ProbeInput, ProbeInputBuilder, ProbeStatus, Result as ArpResult};
+use radb::builder::AdbClientBuilder;
 use crate::arp_common;
 
 // module name for logging engine
@@ -258,14 +259,16 @@ async fn get_first_adb_device(config: AppConfig,) ->Option<AdbDevice<&'static st
         .filter(|outcome| outcome.status == ProbeStatus::Occupied);
     let scan_duration = start.elapsed();
     info!("Found hosts: {}", occupied.clone().count());
+
     for outcome in occupied {
         info!("ADB try to connect to {:?}", outcome.target_ip);
 
         let mut client = AdbClient::new(SocketAddrV4::new(outcome.target_ip, ADB_SERVER_PORT));
+
         if(client.list_devices().iter().len()>0)
         {
             info!("ADB Scan took {:?} seconds", scan_duration.as_secs());
-            return Some(client.list_devices()[0]);
+            return Some(client.list_devices().await.ok()?.into_iter().next());
         }
         else {
             info!("{:?} does not have ADB daemon running", outcome.target_ip);
@@ -284,6 +287,10 @@ async fn tsk_adb_scrcpy(
 ) -> Result<()> {
     info!("{}: ADB task started",NAME);
 
+    /*let adb:AdbClientBuilder;
+    adb = AdbClientBuilder::new();
+    adb.timeout(Duration::from_secs(5));
+    adb.build_async().await?;*/
 
     loop
     {
