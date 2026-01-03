@@ -7,7 +7,7 @@ use std::time::Duration;
 use byteorder::{ByteOrder, LittleEndian};
 use nusb::descriptors::{ConfigurationDescriptor, TransferType};
 use nusb::transfer::{ControlIn, ControlOut, ControlType, Direction, Recipient};
-use nusb::{ErrorKind, MaybeFuture};
+use nusb::MaybeFuture;
 use nusb::{DeviceInfo, Interface};
 use thiserror::Error;
 
@@ -244,7 +244,7 @@ impl AccessoryInterface for Interface {
                 timeout,
             )
             .wait()
-            .map_err(ErrorKind::Other)?;
+            .map_err(nusb::Error::other)?;
 
         if size.len() != size_of::<u16>() {
             return Err(AccessoryError::InvalidLength(size.len()));
@@ -273,7 +273,7 @@ impl AccessoryInterface for Interface {
                 timeout,
             )
             .wait()
-            .map_err(ErrorKind::Other)?;
+            .map_err(nusb::Error::other)?;
 
         /*if size.actual_length() != data.len() {
             return Err(AccessoryError::InvalidLength(size.actual_length()));
@@ -314,7 +314,7 @@ impl AccessoryInterface for Interface {
             timeout,
         )
             .wait()
-            .map_err(ErrorKind::Other)?;
+            .map_err(nusb::Error::other)?;
 
         Ok(())
     }
