@@ -10,7 +10,7 @@ on:
       buildLevel:
         description: 'Build level'
         required: true
-        default: 'release'
+        default: 'debug'
         type: choice
         options:
         - release
