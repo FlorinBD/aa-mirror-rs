@@ -327,7 +327,7 @@ pub async fn io_loop(
     info!("{} 🛰️ MD TCP server bound to: <u>{}</u>", NAME, bind_addr);*/
     info!("{} 🛰️ Starting TCP server for DHU...", NAME);
     let bind_addr = format!("0.0.0.0:{}", TCP_DHU_PORT).parse().unwrap();
-    let mut dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
+    //let mut dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
     info!("{} 🛰️ DHU TCP server bound to: <u>{}</u>", NAME, bind_addr);
     let cfg = shared_config.read().await.clone();
     let hex_requested = cfg.hexdump_level;
@@ -351,10 +351,10 @@ pub async fn io_loop(
 
         let mut hu_tcp = None;
         let mut hu_usb = None;
-        //let mut dhu_listener ;
+        let mut dhu_listener ;
         if config.dhu {
             //info!("{} 🛰️ DHU TCP server: bind to local address",NAME);
-            //dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
+            dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
             info!("{} 🛰️ DHU TCP server: listening for `Desktop Head Unit` connection...",NAME);
             if let Ok(s) = tcp_wait_for_hu_connection(&mut dhu_listener.as_mut().unwrap()).await {
                 hu_tcp = Some(s);
