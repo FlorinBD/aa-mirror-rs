@@ -362,6 +362,7 @@ pub async fn io_loop(
             } else {
                 // notify main loop to restart
                 let _ = need_restart.send(None);
+                drop(dhu_listener);
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 continue;
             }
