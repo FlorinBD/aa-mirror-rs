@@ -16,7 +16,6 @@ dependencies = [
  "chrono",
  "clap",
  "config",
- "dbus",
  "flate2",
  "futures",
  "glob",
@@ -50,7 +49,6 @@ dependencies = [
  "thiserror 2.0.17",
  "time",
  "tokio",
- "tokio-fd",
  "tokio-uring",
  "tokio-util",
  "toml_edit",
@@ -1472,7 +1470,6 @@ version = "0.2.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06085512b750d640299b79be4bad3d2fa90a9c00b1fd9e1b46364f66f0485c72"
 dependencies = [
- "cc",
  "pkg-config",
 ]
 
@@ -2924,16 +2921,6 @@ dependencies = [
  "socket2 0.6.1",
  "tokio-macros",
  "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "tokio-fd"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5cedf0b897610a4baff98bf6116c060c5cfe7574d4339c50e9d23fe09377641d"
-dependencies = [
- "libc",
- "tokio",
 ]
 
 [[package]]

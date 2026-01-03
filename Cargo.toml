@@ -13,14 +13,12 @@ repository = 'https://github.com/FlorinBD/aa-mirror-rs'
 default-run = "aa-mirror-rs"
 
 [dependencies]
-dbus = { version = "0.9.7", features = ["vendored"] }
 bluer = { version = "0.17.4", features = ["full"] }
 futures = "0.3.31"
 kobject-uevent = "0.1.1"
 netlink-sys = "0.8.6"
 protobuf = "3.7.1"
 tokio = { version = "1.48.0", features = ["full"] }
-tokio-fd = "0.3.0"
 tokio-uring = "0.5.0"
 mac_address = "1.1.7"
 bytesize = "1.3.0"
