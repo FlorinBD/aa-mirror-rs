@@ -2,6 +2,7 @@ use bytesize::ByteSize;
 use humantime::format_duration;
 use simplelog::*;
 use std::cell::RefCell;
+use std::fmt::Debug;
 use std::io::stderr;
 use std::marker::PhantomData;
 use std::net::{Ipv4Addr, SocketAddrV4};
@@ -239,7 +240,7 @@ async fn tcp_wait_for_md_connection(listener: &mut TcpListener) -> Result<TcpStr
     Ok(stream)
 }
 
-async fn get_first_adb_device(config: AppConfig,) ->Option<AdbDevice<&'static str>>
+async fn get_first_adb_device(config: AppConfig,) ->Option<AdbDevice<impl std::net::ToSocketAddrs + Clone + Debug>>
 {
     let interface = arp_common::interface_from(&config.iface);
     let client = Client::new(
@@ -269,6 +270,7 @@ async fn get_first_adb_device(config: AppConfig,) ->Option<AdbDevice<&'static st
         {
             info!("ADB Scan took {:?} seconds", scan_duration.as_secs());
             return Some(client.list_devices().await?.into_iter().next().unwrap());
+            //return Some(client.list_devices()?.into_iter().next().unwrap());
         }
         else {
             info!("{:?} does not have ADB daemon running", outcome.target_ip);
