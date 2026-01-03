@@ -242,15 +242,15 @@ async fn tcp_wait_for_md_connection(listener: &mut TcpListener) -> Result<TcpStr
     Ok(stream)
 }
 
-async fn get_first_adb_device(config: AppConfig,) ->Option<AdbDevice<impl ToSocketAddrs + Clone + Debug>>
+async fn get_first_adb_device(config: AppConfig, client: &mut AdbClient) ->Option<AdbDevice<impl ToSocketAddrs + Clone + Debug>>
 {
     let interface = arp_common::interface_from(&config.iface);
-    let client = Client::new(
+    let arp_client = Client::new(
         ClientConfigBuilder::new(&config.iface)
             .with_response_timeout(Duration::from_millis(500))
             .build(),
     ).unwrap();
-    let spinner = ClientSpinner::new(client).with_retries(3);
+    let spinner = ClientSpinner::new(arp_client).with_retries(3);
     let net = arp_common::net_from(&interface).unwrap();
     let start = Instant::now();
     let outcomes = spinner
@@ -269,7 +269,7 @@ async fn get_first_adb_device(config: AppConfig,) ->Option<AdbDevice<impl ToSock
         {
             info!("{:?} found port {} open, trying to connect to ADB demon", outcome.target_ip, dev_port);
             //let mut client = AdbClient::new(SocketAddrV4::new(outcome.target_ip, dev_port)).await;
-            let mut client =AdbClient::default().await;
+
             info!("ADB Scan devices");
             let devices = client.list_devices().await;
             info!("ADB get first device");
@@ -303,10 +303,10 @@ async fn tsk_adb_scrcpy(
 ) -> Result<()> {
     info!("{}: ADB task started",NAME);
 
-
+    let mut client =AdbClient::default().await;
     loop
     {
-        if let Some(device)=get_first_adb_device(config.clone()).await {
+        if let Some(device)=get_first_adb_device(config.clone(), & mut client).await {
             info!("{}: ADB device found: {:?}, serial: {:?}",NAME, device.addr, device.serial);
         }
         else {
