@@ -25,6 +25,7 @@ use tokio_uring::net::TcpStream;
 use tokio_uring::BufResult;
 use tokio_uring::UnsubmittedWrite;
 use async_arp::{Client, ClientConfigBuilder, ClientSpinner, ProbeInput, ProbeInputBuilder, ProbeStatus, Result as ArpResult};
+use port_check::is_port_reachable_with_timeout;
 use radb::builder::AdbClientBuilder;
 use crate::arp_common;
 
@@ -263,19 +264,25 @@ async fn get_first_adb_device(config: AppConfig,) ->Option<AdbDevice<impl std::n
 
     for outcome in occupied {
         info!("ADB try to connect to {:?}", outcome.target_ip);
-
-        let mut client = AdbClient::new(SocketAddrV4::new(outcome.target_ip, ADB_SERVER_PORT));
-
-        if(client.list_devices().iter().len()>0)
+        if is_port_reachable_with_timeout(SocketAddrV4::new(outcome.target_ip, ADB_SERVER_PORT), Duration::from_secs(5))
         {
-            info!("ADB Scan took {:?} seconds", scan_duration.as_secs());
-            //return Some(client.list_devices().await?.into_iter().next().unwrap());
-            //return Some(client.list_devices()?.into_iter().next().unwrap());
-            return  Some( client.list_devices().ok()?.into_iter().next().unwrap() );
+            let mut client = AdbClient::new(SocketAddrV4::new(outcome.target_ip, ADB_SERVER_PORT));
+
+            if(client.list_devices().iter().len()>0)
+            {
+                info!("ADB Scan took {:?} seconds", scan_duration.as_secs());
+                //return Some(client.list_devices().await?.into_iter().next().unwrap());
+                //return Some(client.list_devices()?.into_iter().next().unwrap());
+                return  Some( client.list_devices().ok()?.into_iter().next().unwrap() );
+            }
+            else {
+                info!("{:?} does not have ADB daemon running", outcome.target_ip);
+            }
         }
         else {
-            info!("{:?} does not have ADB daemon running", outcome.target_ip);
+            info!("{:?} does not have port {} open", outcome.target_ip, ADB_SERVER_PORT);
         }
+
 
     }
     info!("ADB Scan took {:?} seconds", scan_duration.as_secs());
