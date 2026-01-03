@@ -27,6 +27,7 @@ use tokio_uring::UnsubmittedWrite;
 use async_arp::{Client, ClientConfigBuilder, ClientSpinner, ProbeInput, ProbeInputBuilder, ProbeStatus, Result as ArpResult};
 use port_check::is_port_reachable_with_timeout;
 use radb::builder::AdbClientBuilder;
+use tokio::net::ToSocketAddrs;
 use crate::arp_common;
 
 // module name for logging engine
@@ -241,7 +242,7 @@ async fn tcp_wait_for_md_connection(listener: &mut TcpListener) -> Result<TcpStr
     Ok(stream)
 }
 
-async fn get_first_adb_device(config: AppConfig,) ->Option<AdbDevice<impl std::net::ToSocketAddrs + Clone + Debug>>
+async fn get_first_adb_device(config: AppConfig,) ->Option<AdbDevice<impl ToSocketAddrs + Clone + Debug>>
 {
     let interface = arp_common::interface_from(&config.iface);
     let client = Client::new(
