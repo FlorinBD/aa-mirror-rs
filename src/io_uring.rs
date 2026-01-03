@@ -261,12 +261,13 @@ async fn get_first_adb_device(config: AppConfig,) ->Option<AdbDevice<impl std::n
         .filter(|outcome| outcome.status == ProbeStatus::Occupied);
     let scan_duration = start.elapsed();
     info!("Found hosts: {}", occupied.clone().count());
-
+    let dev_port=ADB_DEVICE_PORT;
     for outcome in occupied {
-        info!("ADB try to connect to {:?}", outcome.target_ip);
-        if is_port_reachable_with_timeout(SocketAddrV4::new(outcome.target_ip, ADB_SERVER_PORT), Duration::from_secs(5))
+        //info!("ADB try to connect to {:?}", outcome.target_ip);
+        if is_port_reachable_with_timeout(SocketAddrV4::new(outcome.target_ip, dev_port), Duration::from_secs(5))
         {
-            let mut client = AdbClient::new(SocketAddrV4::new(outcome.target_ip, ADB_SERVER_PORT));
+            info!("{:?} found port {} open, trying to connect to ADB demon", outcome.target_ip, dev_port);
+            let mut client = AdbClient::new(SocketAddrV4::new(outcome.target_ip, dev_port));
 
             if(client.list_devices().iter().len()>0)
             {
@@ -275,17 +276,17 @@ async fn get_first_adb_device(config: AppConfig,) ->Option<AdbDevice<impl std::n
                 //return Some(client.list_devices()?.into_iter().next().unwrap());
                 return  Some( client.list_devices().ok()?.into_iter().next().unwrap() );
             }
-            else {
+            /*else {
                 info!("{:?} does not have ADB daemon running", outcome.target_ip);
-            }
+            }*/
         }
-        else {
-            info!("{:?} does not have port {} open", outcome.target_ip, ADB_SERVER_PORT);
-        }
+        /*else {
+            info!("{:?} does not have port {} open", outcome.target_ip, dev_port);
+        }*/
 
 
     }
-    info!("ADB Scan took {:?} seconds", scan_duration.as_secs());
+    //info!("ADB Scan took {:?} seconds", scan_duration.as_secs());
     None
 }
 
