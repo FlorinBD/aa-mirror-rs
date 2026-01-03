@@ -268,13 +268,14 @@ async fn get_first_adb_device(config: AppConfig,) ->Option<AdbDevice<impl std::n
         {
             info!("{:?} found port {} open, trying to connect to ADB demon", outcome.target_ip, dev_port);
             let mut client = AdbClient::new(SocketAddrV4::new(outcome.target_ip, dev_port)).await;
-
-            if(client.list_devices().await.iter().clone().len()>0)
+            let devices = client.list_devices().await;
+            let mut device = devices.into_iter().next().unwrap();
+            if device.len() >0
             {
                 info!("ADB Scan took {:?} seconds", scan_duration.as_secs());
                 //return Some(client.list_devices().await?.into_iter().next().unwrap());
                 //return Some(client.list_devices()?.into_iter().next().unwrap());
-                return  Some( client.list_devices().ok()?.into_iter().next().unwrap() );
+                return  Some( device.into_iter().next().unwrap() );
             }
             /*else {
                 info!("{:?} does not have ADB daemon running", outcome.target_ip);
