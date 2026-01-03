@@ -269,7 +269,9 @@ async fn get_first_adb_device(config: AppConfig,) ->Option<AdbDevice<impl ToSock
         {
             info!("{:?} found port {} open, trying to connect to ADB demon", outcome.target_ip, dev_port);
             let mut client = AdbClient::new(SocketAddrV4::new(outcome.target_ip, dev_port)).await;
+            info!("ADB Scan devices");
             let devices = client.list_devices().await;
+            info!("ADB get first device");
             let mut device = devices.into_iter().next().unwrap();
             if device.len() >0
             {
