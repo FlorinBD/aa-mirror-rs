@@ -313,8 +313,8 @@ impl AccessoryInterface for Interface {
             },
             timeout,
         )
-        .wait()
-        .map_err(nusb::Error::other)?;
+            .wait()
+            .map_err(nusb::Error::other)?;
 
         Ok(())
     }
