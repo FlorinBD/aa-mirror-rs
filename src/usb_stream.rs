@@ -1,4 +1,4 @@
-use nusb::Endpoint;
+use nusb::{Endpoint, ErrorKind};
 use nusb::{
     transfer::{Bulk, In, Out},
     Device, MaybeFuture,
@@ -78,7 +78,7 @@ pub fn switch_to_accessory(info: &nusb::DeviceInfo) -> Result<(), ConnectError> 
 
     let strings = AccessoryStrings::new("Android", "Android Auto", "Android Auto", "1.0", "", "")
         .map_err(|_| {
-        ConnectError::CantOpenUsbHandle(nusb::Error::other("Invalid accessory settings"))
+        ConnectError::CantOpenUsbHandle(nusb::Error::from("Invalid accessory settings"))
     })?;
 
     let protocol = iface
@@ -131,7 +131,7 @@ pub async fn new(
             .wait()
             .map_err(ConnectError::NoUsbDevice)?
             .find(|d| d.in_accessory_mode())
-            .ok_or(nusb::Error::other(
+            .ok_or(nusb::Error::from(
                 "No android phone found after switching to accessory. Make sure the phone is set to charging only mode.",
             ))
             .map_err(ConnectError::NoUsbDevice)?;
