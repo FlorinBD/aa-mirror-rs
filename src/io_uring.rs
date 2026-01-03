@@ -268,7 +268,8 @@ async fn get_first_adb_device(config: AppConfig,) ->Option<AdbDevice<impl ToSock
         if is_port_reachable_with_timeout(SocketAddrV4::new(outcome.target_ip, dev_port), Duration::from_secs(5))
         {
             info!("{:?} found port {} open, trying to connect to ADB demon", outcome.target_ip, dev_port);
-            let mut client = AdbClient::new(SocketAddrV4::new(outcome.target_ip, dev_port)).await;
+            //let mut client = AdbClient::new(SocketAddrV4::new(outcome.target_ip, dev_port)).await;
+            let mut client =AdbClient::default().await;
             info!("ADB Scan devices");
             let devices = client.list_devices().await;
             info!("ADB get first device");
