@@ -269,8 +269,9 @@ async fn get_first_adb_device(config: AppConfig,) ->Option<AdbDevice<impl std::n
         if(client.list_devices().iter().len()>0)
         {
             info!("ADB Scan took {:?} seconds", scan_duration.as_secs());
-            return Some(client.list_devices().await?.into_iter().next().unwrap());
+            //return Some(client.list_devices().await?.into_iter().next().unwrap());
             //return Some(client.list_devices()?.into_iter().next().unwrap());
+            return  Some( client.list_devices().ok()?.into_iter().next().unwrap() );
         }
         else {
             info!("{:?} does not have ADB daemon running", outcome.target_ip);
