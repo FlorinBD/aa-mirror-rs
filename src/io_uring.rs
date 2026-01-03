@@ -267,9 +267,9 @@ async fn get_first_adb_device(config: AppConfig,) ->Option<AdbDevice<impl std::n
         if is_port_reachable_with_timeout(SocketAddrV4::new(outcome.target_ip, dev_port), Duration::from_secs(5))
         {
             info!("{:?} found port {} open, trying to connect to ADB demon", outcome.target_ip, dev_port);
-            let mut client = AdbClient::new(SocketAddrV4::new(outcome.target_ip, dev_port));
+            let mut client = AdbClient::new(SocketAddrV4::new(outcome.target_ip, dev_port)).await;
 
-            if(client.list_devices().iter().len()>0)
+            if(client.list_devices().await.iter().clone().len()>0)
             {
                 info!("ADB Scan took {:?} seconds", scan_duration.as_secs());
                 //return Some(client.list_devices().await?.into_iter().next().unwrap());
