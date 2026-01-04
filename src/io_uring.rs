@@ -275,7 +275,7 @@ async fn get_first_adb_device(config: AppConfig, client: &mut AdbClient) ->Optio
             info!("ADB Scan devices");
             let mut device_list = client.iter_devices().await;
             if let Some(device) = device_list.next().await {
-                info!("ADB dev found: {}", device.serial);
+                info!("ADB dev found: {:?}", device.serial);
                 return  Some(device);
             }
         }
