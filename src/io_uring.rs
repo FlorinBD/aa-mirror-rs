@@ -296,7 +296,9 @@ async fn get_first_adb_device(config: AppConfig, client: &mut AdbClient) ->Optio
             //let mut client = AdbClient::new(SocketAddrV4::new(outcome.target_ip, dev_port)).await;
             client.connect_device(dev_socket.to_string().as_str()).await.expect("TODO: panic message");
             info!("ADB Scan devices");
+            tokio::time::sleep(Duration::from_secs(5)).await;
             let mut device_list = client.iter_devices().await;
+            info!("ADB iter devices done");
             if let Some(device) = device_list.next().await {
                 info!("ADB dev found: {:?}", device.serial);
                 return  Some(device);
