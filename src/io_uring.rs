@@ -300,12 +300,12 @@ async fn get_first_adb_device(config: AppConfig) ->Option<& 'static str>
 
             let cmd_shell = Command::new("adb")
                 .arg("shell")
-                .arg("CLASSPATH=/data/local/tmp/scrcpy-server.jar app_process / com.genymobile.scrcpy.Server 3.3 scid=101 log_level=info tunnel_forward=true raw_stream=true audio=true max_size=800")
+                .arg("CLASSPATH=/data/local/tmp/scrcpy-server.jar app_process / com.genymobile.scrcpy.Server 3.3 scid=101 log_level=info tunnel_forward=true raw_stream=true audio=true max_size=800 video_bit_rate=8M video_codec=h264 max_fps=30")
                 .output().await.unwrap();
             info!("ADB error: {:?}", cmd_shell.stderr);
             info!("ADB status: {:?}", cmd_shell.status);
-
-            return  Some(cmd_dev.status.to_string().as_str());
+            let retval:& 'static str=cmd_dev.status.to_string().as_str();
+            return  Some(retval);
         }
     }
     //info!("ADB Scan took {:?} seconds", scan_duration.as_secs());
