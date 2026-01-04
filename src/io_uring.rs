@@ -195,7 +195,7 @@ async fn flatten<T>(handle: &mut JoinHandle<Result<T>>, dbg_info:String) -> Resu
 
 /// Asynchronously wait for an inbound TCP connection
 /// returning TcpStream of first client connected
-async fn tcp_wait_for_hu_connection(listener: &mut TcpListener) -> Result<TcpStream> {
+async fn tcp_wait_for_hu_connection_old(listener: &mut TcpListener) -> Result<TcpStream> {
     let retval = listener.accept();
     let (stream, addr) = match timeout(TCP_CLIENT_TIMEOUT, retval)
         .await
@@ -216,6 +216,29 @@ async fn tcp_wait_for_hu_connection(listener: &mut TcpListener) -> Result<TcpStr
     // even if there is only a small amount of data
     stream.set_nodelay(true)?;
     Ok(stream)
+}
+
+async fn tcp_wait_for_hu_connection(listener: &TcpListener) -> Result<TcpStream> {
+    let deadline = tokio::time::Instant::now() + TCP_CLIENT_TIMEOUT;
+    loop {
+        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+        if remaining.is_zero() {
+            return Err("TCP accept timed out".into());
+        }
+
+        match tokio::time::timeout(remaining, listener.accept()).await {
+            Ok(Ok((stream, addr))) => {
+                info!(
+                    "{} 📳 HU TCP server: new client connected: <b>{:?}</b>",
+                    NAME, addr
+                );
+                stream.set_nodelay(true)?;
+                return Ok(stream);
+            }
+            Ok(Err(e)) => return Err(e.into()),
+            Err(_) => continue, // timeout tick, keep listener alive
+        }
+    }
 }
 
 /// Asynchronously wait for an inbound TCP connection
@@ -323,7 +346,7 @@ pub async fn io_loop(
     info!("{} 🛰️ MD TCP server bound to: <u>{}</u>", NAME, bind_addr);*/
     info!("{} 🛰️ Starting TCP server for DHU...", NAME);
     let bind_addr = format!("0.0.0.0:{}", TCP_DHU_PORT).parse().unwrap();
-    //let mut dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
+    let mut dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
     info!("{} 🛰️ DHU TCP server bound to: <u>{}</u>", NAME, bind_addr);
     let cfg = shared_config.read().await.clone();
     let hex_requested = cfg.hexdump_level;
@@ -347,17 +370,17 @@ pub async fn io_loop(
 
         let mut hu_tcp = None;
         let mut hu_usb = None;
-        let mut dhu_listener ;
+        //let mut dhu_listener ;
         if config.dhu {
             //info!("{} 🛰️ DHU TCP server: bind to local address",NAME);
-            dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
+            //dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
             info!("{} 🛰️ DHU TCP server: listening for `Desktop Head Unit` connection...",NAME);
             if let Ok(s) = tcp_wait_for_hu_connection(&mut dhu_listener.as_mut().unwrap()).await {
                 hu_tcp = Some(s);
             } else {
                 // notify main loop to restart
                 let _ = need_restart.send(None);
-                drop(dhu_listener);
+                //drop(dhu_listener);
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 continue;
             }
