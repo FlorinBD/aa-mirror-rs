@@ -10,7 +10,6 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use radb::{AdbDevice, AdbClient, utils};
 use tokio::sync::broadcast::Sender as BroadcastSender;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::{mpsc, Mutex, Notify};
@@ -26,7 +25,6 @@ use tokio_uring::BufResult;
 use tokio_uring::UnsubmittedWrite;
 use async_arp::{Client, ClientConfigBuilder, ClientSpinner, ProbeInput, ProbeInputBuilder, ProbeStatus, Result as ArpResult};
 use port_check::is_port_reachable_with_timeout;
-use radb::builder::AdbClientBuilder;
 use tokio::net::ToSocketAddrs;
 use crate::arp_common;
 use futures::StreamExt;
@@ -244,7 +242,7 @@ async fn tcp_wait_for_md_connection(listener: &mut TcpListener) -> Result<TcpStr
     Ok(stream)
 }
 
-async fn get_first_adb_device(config: AppConfig) ->Option<&str>
+async fn get_first_adb_device(config: AppConfig) ->Option<& 'static str>
 {
     let interface = arp_common::interface_from(&config.iface);
     let arp_client = Client::new(
