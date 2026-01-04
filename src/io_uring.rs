@@ -304,7 +304,7 @@ async fn get_first_adb_device(config: AppConfig) ->Option<& 'static str>
                 .output().await.unwrap();
             info!("ADB error: {:?}", cmd_shell.stderr);
             info!("ADB status: {:?}", cmd_shell.status);
-            let retval:& 'static str=cmd_dev.status.to_string().as_str();
+            let retval:& 'static str=&String::from(cmd_dev.status.to_string());
             return  Some(retval);
         }
     }
