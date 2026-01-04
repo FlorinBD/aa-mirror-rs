@@ -30,6 +30,7 @@ use radb::builder::AdbClientBuilder;
 use tokio::net::ToSocketAddrs;
 use crate::arp_common;
 use futures::StreamExt;
+use tokio::process::Command;
 
 // module name for logging engine
 const NAME: &str = "<i><bright-black> io_uring: </>";
@@ -195,7 +196,7 @@ async fn flatten<T>(handle: &mut JoinHandle<Result<T>>, dbg_info:String) -> Resu
 
 /// Asynchronously wait for an inbound TCP connection
 /// returning TcpStream of first client connected
-async fn tcp_wait_for_hu_connection_old(listener: &mut TcpListener) -> Result<TcpStream> {
+async fn tcp_wait_for_hu_connection(listener: &mut TcpListener) -> Result<TcpStream> {
     let retval = listener.accept();
     let (stream, addr) = match timeout(TCP_CLIENT_TIMEOUT, retval)
         .await
@@ -216,29 +217,6 @@ async fn tcp_wait_for_hu_connection_old(listener: &mut TcpListener) -> Result<Tc
     // even if there is only a small amount of data
     stream.set_nodelay(true)?;
     Ok(stream)
-}
-
-async fn tcp_wait_for_hu_connection(listener: &TcpListener) -> Result<TcpStream> {
-    let deadline = tokio::time::Instant::now() + TCP_CLIENT_TIMEOUT;
-    loop {
-        let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
-        if remaining.is_zero() {
-            return Err("TCP accept timed out".into());
-        }
-
-        match tokio::time::timeout(remaining, listener.accept()).await {
-            Ok(Ok((stream, addr))) => {
-                info!(
-                    "{} 📳 HU TCP server: new client connected: <b>{:?}</b>",
-                    NAME, addr
-                );
-                stream.set_nodelay(true)?;
-                return Ok(stream);
-            }
-            Ok(Err(e)) => return Err(e.into()),
-            Err(_) => continue, // timeout tick, keep listener alive
-        }
-    }
 }
 
 /// Asynchronously wait for an inbound TCP connection
@@ -266,7 +244,7 @@ async fn tcp_wait_for_md_connection(listener: &mut TcpListener) -> Result<TcpStr
     Ok(stream)
 }
 
-async fn get_first_adb_device(config: AppConfig, client: &mut AdbClient) ->Option<AdbDevice<impl ToSocketAddrs + Clone + Debug>>
+async fn get_first_adb_device(config: AppConfig) ->Option<&str>
 {
     let interface = arp_common::interface_from(&config.iface);
     let arp_client = Client::new(
@@ -293,16 +271,43 @@ async fn get_first_adb_device(config: AppConfig, client: &mut AdbClient) ->Optio
         if is_port_reachable_with_timeout(dev_socket, Duration::from_secs(5))
         {
             info!("{:?} found port {} open, trying to connect to ADB demon", outcome.target_ip, dev_port);
-            //let mut client = AdbClient::new(SocketAddrV4::new(outcome.target_ip, dev_port)).await;
-            client.connect_device(dev_socket.to_string().as_str()).await.expect("TODO: panic message");
-            info!("ADB Scan devices");
-            tokio::time::sleep(Duration::from_secs(5)).await;
-            let mut device_list = client.iter_devices().await;
-            info!("ADB iter devices done");
-            if let Some(device) = device_list.next().await {
-                info!("ADB dev found: {:?}", device.serial);
-                return  Some(device);
-            }
+            let cmd_connect = Command::new("adb")
+                .arg("connect")
+                .arg(dev_socket.to_string())
+                .output().await.unwrap();
+            info!("ADB error: {:?}", cmd_connect.stderr);
+            info!("ADB status: {:?}", cmd_connect.status);
+
+            let cmd_dev = Command::new("adb")
+                .arg("devices")
+                .output().await.unwrap();
+            info!("ADB error: {:?}", cmd_dev.stderr);
+            info!("ADB status: {:?}", cmd_dev.status);
+
+            let cmd_push = Command::new("adb")
+                .arg("push")
+                .arg("/etc/aa-mirror-rs/scrcpy-server")
+                .arg("/data/local/tmp/scrcpy-server-manual.jar")
+                .output().await.unwrap();
+            info!("ADB error: {:?}", cmd_push.stderr);
+            info!("ADB status: {:?}", cmd_push.status);
+
+            let cmd_portfw = Command::new("adb")
+                .arg("forward")
+                .arg("tcp:27183")
+                .arg("localabstract:scrcpy_101")
+                .output().await.unwrap();
+            info!("ADB error: {:?}", cmd_portfw.stderr);
+            info!("ADB status: {:?}", cmd_portfw.status);
+
+            let cmd_shell = Command::new("adb")
+                .arg("shell")
+                .arg("CLASSPATH=/data/local/tmp/scrcpy-server.jar app_process / com.genymobile.scrcpy.Server 3.3 scid=101 log_level=info tunnel_forward=true raw_stream=true audio=true max_size=800")
+                .output().await.unwrap();
+            info!("ADB error: {:?}", cmd_shell.stderr);
+            info!("ADB status: {:?}", cmd_shell.status);
+
+            return  Some(cmd_dev.status.to_string().as_str());
         }
     }
     //info!("ADB Scan took {:?} seconds", scan_duration.as_secs());
@@ -316,13 +321,11 @@ async fn tsk_adb_scrcpy(
     config: AppConfig,
 ) -> Result<()> {
     info!("{}: ADB task started",NAME);
-    utils::start_adb_server();
-    let mut client =AdbClient::default().await;
+
     loop
     {
-        if let Some(device)=get_first_adb_device(config.clone(), & mut client).await {
-            info!("{}: ADB device found: {:?}, serial: {:?}",NAME, device.addr, device.serial);
-            client.disconnect_device(device.serial.unwrap().as_str()).await.expect("TODO: panic message");
+        if let Some(device)=get_first_adb_device(config.clone()).await {
+            info!("{}: ADB device found: {:?}",NAME, device);
         }
         else {
             error!("{}: No device with ADB connection found, trying again...", NAME)
