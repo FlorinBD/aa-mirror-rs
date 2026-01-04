@@ -272,25 +272,12 @@ async fn get_first_adb_device(config: AppConfig, client: &mut AdbClient) ->Optio
             //let mut client = AdbClient::new(SocketAddrV4::new(outcome.target_ip, dev_port)).await;
             client.connect_device(dev_socket.to_string().as_str()).await.expect("TODO: panic message");
             info!("ADB Scan devices");
-            let devices = client.list_devices().await;
-            info!("ADB get first device");
-            let mut device = devices.into_iter().next().unwrap();
-            if device.len() >0
-            {
-                info!("ADB Scan took {:?} seconds", scan_duration.as_secs());
-                //return Some(client.list_devices().await?.into_iter().next().unwrap());
-                //return Some(client.list_devices()?.into_iter().next().unwrap());
-                return  Some( device.into_iter().next().unwrap() );
+            let device_list = client.iter_devices().unwrap().next();
+            if let Some(dev) = device_list{
+                info!("ADB dev found: {}", dev.info);
+                return  Some(dev);
             }
-            /*else {
-                info!("{:?} does not have ADB daemon running", outcome.target_ip);
-            }*/
         }
-        /*else {
-            info!("{:?} does not have port {} open", outcome.target_ip, dev_port);
-        }*/
-
-
     }
     //info!("ADB Scan took {:?} seconds", scan_duration.as_secs());
     None
@@ -309,6 +296,7 @@ async fn tsk_adb_scrcpy(
     {
         if let Some(device)=get_first_adb_device(config.clone(), & mut client).await {
             info!("{}: ADB device found: {:?}, serial: {:?}",NAME, device.addr, device.serial);
+            client.disconnect_device(device.serial.to_string().as_str()).await.expect("TODO: panic message");
         }
         else {
             error!("{}: No device with ADB connection found, trying again...", NAME)
