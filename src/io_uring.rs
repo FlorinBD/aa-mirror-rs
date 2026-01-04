@@ -272,7 +272,7 @@ async fn get_first_adb_device(config: AppConfig, client: &mut AdbClient) ->Optio
             //let mut client = AdbClient::new(SocketAddrV4::new(outcome.target_ip, dev_port)).await;
             client.connect_device(dev_socket.to_string().as_str()).await.expect("TODO: panic message");
             info!("ADB Scan devices");
-            let device_list = client.iter_devices().unwrap().next();
+            let device_list = client.iter_devices().await;
             if let Some(dev) = device_list{
                 info!("ADB dev found: {}", dev.info);
                 return  Some(dev);
@@ -296,7 +296,7 @@ async fn tsk_adb_scrcpy(
     {
         if let Some(device)=get_first_adb_device(config.clone(), & mut client).await {
             info!("{}: ADB device found: {:?}, serial: {:?}",NAME, device.addr, device.serial);
-            client.disconnect_device(device.serial.to_string().as_str()).await.expect("TODO: panic message");
+            client.disconnect_device(device.serial.unwrap().as_str()).await.expect("TODO: panic message");
         }
         else {
             error!("{}: No device with ADB connection found, trying again...", NAME)
