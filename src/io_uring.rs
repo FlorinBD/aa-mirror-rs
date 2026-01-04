@@ -29,6 +29,7 @@ use port_check::is_port_reachable_with_timeout;
 use radb::builder::AdbClientBuilder;
 use tokio::net::ToSocketAddrs;
 use crate::arp_common;
+use futures::StreamExt;
 
 // module name for logging engine
 const NAME: &str = "<i><bright-black> io_uring: </>";
@@ -272,10 +273,10 @@ async fn get_first_adb_device(config: AppConfig, client: &mut AdbClient) ->Optio
             //let mut client = AdbClient::new(SocketAddrV4::new(outcome.target_ip, dev_port)).await;
             client.connect_device(dev_socket.to_string().as_str()).await.expect("TODO: panic message");
             info!("ADB Scan devices");
-            let device_list = client.iter_devices().await;
-            if let Some(dev) = device_list{
-                info!("ADB dev found: {}", dev.info);
-                return  Some(dev);
+            let mut device_list = client.iter_devices().await;
+            if let Some(device) = device_list.next().await {
+                info!("ADB dev found: {}", device.serial);
+                return  Some(device);
             }
         }
     }
