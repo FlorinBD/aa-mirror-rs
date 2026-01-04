@@ -242,7 +242,7 @@ async fn tcp_wait_for_md_connection(listener: &mut TcpListener) -> Result<TcpStr
     Ok(stream)
 }
 
-async fn get_first_adb_device(config: AppConfig) ->Option<& 'static str>
+async fn get_first_adb_device(config: AppConfig) ->Option<String>
 {
     let interface = arp_common::interface_from(&config.iface);
     let arp_client = Client::new(
@@ -304,8 +304,8 @@ async fn get_first_adb_device(config: AppConfig) ->Option<& 'static str>
                 .output().await.unwrap();
             info!("ADB error: {:?}", cmd_shell.stderr);
             info!("ADB status: {:?}", cmd_shell.status);
-            let retval:& 'static str=&String::from(cmd_dev.status.to_string());
-            return  Some(retval);
+
+            return  Some(cmd_dev.status.to_string());
         }
     }
     //info!("ADB Scan took {:?} seconds", scan_duration.as_secs());
