@@ -10,7 +10,7 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use radb::{AdbDevice, AdbClient};
+use radb::{AdbDevice, AdbClient, utils};
 use tokio::sync::broadcast::Sender as BroadcastSender;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::{mpsc, Mutex, Notify};
@@ -265,11 +265,12 @@ async fn get_first_adb_device(config: AppConfig, client: &mut AdbClient) ->Optio
     let dev_port=ADB_DEVICE_PORT;
     for outcome in occupied {
         //info!("ADB try to connect to {:?}", outcome.target_ip);
-        if is_port_reachable_with_timeout(SocketAddrV4::new(outcome.target_ip, dev_port), Duration::from_secs(5))
+        let dev_socket=SocketAddrV4::new(outcome.target_ip, dev_port);
+        if is_port_reachable_with_timeout(dev_socket, Duration::from_secs(5))
         {
             info!("{:?} found port {} open, trying to connect to ADB demon", outcome.target_ip, dev_port);
             //let mut client = AdbClient::new(SocketAddrV4::new(outcome.target_ip, dev_port)).await;
-
+            client.connect_device(dev_socket.to_string().as_str()).await.expect("TODO: panic message");
             info!("ADB Scan devices");
             let devices = client.list_devices().await;
             info!("ADB get first device");
@@ -302,7 +303,7 @@ async fn tsk_adb_scrcpy(
     config: AppConfig,
 ) -> Result<()> {
     info!("{}: ADB task started",NAME);
-
+    utils::start_adb_server();
     let mut client =AdbClient::default().await;
     loop
     {
