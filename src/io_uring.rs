@@ -26,7 +26,7 @@ use tokio_uring::UnsubmittedWrite;
 use async_arp::{Client, ClientConfigBuilder, ClientSpinner, ProbeInput, ProbeInputBuilder, ProbeStatus, Result as ArpResult};
 use port_check::is_port_reachable_with_timeout;
 use tokio::net::ToSocketAddrs;
-use crate::arp_common;
+use crate::{adb, arp_common};
 use futures::StreamExt;
 use tokio::process::Command;
 
@@ -280,7 +280,12 @@ async fn get_first_adb_device(config: AppConfig) ->Option<String>
                 Ok(string) => println!("ADB connect stdout: {}", string),
                 _=>{},
             }
-
+            let lines=adb::parse_response_lines(cmd_connect.stdout).expect("TODO: panic message");
+            if lines.len() > 0 {
+               for line in lines {
+                   info!("ADB response: {:?}", line);
+               }
+            }
             let cmd_dev = Command::new("adb")
                 .arg("devices")
                 .output().await.unwrap();
