@@ -1,5 +1,5 @@
 name: Build aa-mirror-rs
-run-name: Build aa-mirror-rs ${{':'}} ${{ github.event.workflow_run.head_commit.message }}
+run-name: Build aa-mirror-rs ${{':'}} ${{ github.event.head_commit.message }}
 on:
   #push:
     #branches: [ "main" ]
