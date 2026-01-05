@@ -263,6 +263,15 @@ async fn get_first_adb_device(config: AppConfig) ->Option<String>
     let scan_duration = start.elapsed();
     info!("Found hosts: {}", occupied.clone().count());
     let dev_port=ADB_DEVICE_PORT;
+    let scid=101;
+    let scrcpy_version="3.3.4";
+    let video_bitrate=8000000;
+    let video_res_w=800;
+    let video_res_h=480;
+    let video_fps=60;
+    let screen_dpi=160;
+    let audio_bitrate=48000;
+    let connected_dev;
     for outcome in occupied {
         //info!("ADB try to connect to {:?}", outcome.target_ip);
         let dev_socket=SocketAddrV4::new(outcome.target_ip, dev_port);
@@ -273,65 +282,86 @@ async fn get_first_adb_device(config: AppConfig) ->Option<String>
                 .arg("connect")
                 .arg(dev_socket.to_string())
                 .output().await.unwrap();
-            info!("ADB connect error: {:?}", cmd_connect.stderr);
-            info!("ADB connect status: {:?}", cmd_connect.status);
-            info!("ADB connect stdout: {:?}", cmd_connect.stdout);
-            let lines= String::from_utf8_lossy(&cmd_connect.stdout).to_string();
-            println!("ADB connect stdout: {}", lines);
             let lines=adb::parse_response_lines(cmd_connect.stdout).expect("TODO: panic message");
             if lines.len() > 0 {
                for line in lines {
-                   info!("ADB response: {:?}", line);
+                   info!("ADB connect response: {:?}", line);
+                   if line.contains("connected") {
+                       connected_dev=line;
+                   }
                }
             }
+
             let cmd_dev = Command::new("adb")
                 .arg("devices")
                 .output().await.unwrap();
-            info!("ADB devices error: {:?}", cmd_dev.stderr);
-            info!("ADB devices status: {:?}", cmd_dev.status);
-            info!("ADB devices stdout: {:?}", cmd_dev.stdout);
-            let lines= String::from_utf8_lossy(&cmd_dev.stdout).to_string();
-            println!("ADB devices stdout: {}", lines);
+            let lines=adb::parse_response_lines(cmd_dev.stdout).expect("TODO: panic message");
+            if lines.len() > 0 {
+                for line in lines {
+                    info!("ADB devices response: {:?}", line);
+                }
+            }
 
             let cmd_push = Command::new("adb")
                 .arg("push")
                 .arg("/etc/aa-mirror-rs/scrcpy-server")
                 .arg("/data/local/tmp/scrcpy-server-manual.jar")
                 .output().await.unwrap();
-            info!("ADB push error: {:?}", cmd_push.stderr);
-            info!("ADB push status: {:?}", cmd_push.status);
-            info!("ADB push stdout: {:?}", cmd_push.stdout);
-            let lines= String::from_utf8_lossy(&cmd_push.stdout).to_string();
-            println!("ADB push stdout: {}", lines);
+            let lines=adb::parse_response_lines(cmd_push.stdout).expect("TODO: panic message");
+            if lines.len() > 0 {
+                for line in lines {
+                    info!("ADB push response: {:?}", line);
+                }
+            }
 
             let cmd_portfw = Command::new("adb")
                 .arg("forward")
-                .arg("tcp:27183")
-                .arg("localabstract:scrcpy_101")
+                .arg(format!("tcp:{}", ADB_SERVER_PORT))
+                .arg(format!("localabstract:scrcpy_{}", scid))
                 .output().await.unwrap();
-            info!("ADB forward error: {:?}", cmd_portfw.stderr);
-            info!("ADB forward status: {:?}", cmd_portfw.status);
-            info!("ADB forward stdout: {:?}", cmd_portfw.stdout);
-            let lines= String::from_utf8_lossy(&cmd_portfw.stdout).to_string();
-            println!("ADB forward stdout: {}", lines);
+            let lines=adb::parse_response_lines(cmd_portfw.stdout).expect("TODO: panic message");
+            if lines.len() > 0 {
+                for line in lines {
+                    info!("ADB port fw. response: {:?}", line);
+                }
+            }
 
             let cmd_shell = Command::new("adb")
                 .arg("shell")
-                .arg("CLASSPATH=/data/local/tmp/scrcpy-server.jar app_process / com.genymobile.scrcpy.Server 3.3 scid=101 log_level=info tunnel_forward=true raw_stream=true audio=true max_size=800 video_bit_rate=8M video_codec=h264 max_fps=30")
+                .arg(format!("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar app_process / com.genymobile.scrcpy.Server {} scid={} log_level=info send_frame_meta=true tunnel_forward=true audio=true video=true control=true cleanup=true raw_stream=true audio_codec=aac audio_bit_rate={} max_size={} video_bit_rate={} video_codec=h264 new_display={}x{}/{} max_fps={}",scrcpy_version,scid, audio_bitrate, video_res_w, video_bitrate, video_res_w, video_res_h, screen_dpi, video_fps))
                 .output().await.unwrap();
-            info!("ADB shell error: {:?}", cmd_shell.stderr);
-            info!("ADB shell status: {:?}", cmd_shell.status);
-            info!("ADB shell stdout: {:?}", cmd_shell.stdout);
-            let lines= String::from_utf8_lossy(&cmd_shell.stdout).to_string();
-            println!("ADB shell stdout: {}", lines);
+            let lines=adb::parse_response_lines(cmd_shell.stdout).expect("TODO: panic message");
+            if lines.len() > 0 {
+                for line in lines {
+                    info!("ADB shell response: {:?}", line);
+                }
+            }
 
-            return  Some(cmd_dev.status.to_string());
+            return  Some(connected_dev);
         }
     }
     //info!("ADB Scan took {:?} seconds", scan_duration.as_secs());
     None
 }
+async fn tsk_scrcpy_video(
+    /*srv_rx: Receiver<Packet>,
+    video_tx: Sender<Packet>,*/
+    config: AppConfig,
+) -> Result<()> {
+    loop {
 
+    }
+}
+
+async fn tsk_scrcpy_audio(
+    /*srv_rx: Receiver<Packet>,
+    audio_tx: Sender<Packet>,*/
+    config: AppConfig,
+) -> Result<()> {
+    loop {
+
+    }
+}
 async fn tsk_adb_scrcpy(
     /*srv_rx: Receiver<Packet>,
     video_tx: Sender<Packet>,
@@ -349,6 +379,20 @@ async fn tsk_adb_scrcpy(
     {
         if let Some(device)=get_first_adb_device(config.clone()).await {
             info!("{}: ADB device found: {:?}",NAME, device);
+            let tsk_scrcpy_video = tokio_uring::spawn(tsk_scrcpy_video(
+                config.clone(),
+            ));
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            let tsk_scrcpy_audio = tokio_uring::spawn(tsk_scrcpy_audio(
+                config.clone(),
+            ));
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            loop {
+                info!("{}: ADB control loop started",NAME);
+            }
+            //FIXME add a cancellation token
+            tsk_scrcpy_video.abort();
+            tsk_scrcpy_audio.await;
         }
         else {
             error!("{}: No device with ADB connection found, trying again...", NAME)
