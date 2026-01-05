@@ -273,37 +273,62 @@ async fn get_first_adb_device(config: AppConfig) ->Option<String>
                 .arg("connect")
                 .arg(dev_socket.to_string())
                 .output().await.unwrap();
-            info!("ADB error: {:?}", cmd_connect.stderr);
-            info!("ADB status: {:?}", cmd_connect.status);
+            info!("ADB connect error: {:?}", cmd_connect.stderr);
+            info!("ADB connect status: {:?}", cmd_connect.status);
+            info!("ADB connect stdout: {:?}", cmd_connect.stdout);
+            match String::from_utf8(cmd_connect.stdout) {
+                Ok(string) => println!("ADB connect stdout: {}", string),
+                _=>{},
+            }
 
             let cmd_dev = Command::new("adb")
                 .arg("devices")
                 .output().await.unwrap();
-            info!("ADB error: {:?}", cmd_dev.stderr);
-            info!("ADB status: {:?}", cmd_dev.status);
+            info!("ADB devices error: {:?}", cmd_dev.stderr);
+            info!("ADB devices status: {:?}", cmd_dev.status);
+            info!("ADB devices stdout: {:?}", cmd_dev.stdout);
+            match String::from_utf8(cmd_dev.stdout) {
+                Ok(string) => println!("ADB devices stdout: {}", string),
+                _=>{},
+            }
 
             let cmd_push = Command::new("adb")
                 .arg("push")
                 .arg("/etc/aa-mirror-rs/scrcpy-server")
                 .arg("/data/local/tmp/scrcpy-server-manual.jar")
                 .output().await.unwrap();
-            info!("ADB error: {:?}", cmd_push.stderr);
-            info!("ADB status: {:?}", cmd_push.status);
+            info!("ADB push error: {:?}", cmd_push.stderr);
+            info!("ADB push status: {:?}", cmd_push.status);
+            info!("ADB push stdout: {:?}", cmd_push.stdout);
+            match String::from_utf8(cmd_push.stdout) {
+                Ok(string) => println!("ADB push stdout: {}", string),
+                _=>{},
+            }
 
             let cmd_portfw = Command::new("adb")
                 .arg("forward")
                 .arg("tcp:27183")
                 .arg("localabstract:scrcpy_101")
                 .output().await.unwrap();
-            info!("ADB error: {:?}", cmd_portfw.stderr);
-            info!("ADB status: {:?}", cmd_portfw.status);
+            info!("ADB forward error: {:?}", cmd_portfw.stderr);
+            info!("ADB forward status: {:?}", cmd_portfw.status);
+            info!("ADB forward stdout: {:?}", cmd_portfw.stdout);
+            match String::from_utf8(cmd_portfw.stdout) {
+                Ok(string) => println!("ADB forward stdout: {}", string),
+                _=>{},
+            }
 
             let cmd_shell = Command::new("adb")
                 .arg("shell")
                 .arg("CLASSPATH=/data/local/tmp/scrcpy-server.jar app_process / com.genymobile.scrcpy.Server 3.3 scid=101 log_level=info tunnel_forward=true raw_stream=true audio=true max_size=800 video_bit_rate=8M video_codec=h264 max_fps=30")
                 .output().await.unwrap();
-            info!("ADB error: {:?}", cmd_shell.stderr);
-            info!("ADB status: {:?}", cmd_shell.status);
+            info!("ADB shell error: {:?}", cmd_shell.stderr);
+            info!("ADB shell status: {:?}", cmd_shell.status);
+            info!("ADB shell stdout: {:?}", cmd_shell.stdout);
+            match String::from_utf8(cmd_shell.stdout) {
+                Ok(string) => println!("ADB shell stdout: {}", string),
+                _=>{},
+            }
 
             return  Some(cmd_dev.status.to_string());
         }
