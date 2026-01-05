@@ -55,6 +55,6 @@ jobs:
       run: |
         echo "msg=$(git log -1 --pretty=%s)" >> $GITHUB_OUTPUT
     - name: last commit:${{ steps.commit.outputs.msg }}
-      run: echo "Building"
+      run: echo ${{ steps.commit.outputs.msg }}
     #- name: Run tests
       #run: cargo test --verbose --target aarch64-unknown-linux-gnu
