@@ -276,10 +276,8 @@ async fn get_first_adb_device(config: AppConfig) ->Option<String>
             info!("ADB connect error: {:?}", cmd_connect.stderr);
             info!("ADB connect status: {:?}", cmd_connect.status);
             info!("ADB connect stdout: {:?}", cmd_connect.stdout);
-            match String::from_utf8_lossy(&cmd_connect.stdout).to_string() {
-                Ok(string) => println!("ADB connect stdout: {}", string),
-                _=>{},
-            }
+            let lines= String::from_utf8_lossy(&cmd_connect.stdout).to_string();
+            println!("ADB connect stdout: {}", lines);
             let lines=adb::parse_response_lines(cmd_connect.stdout).expect("TODO: panic message");
             if lines.len() > 0 {
                for line in lines {
@@ -292,10 +290,8 @@ async fn get_first_adb_device(config: AppConfig) ->Option<String>
             info!("ADB devices error: {:?}", cmd_dev.stderr);
             info!("ADB devices status: {:?}", cmd_dev.status);
             info!("ADB devices stdout: {:?}", cmd_dev.stdout);
-            match String::from_utf8_lossy(&cmd_dev.stdout).to_string() {
-                Ok(string) => println!("ADB devices stdout: {}", string),
-                _=>{},
-            }
+            let lines= String::from_utf8_lossy(&cmd_dev.stdout).to_string();
+            println!("ADB devices stdout: {}", lines);
 
             let cmd_push = Command::new("adb")
                 .arg("push")
@@ -305,10 +301,8 @@ async fn get_first_adb_device(config: AppConfig) ->Option<String>
             info!("ADB push error: {:?}", cmd_push.stderr);
             info!("ADB push status: {:?}", cmd_push.status);
             info!("ADB push stdout: {:?}", cmd_push.stdout);
-            match String::from_utf8_lossy(&cmd_push.stdout).to_string() {
-                Ok(string) => println!("ADB push stdout: {}", string),
-                _=>{},
-            }
+            let lines= String::from_utf8_lossy(&cmd_push.stdout).to_string();
+            println!("ADB push stdout: {}", lines);
 
             let cmd_portfw = Command::new("adb")
                 .arg("forward")
@@ -318,10 +312,8 @@ async fn get_first_adb_device(config: AppConfig) ->Option<String>
             info!("ADB forward error: {:?}", cmd_portfw.stderr);
             info!("ADB forward status: {:?}", cmd_portfw.status);
             info!("ADB forward stdout: {:?}", cmd_portfw.stdout);
-            match String::from_utf8_lossy(&cmd_portfw.stdout).to_string() {
-                Ok(string) => println!("ADB forward stdout: {}", string),
-                _=>{},
-            }
+            let lines= String::from_utf8_lossy(&cmd_portfw.stdout).to_string();
+            println!("ADB forward stdout: {}", lines);
 
             let cmd_shell = Command::new("adb")
                 .arg("shell")
@@ -330,10 +322,8 @@ async fn get_first_adb_device(config: AppConfig) ->Option<String>
             info!("ADB shell error: {:?}", cmd_shell.stderr);
             info!("ADB shell status: {:?}", cmd_shell.status);
             info!("ADB shell stdout: {:?}", cmd_shell.stdout);
-            match String::from_utf8_lossy(&cmd_shell.stdout).to_string() {
-                Ok(string) => println!("ADB shell stdout: {}", string),
-                _=>{},
-            }
+            let lines= String::from_utf8_lossy(&cmd_shell.stdout).to_string();
+            println!("ADB shell stdout: {}", lines);
 
             return  Some(cmd_dev.status.to_string());
         }
