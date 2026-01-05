@@ -53,6 +53,8 @@ jobs:
     - name: Get commit message
       id: commit
       run: |
-        echo "msg=$(git log -1 --pretty=%s)" >> $GITHUB_OUTPUT    
+        echo "msg=$(git log -1 --pretty=%s)" >> $GITHUB_OUTPUT
+    - name: my package:${{ steps.commit.outputs.msg }}
+      run: echo "Building"
     #- name: Run tests
       #run: cargo test --verbose --target aarch64-unknown-linux-gnu
