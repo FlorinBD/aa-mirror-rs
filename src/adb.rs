@@ -1,14 +1,15 @@
 use std::borrow::Cow;
 
-pub fn parse_response_lines(rsp: Vec<u8>) -> Result<Vec<Cow<'static, str>>, String> {
-    // Convert bytes to UTF-8 lossily
-    let s: Cow<str> = String::from_utf8_lossy(&rsp);
+pub fn parse_response_lines(rsp: Vec<u8>) -> Result<Vec<String>, String> {
+    // Convert bytes to UTF-8 safely, replacing invalid bytes with �
+    let s = String::from_utf8_lossy(&rsp);
 
-    // Collect first tab-separated column of each line as Cow<str>
-    let response: Vec<Cow<'static, str>> = s
+    // Iterate over lines, take first tab-separated column, skip empty lines
+    let response: Vec<String> = s
         .lines()
-        .filter_map(|line| line.split('\t').next()) // take first column
-        .map(|col| Cow::Owned(col.to_string()))     // convert to owned Cow<str>
+        .filter_map(|line| line.split('\t').next()) // first column
+        .filter(|col| !col.is_empty())             // skip empty
+        .map(|col| col.to_string())                // make owned
         .collect();
 
     Ok(response)
