@@ -139,9 +139,9 @@ where
         .args(args)
         .output().await?;
     // Optional: check exit status
-    if !adb_cmd.status.success() {
+    /*if !adb_cmd.status.success() {
         return Err(format!("process exited with {}", adb_cmd.status).into());
-    }
+    }*/
 
     let stdout = String::from_utf8_lossy(&adb_cmd.stdout);
 
