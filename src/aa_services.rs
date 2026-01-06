@@ -9,6 +9,7 @@ use std::sync::mpsc as std_mpsc;
 //use std::sync::mpsc::{Receiver as std_Receiver, Sender as std_Sender};
 use tokio::time::timeout;
 use tokio_uring::buf::BoundedBuf;
+use serde::{Serialize, Deserialize};
 
 // protobuf stuff:
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
@@ -71,6 +72,15 @@ pub struct ServiceStatus {
     pub enabled:bool,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+struct CmdStartVideoRec {
+    max_unack: i32,
+    bitrate: i32,
+    res_w:i32,
+    res_h:i32,
+    fps:i32,
+    dpi:i32,
+}
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum VideoCodecResolution {
@@ -191,7 +201,7 @@ pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, 
         format!("<i><bright-black> aa-mirror/{}: </>", dev)
     }
 }
-pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, vcfg:VideoConfig)-> Result<()>{
+pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, scrcpy_cmd: &Sender<Packet>, vcfg:VideoConfig)-> Result<()>{
     //pre-rendered frames using openh264 lib from a C# app (1 frame out of static 800x480 bmp)
     let wait_screen_config_frame: Vec<u8> = vec![0x00, 0x00, 0x00, 0x01, 0x67, 0x42, 0xC0, 0x1E, 0x8C, 0x8D, 0x40, 0x64, 0x1E, 0x90, 0x0F, 0x08, 0x84, 0x6A, 0x00, 0x00, 0x00, 0x01, 0x68, 0xCE, 0x3C, 0x80];
     let wait_screen_first_frame: Vec<u8> = vec![0x00, 0x00, 0x00, 0x01, 0x65, 0xB8, 0x00, 0x04, 0x00, 0x00, 0x78, 0x8C, 0x50, 0x00, 0x27, 0x1C,
@@ -885,6 +895,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                                                     0xEB, 0xAE, 0xBA, 0xEB, 0xAE, 0xBA, 0xEB, 0xAE, 0xBA, 0xEB, 0xAE, 0xBA, 0xEB, 0xAE, 0xBA, 0xEB, 0xAF];
     info!( "{}: Starting...", get_name());
     let mut video_stream_started:bool=false;
+    let max_unack:i32;
     let mut session_id=1;
     loop {
         let pkt=  rx_srv.recv().await.ok_or("service reader channel hung up")?;
@@ -982,6 +993,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                     info!( "{}, channel {:?}: Message status: {:?}", get_name(), pkt.channel, rsp.status());
                     if rsp.status() == ConfigStatus::STATUS_READY
                     {
+                        max_unack=rsp.max_unacked();
                         info!( "{}, channel {:?}: Starting START command", get_name(), pkt.channel);
                         session_id +=1;
                         let mut start_req = Start::new();
@@ -1052,6 +1064,26 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                                 payload: payload,
                             };
                             tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+
+                            info!( "{} Send custom CMD_START_VIDEO_RECORDING for ch {}",get_name(), ch_id);
+                            let mut cmd_req = CustomCommandMessage::new();
+                            cmd_req.set_cmd(CustomCommand::CMD_START_VIDEO_RECORDING);
+
+
+                            let struc = CmdStartVideoRec { max_unack:max_unack, res_h:480, res_w:800, dpi:160, fps:60, bitrate:8000000};
+                            let bytes: Vec<u8> = postcard::to_stdvec(&struc)?;
+                            let mut payload: Vec<u8> = cmd_req.write_to_bytes()?;
+                            payload.insert(0, ((MESSAGE_CUSTOM_CMD as u16) >> 8) as u8);
+                            payload.insert(1, ((MESSAGE_CUSTOM_CMD as u16) & 0xff) as u8);
+                            //payload.push(&max_unack.to_be_bytes());
+                            payload.push(&bytes);
+                            let pkt_rsp = Packet {
+                                channel: ch_id as u8,
+                                flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                                final_length: None,
+                                payload: payload.clone(),
+                            };
+                            scrcpy_cmd.send(pkt_rsp).await.expect("Error sending custom CMD");
                         }
                         else
                         {
@@ -1296,9 +1328,10 @@ pub async fn th_media_sink_audio_guidance(ch_id: i32, enabled:bool, tx_srv: Send
         format!("<i><bright-black> aa-mirror/{}: </>", dev)
     }
 }
-pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, acfg:AudioConfig)-> Result<()>{
+pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, scrcpy_cmd: &Sender<Packet>, acfg:AudioConfig)-> Result<()>{
     info!( "{}: Starting...", get_name());
     let mut audio_stream_started:bool=false;
+    let max_unack:i32;
     loop {
         let pkt=  rx_srv.recv().await.ok_or("service reader channel hung up")?;
         if pkt.channel !=ch_id as u8
@@ -1395,10 +1428,26 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                     info!( "{}, channel {:?}: Message status: {:?}", get_name(), pkt.channel, rsp.status());
                     if rsp.status() == STATUS_READY
                     {
+                        max_unack=rsp.max_unacked();
                         info!( "{}, channel {:?}: Starting audio capture", get_name(), pkt.channel);
                         if acfg.codec == MediaCodec::AUDIO_PCM
                         {
                             audio_stream_started =true;
+                            info!( "{} Send custom CMD_START_AUDIO_RECORDING for ch {}",get_name(), ch_id);
+                            let mut cmd_req = CustomCommandMessage::new();
+                            cmd_req.set_cmd(CustomCommand::CMD_START_AUDIO_RECORDING);
+
+                            let mut payload: Vec<u8> = cmd_req.write_to_bytes()?;
+                            payload.insert(0, ((MESSAGE_CUSTOM_CMD as u16) >> 8) as u8);
+                            payload.insert(1, ((MESSAGE_CUSTOM_CMD as u16) & 0xff) as u8);
+                            payload.push(&max_unack.to_be_bytes());
+                            let pkt_rsp = Packet {
+                                channel: ch_id as u8,
+                                flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                                final_length: None,
+                                payload: payload.clone(),
+                            };
+                            scrcpy_cmd.send(pkt_rsp).await.expect("Error sending custom CMD");
                         }
                         else
                         {

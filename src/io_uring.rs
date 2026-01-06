@@ -246,8 +246,8 @@ async fn tcp_wait_for_md_connection(listener: &mut TcpListener) -> Result<TcpStr
 }
 
 async fn tsk_scrcpy_video(
-    /*srv_rx: Receiver<Packet>,
-    video_tx: Sender<Packet>,*/
+    cmd_rx: Receiver<Packet>,
+    video_tx: Sender<Packet>,
     config: AppConfig,
 ) -> Result<()> {
     let mut stream = TokioTcpStream::connect(format!("127.0.0.1:{}", ADB_SERVER_PORT)).await?;
@@ -263,8 +263,8 @@ async fn tsk_scrcpy_video(
 }
 
 async fn tsk_scrcpy_audio(
-    /*srv_rx: Receiver<Packet>,
-    audio_tx: Sender<Packet>,*/
+    cmd_rx: Receiver<Packet>,
+    audio_tx: Sender<Packet>,
     config: AppConfig,
 ) -> Result<()> {
     let mut stream = TokioTcpStream::connect(format!("127.0.0.1:{}", ADB_SERVER_PORT)).await?;
@@ -279,9 +279,10 @@ async fn tsk_scrcpy_audio(
     }
 }
 async fn tsk_adb_scrcpy(
-    /*srv_rx: Receiver<Packet>,
-    video_tx: Sender<Packet>,
-    audio_tx: Sender<Packet>,*/
+    video_cmd_rx: &Receiver<Packet>,
+    audio_cmd_rx: &Receiver<Packet>,
+    srv_tx: Sender<Packet>,
+    //audio_tx: Sender<Packet>,
     config: AppConfig,
 ) -> Result<()> {
     info!("{}: ADB task started",NAME);
@@ -329,10 +330,14 @@ async fn tsk_adb_scrcpy(
             let line=adb::run_piped_cmd(cmd_shell).await?;
             info!("ADB shell response: {:?}", line);
             let tsk_scrcpy_video = tokio_uring::spawn(tsk_scrcpy_video(
+                *video_cmd_rx,
+                srv_tx.clone(),
                 config.clone(),
             ));
             tokio::time::sleep(Duration::from_secs(5)).await;
             let tsk_scrcpy_audio = tokio_uring::spawn(tsk_scrcpy_audio(
+                *audio_cmd_rx,
+                srv_tx,
                 config.clone(),
             ));
             tokio::time::sleep(Duration::from_secs(5)).await;
@@ -378,9 +383,18 @@ pub async fn io_loop(
     info!("{} 🛰️ DHU TCP server bound to: <u>{}</u>", NAME, bind_addr);
     let cfg = shared_config.read().await.clone();
     let hex_requested = cfg.hexdump_level;
+
+    //mpsc for scrcpy
+    let (tx_cmd_audio, rx_cmd_audio): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(5);
+    let (tx_cmd_video, rx_cmd_video): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(5);
+    let (tx_scrcpy, rx_scrcpy): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(30);
+
     let mut tsk_adb;
     tsk_adb = tokio_uring::spawn(tsk_adb_scrcpy(
-        cfg
+        *rx_cmd_video,
+        *rx_cmd_audio,
+        tx_scrcpy,
+        cfg,
     ));
     loop {
         // reload new config
@@ -447,7 +461,10 @@ pub async fn io_loop(
         // `Arc`.
         let stats_w_bytes = Arc::new(AtomicUsize::new(0));
         let stats_r_bytes = Arc::new(AtomicUsize::new(0));
-
+        // mpsc channels:
+        let (txr_hu, rxr_hu):       (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
+        let (tx_srv, rx_srv):   (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
+        let (txr_srv, rxr_srv): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(20);
 
         let mut tsk_ch_manager;
         let mut tsk_hu_read;
@@ -455,10 +472,7 @@ pub async fn io_loop(
         // these will be used for cleanup
         let mut hu_tcp_stream = None;
 
-        // mpsc channels:
-        let (txr_hu, rxr_hu):       (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
-        let (tx_srv, rx_srv):   (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
-        let (txr_srv, rxr_srv): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(20);
+
         // selecting I/O device for reading and writing
         // and creating desired objects for proxy functions
         let hu_r;
@@ -479,7 +493,7 @@ pub async fn io_loop(
         }
 
         //service packet proxy
-        tsk_packet_proxy = tokio_uring::spawn(packet_tls_proxy(hu_w, rxr_hu, rxr_srv, tx_srv, stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested));
+        tsk_packet_proxy = tokio_uring::spawn(packet_tls_proxy(hu_w, rxr_hu, rxr_srv, tx_srv, *rx_scrcpy, stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested));
 
         // dedicated reading threads:
         tsk_hu_read = tokio_uring::spawn(endpoint_reader(hu_r, txr_hu));
@@ -488,6 +502,8 @@ pub async fn io_loop(
         tsk_ch_manager = tokio_uring::spawn(ch_proxy(
             rx_srv,
             txr_srv,
+            *tx_cmd_video,
+            *tx_cmd_audio
         ));
         
         // Thread for monitoring transfer

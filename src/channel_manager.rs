@@ -363,12 +363,14 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
     mut hu_rx: Receiver<Packet>,
     mut srv_rx: Receiver<Packet>,
     srv_tx: Sender<Packet>,
+    mut scrcpy_rx: &Receiver<Packet>,
     r_statistics: Arc<AtomicUsize>,
     w_statistics: Arc<AtomicUsize>,
     dmp_level:HexdumpLevel,
     ) -> Result<()> {
     let mut ssl_handshake_done:bool=false;
     let mut hu_read_err:bool=false;
+    let mut srv_read_err:bool=false;
     let ssl = ssl_builder().await?;
     let mut mem_buf = SslMemBuf {
         client_stream: Arc::new(Mutex::new(VecDeque::new())),
@@ -480,6 +482,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
         //Service>HU
         match srv_rx.try_recv() {
             Ok(mut msg) => {
+                srv_read_err=false;
                 if msg.flags&ENCRYPTED !=0
                 {
                     if !ssl_handshake_done
@@ -524,8 +527,43 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
             // the next iteration rx.recv().await will be None and we'll
             // break from the outer loop anyway.
             Err(_) => {
-                /*error!( "{}: tls proxy error receiving message from Service", get_name());*/
-                if hu_read_err
+                srv_read_err=true;
+            },
+        }
+
+        //SCRCPY>HU
+        match scrcpy_rx.try_recv() {
+            Ok(mut msg) => {
+                if !ssl_handshake_done
+                {
+                    error!( "{}: tls proxy error: received encrypted message from service before TLS handshake", get_name());
+                }
+                else {
+                    let _ = pkt_debug(
+                        HexdumpLevel::DecryptedOutput,
+                        dmp_level,
+                        &msg,
+                        "SCRCPY".parse().unwrap()
+                    ).await;
+                    match msg.encrypt_payload(&mut mem_buf, &mut server).await {
+                        Ok(_) => {
+                            // Increment byte counters for statistics
+                            // fixme: compute final_len for precise stats
+                            w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
+                            msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: transmit to HU failed", get_name()))?;
+                        }
+                        Err(e) => {error!( "{} encrypt_payload error: {:?}", get_name(), e);},
+                    }
+                }
+            }
+
+            // For both errors (Disconnected and Empty), the correct action
+            // is to process the items.  If the error was Disconnected, on
+            // the next iteration rx.recv().await will be None and we'll
+            // break from the outer loop anyway.
+            Err(_) => {
+                //if both errors ant this one also we must wait to prevent tokio starvation
+                if hu_read_err && srv_read_err
                 {
                     tokio::time::sleep(Duration::from_millis(1)).await;
                 }
@@ -627,6 +665,8 @@ fn get_service_index(arr:&Vec<ServiceStatus>, ch:i32)->usize
 pub async fn ch_proxy(
     mut rx_srv: Receiver<Packet>,
     mut tx_srv: Sender<Packet>,
+    video_cmd: &Sender<Packet>,
+    audio_cmd: &Sender<Packet>,
 ) -> Result<()> {
     info!( "{} Entering channel manager",get_name());
    // waiting for initial version frame (HU is starting transmission)
@@ -761,7 +801,7 @@ pub async fn ch_proxy(
                         };
                         let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                         srv_senders.push(tx);
-                        srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_audio_streaming(ch_id,true, tx_srv.clone(), rx, audio_cfg)));
+                        srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_audio_streaming(ch_id,true, tx_srv.clone(), rx, audio_cmd, audio_cfg)));
                     }
                     else {
                         error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
@@ -796,7 +836,7 @@ pub async fn ch_proxy(
                         fps:vfps,
                     };
 
-                    srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_video(ch_id,true, tx_srv.clone(), rx, video_cfg)));
+                    srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_video(ch_id,true, tx_srv.clone(), rx, video_cmd, video_cfg)));
                 }
                 else {
                     error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
