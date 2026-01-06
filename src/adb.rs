@@ -10,6 +10,7 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use crate::{adb, arp_common};
 use crate::config::{AppConfig, ADB_DEVICE_PORT, ADB_SERVER_PORT};
+use simplelog;
 
 ///ADB wrapper, needs adb binary installed
 pub(crate) fn parse_response_lines(rsp: Vec<u8>) -> Result<Vec<String>, String> {
@@ -63,7 +64,7 @@ pub(crate) async fn get_first_adb_device(config: AppConfig) ->Option<String>
     //let scan_duration = start.elapsed();
     info!("Found hosts: {}", occupied.clone().count());
     let dev_port=ADB_DEVICE_PORT;
-    let connected_dev;
+    let mut connected_dev=String::from("");
     for outcome in occupied {
         //info!("ADB try to connect to {:?}", outcome.target_ip);
         let dev_socket=SocketAddrV4::new(outcome.target_ip, dev_port);
@@ -92,7 +93,13 @@ pub(crate) async fn get_first_adb_device(config: AppConfig) ->Option<String>
                 for line in lines {
                     info!("ADB devices response: {:?}", line);
                     if line.contains("device") {
-                        return  Some(connected_dev);
+                        if connected_dev.is_empty() {
+                            return None;
+                        }
+                        else {
+                            return  Some(connected_dev);
+                        }
+
                     }
                 }
             }
