@@ -60,7 +60,7 @@ pub(crate) async fn get_first_adb_device(config: AppConfig) ->Option<String>
     let occupied = outcomes.unwrap()
         .into_iter()
         .filter(|outcome| outcome.status == ProbeStatus::Occupied);
-    let scan_duration = start.elapsed();
+    //let scan_duration = start.elapsed();
     info!("Found hosts: {}", occupied.clone().count());
     let dev_port=ADB_DEVICE_PORT;
     let connected_dev;
