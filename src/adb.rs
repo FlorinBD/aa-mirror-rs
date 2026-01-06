@@ -1,6 +1,14 @@
 use std::borrow::Cow;
+use std::net::SocketAddrV4;
+use std::time::{Duration, Instant};
+use async_arp::{Client, ClientConfigBuilder, ClientSpinner, ProbeStatus};
+use port_check::is_port_reachable_with_timeout;
+use simplelog::info;
+use tokio::process::Command;
+use crate::{adb, arp_common};
+use crate::config::{AppConfig, ADB_DEVICE_PORT, ADB_SERVER_PORT};
 
-pub fn parse_response_lines(rsp: Vec<u8>) -> Result<Vec<String>, String> {
+pub(crate) fn parse_response_lines(rsp: Vec<u8>) -> Result<Vec<String>, String> {
     // Convert bytes to UTF-8 safely, replacing invalid bytes with �
     let s = String::from_utf8_lossy(&rsp);
 
@@ -28,4 +36,64 @@ pub fn parse_response_lines_old(rsp: Vec<u8>) ->Result<Vec<String>, String>
         })
     };
     Ok(response)
+}
+
+pub(crate) async fn get_first_adb_device(config: AppConfig) ->Option<String>
+{
+    let interface = arp_common::interface_from(&config.iface);
+    let arp_client = Client::new(
+        ClientConfigBuilder::new(&config.iface)
+            .with_response_timeout(Duration::from_millis(500))
+            .build(),
+    ).unwrap();
+    let spinner = ClientSpinner::new(arp_client).with_retries(3);
+    let net = arp_common::net_from(&interface).unwrap();
+    let start = Instant::now();
+    let outcomes = spinner
+        .probe_batch(&arp_common::generate_probe_inputs(net, interface))
+        .await;
+
+    let occupied = outcomes.unwrap()
+        .into_iter()
+        .filter(|outcome| outcome.status == ProbeStatus::Occupied);
+    let scan_duration = start.elapsed();
+    info!("Found hosts: {}", occupied.clone().count());
+    let dev_port=ADB_DEVICE_PORT;
+    let connected_dev;
+    for outcome in occupied {
+        //info!("ADB try to connect to {:?}", outcome.target_ip);
+        let dev_socket=SocketAddrV4::new(outcome.target_ip, dev_port);
+        if is_port_reachable_with_timeout(dev_socket, Duration::from_secs(5))
+        {
+            info!("{:?} found port {} open, trying to connect to ADB demon", outcome.target_ip, dev_port);
+            let cmd_connect = Command::new("adb")
+                .arg("connect")
+                .arg(dev_socket.to_string())
+                .output().await.unwrap();
+            let lines=adb::parse_response_lines(cmd_connect.stdout).expect("TODO: panic message");
+            if lines.len() > 0 {
+                for line in lines {
+                    info!("ADB connect response: {:?}", line);
+                    if line.contains("connected") {
+                        connected_dev=dev_socket.to_string();
+                    }
+                }
+            }
+
+            let cmd_dev = Command::new("adb")
+                .arg("devices")
+                .output().await.unwrap();
+            let lines=adb::parse_response_lines(cmd_dev.stdout).expect("TODO: panic message");
+            if lines.len() > 0 {
+                for line in lines {
+                    info!("ADB devices response: {:?}", line);
+                    if line.contains("device") {
+                        return  Some(connected_dev);
+                    }
+                }
+            }
+        }
+    }
+    //info!("ADB Scan took {:?} seconds", scan_duration.as_secs());
+    None
 }

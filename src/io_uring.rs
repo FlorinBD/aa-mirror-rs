@@ -29,6 +29,8 @@ use tokio::net::ToSocketAddrs;
 use crate::{adb, arp_common};
 use futures::StreamExt;
 use tokio::process::Command;
+use tokio::net::TcpStream as TokioTcpStream;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 // module name for logging engine
 const NAME: &str = "<i><bright-black> io_uring: </>";
@@ -242,65 +244,64 @@ async fn tcp_wait_for_md_connection(listener: &mut TcpListener) -> Result<TcpStr
     Ok(stream)
 }
 
-async fn get_first_adb_device(config: AppConfig) ->Option<String>
-{
-    let interface = arp_common::interface_from(&config.iface);
-    let arp_client = Client::new(
-        ClientConfigBuilder::new(&config.iface)
-            .with_response_timeout(Duration::from_millis(500))
-            .build(),
-    ).unwrap();
-    let spinner = ClientSpinner::new(arp_client).with_retries(3);
-    let net = arp_common::net_from(&interface).unwrap();
-    let start = Instant::now();
-    let outcomes = spinner
-        .probe_batch(&arp_common::generate_probe_inputs(net, interface))
-        .await;
+async fn tsk_scrcpy_video(
+    /*srv_rx: Receiver<Packet>,
+    video_tx: Sender<Packet>,*/
+    config: AppConfig,
+) -> Result<()> {
+    let mut stream = TokioTcpStream::connect(format!("127.0.0.1:{}", ADB_SERVER_PORT)).await?;
 
-    let occupied = outcomes.unwrap()
-        .into_iter()
-        .filter(|outcome| outcome.status == ProbeStatus::Occupied);
-    let scan_duration = start.elapsed();
-    info!("Found hosts: {}", occupied.clone().count());
-    let dev_port=ADB_DEVICE_PORT;
-    let scid=101;
-    let scrcpy_version="3.3.4";
-    let video_bitrate=8000000;
-    let video_res_w=800;
-    let video_res_h=480;
-    let video_fps=60;
-    let screen_dpi=160;
-    let audio_bitrate=48000;
-    let connected_dev;
-    for outcome in occupied {
-        //info!("ADB try to connect to {:?}", outcome.target_ip);
-        let dev_socket=SocketAddrV4::new(outcome.target_ip, dev_port);
-        if is_port_reachable_with_timeout(dev_socket, Duration::from_secs(5))
-        {
-            info!("{:?} found port {} open, trying to connect to ADB demon", outcome.target_ip, dev_port);
-            let cmd_connect = Command::new("adb")
-                .arg("connect")
-                .arg(dev_socket.to_string())
-                .output().await.unwrap();
-            let lines=adb::parse_response_lines(cmd_connect.stdout).expect("TODO: panic message");
-            if lines.len() > 0 {
-               for line in lines {
-                   info!("ADB connect response: {:?}", line);
-                   if line.contains("connected") {
-                       connected_dev=line;
-                   }
-               }
-            }
+    info!("Connected to video server!");
 
-            let cmd_dev = Command::new("adb")
-                .arg("devices")
-                .output().await.unwrap();
-            let lines=adb::parse_response_lines(cmd_dev.stdout).expect("TODO: panic message");
-            if lines.len() > 0 {
-                for line in lines {
-                    info!("ADB devices response: {:?}", line);
-                }
-            }
+    loop {
+        // Read response
+        let mut buffer = vec![];
+        let n = stream.read(&mut buffer).await?;
+        info!("Video task received {} bytes: {}", n, buffer.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" "));
+    }
+}
+
+async fn tsk_scrcpy_audio(
+    /*srv_rx: Receiver<Packet>,
+    audio_tx: Sender<Packet>,*/
+    config: AppConfig,
+) -> Result<()> {
+    let mut stream = TokioTcpStream::connect(format!("127.0.0.1:{}", ADB_SERVER_PORT)).await?;
+
+    info!("Connected to audio server!");
+
+    loop {
+        // Read response
+        let mut buffer = vec![];
+        let n = stream.read(&mut buffer).await?;
+        info!("Audio task received {} bytes: {}", n, buffer.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" "));
+    }
+}
+async fn tsk_adb_scrcpy(
+    /*srv_rx: Receiver<Packet>,
+    video_tx: Sender<Packet>,
+    audio_tx: Sender<Packet>,*/
+    config: AppConfig,
+) -> Result<()> {
+    info!("{}: ADB task started",NAME);
+    let cmd_adb = Command::new("adb")
+        .arg("start-server")
+        .output().await.unwrap();
+    if !cmd_adb.status.success() {
+        error!("ADB server can't start");
+    }
+    loop
+    {
+        if let Some(device)=adb::get_first_adb_device(config.clone()).await {
+            info!("{}: ADB device found: {:?}, trying to get video/audio from it now",NAME, device);
+            let scid=101;
+            let scrcpy_version="3.3.4";
+            let video_bitrate=8000000;
+            let video_res_w=800;
+            let video_res_h=480;
+            let video_fps=60;
+            let screen_dpi=160;
+            let audio_bitrate=48000;
 
             let cmd_push = Command::new("adb")
                 .arg("push")
@@ -337,48 +338,6 @@ async fn get_first_adb_device(config: AppConfig) ->Option<String>
                 }
             }
 
-            return  Some(connected_dev);
-        }
-    }
-    //info!("ADB Scan took {:?} seconds", scan_duration.as_secs());
-    None
-}
-async fn tsk_scrcpy_video(
-    /*srv_rx: Receiver<Packet>,
-    video_tx: Sender<Packet>,*/
-    config: AppConfig,
-) -> Result<()> {
-    loop {
-
-    }
-}
-
-async fn tsk_scrcpy_audio(
-    /*srv_rx: Receiver<Packet>,
-    audio_tx: Sender<Packet>,*/
-    config: AppConfig,
-) -> Result<()> {
-    loop {
-
-    }
-}
-async fn tsk_adb_scrcpy(
-    /*srv_rx: Receiver<Packet>,
-    video_tx: Sender<Packet>,
-    audio_tx: Sender<Packet>,*/
-    config: AppConfig,
-) -> Result<()> {
-    info!("{}: ADB task started",NAME);
-    let cmd_adb = Command::new("adb")
-        .arg("start-server")
-        .output().await.unwrap();
-    if !cmd_adb.status.success() {
-        error!("ADB server can't start");
-    }
-    loop
-    {
-        if let Some(device)=get_first_adb_device(config.clone()).await {
-            info!("{}: ADB device found: {:?}",NAME, device);
             let tsk_scrcpy_video = tokio_uring::spawn(tsk_scrcpy_video(
                 config.clone(),
             ));
@@ -387,9 +346,16 @@ async fn tsk_adb_scrcpy(
                 config.clone(),
             ));
             tokio::time::sleep(Duration::from_secs(5)).await;
+
+            let mut stream = TokioTcpStream::connect(format!("127.0.0.1:{}", ADB_SERVER_PORT)).await?;
+
+            info!("Connected to control server!");
+
             loop {
-                info!("{}: ADB control loop started",NAME);
+                //stream.write_all(b"Hello, server!\n").await?;
+                tokio::time::sleep(Duration::from_secs(50)).await;
             }
+
             //FIXME add a cancellation token
             tsk_scrcpy_video.abort();
             tsk_scrcpy_audio.await;
