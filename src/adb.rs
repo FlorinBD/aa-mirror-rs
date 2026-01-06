@@ -102,9 +102,9 @@ pub(crate) async fn get_first_adb_device(config: AppConfig) ->Option<String>
     None
 }
 
-pub(crate) async fn run_piped_cmd<I>(args: I) ->Result<String, Box<dyn std::error::Error>>
+pub(crate) async fn run_piped_cmd<I,S>(args: I) ->Result<String, Box<dyn std::error::Error>>
 where
-    I: IntoIterator,
+    I: IntoIterator<Item = S>,
     I::Item: AsRef<OsStr>,
 {
     let mut adb_cmd = Command::new("adb")
@@ -123,9 +123,9 @@ where
     Err("no output received".into())
 }
 
-pub(crate) async fn run_cmd<I>(args: I) ->Result<Vec<String>, Box<dyn std::error::Error>>
+pub(crate) async fn run_cmd<I, S>(args: I) ->Result<Vec<String>, Box<dyn std::error::Error>>
 where
-    I: IntoIterator,
+    I: IntoIterator<Item = S>,
     I::Item: AsRef<OsStr>,
 {
     let adb_cmd = Command::new("adb")
