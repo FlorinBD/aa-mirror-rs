@@ -108,7 +108,7 @@ where
     I::Item: AsRef<OsStr>,
 {
     let mut adb_cmd = Command::new("adb")
-        .arg(args)
+        .args(args)
         .stdout(Stdio::piped())
         //.stderr(Stdio::piped())
         .spawn()?;
@@ -129,7 +129,7 @@ where
     I::Item: AsRef<OsStr>,
 {
     let adb_cmd = Command::new("adb")
-        .arg(args)
+        .args(args)
         .output().await?;
     // Optional: check exit status
     if !adb_cmd.status.success() {
