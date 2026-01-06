@@ -1,13 +1,17 @@
 use std::borrow::Cow;
+use std::ffi::OsStr;
 use std::net::SocketAddrV4;
+use std::process::Stdio;
 use std::time::{Duration, Instant};
 use async_arp::{Client, ClientConfigBuilder, ClientSpinner, ProbeStatus};
 use port_check::is_port_reachable_with_timeout;
 use simplelog::info;
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use crate::{adb, arp_common};
 use crate::config::{AppConfig, ADB_DEVICE_PORT, ADB_SERVER_PORT};
 
+///ADB wrapper, needs adb binary installed
 pub(crate) fn parse_response_lines(rsp: Vec<u8>) -> Result<Vec<String>, String> {
     // Convert bytes to UTF-8 safely, replacing invalid bytes with �
     let s = String::from_utf8_lossy(&rsp);
@@ -96,4 +100,43 @@ pub(crate) async fn get_first_adb_device(config: AppConfig) ->Option<String>
     }
     //info!("ADB Scan took {:?} seconds", scan_duration.as_secs());
     None
+}
+
+pub(crate) async fn run_piped_cmd<I>(args: I) ->Result<String, Box<dyn std::error::Error>>
+where
+    I: IntoIterator,
+    I::Item: AsRef<OsStr>,
+{
+    let mut adb_cmd = Command::new("adb")
+        .arg(args)
+        .stdout(Stdio::piped())
+        //.stderr(Stdio::piped())
+        .spawn()?;
+
+    let stdout = adb_cmd.stdout.take().unwrap();
+    let mut lines = BufReader::new(stdout).lines();
+
+    if let Some(line) = lines.next_line().await? {
+        return Ok(line);
+    }
+
+    Err("no output received".into())
+}
+
+pub(crate) async fn run_cmd<I>(args: I) ->Result<Vec<String>, Box<dyn std::error::Error>>
+where
+    I: IntoIterator,
+    I::Item: AsRef<OsStr>,
+{
+    let adb_cmd = Command::new("adb")
+        .arg(args)
+        .output().await?;
+    // Optional: check exit status
+    if !adb_cmd.status.success() {
+        return Err(format!("process exited with {}", adb_cmd.status).into());
+    }
+
+    let stdout = String::from_utf8_lossy(&adb_cmd.stdout);
+
+    Ok(stdout.lines().map(|line| line.to_string()).collect())
 }

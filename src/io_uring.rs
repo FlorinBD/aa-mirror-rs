@@ -24,6 +24,7 @@ use tokio_uring::net::TcpStream;
 use tokio_uring::BufResult;
 use tokio_uring::UnsubmittedWrite;
 use async_arp::{Client, ClientConfigBuilder, ClientSpinner, ProbeInput, ProbeInputBuilder, ProbeStatus, Result as ArpResult};
+use clap::builder::TypedValueParser;
 use port_check::is_port_reachable_with_timeout;
 use tokio::net::ToSocketAddrs;
 use crate::{adb, arp_common};
@@ -303,41 +304,34 @@ async fn tsk_adb_scrcpy(
             let screen_dpi=160;
             let audio_bitrate=48000;
 
-            let cmd_push = Command::new("adb")
-                .arg("push")
-                .arg("/etc/aa-mirror-rs/scrcpy-server")
-                .arg("/data/local/tmp/scrcpy-server-manual.jar")
-                .output().await.unwrap();
-            let lines=adb::parse_response_lines(cmd_push.stdout).expect("TODO: panic message");
+            let mut cmd_push = vec![String::from("push")];
+            cmd_push.push(String::from("/etc/aa-mirror-rs/scrcpy-server"));
+            cmd_push.push(String::from("/data/local/tmp/scrcpy-server-manual.jar"));
+            let lines=adb::run_cmd(cmd_push).await?;
             if lines.len() > 0 {
                 for line in lines {
                     info!("ADB push response: {:?}", line);
                 }
             }
 
-            let cmd_portfw = Command::new("adb")
-                .arg("forward")
-                .arg(format!("tcp:{}", ADB_SERVER_PORT))
-                .arg(format!("localabstract:scrcpy_{}", scid))
-                .output().await.unwrap();
-            let lines=adb::parse_response_lines(cmd_portfw.stdout).expect("TODO: panic message");
+            let mut cmd_portfw = vec![String::from("forward")];
+            cmd_portfw.push(format!("tcp:{}", ADB_SERVER_PORT));
+            cmd_portfw.push(format!("localabstract:scrcpy_{}", scid));
+            let lines=adb::run_cmd(cmd_portfw).await?;
             if lines.len() > 0 {
                 for line in lines {
                     info!("ADB port fw. response: {:?}", line);
                 }
             }
 
-            let cmd_shell = Command::new("adb")
-                .arg("shell")
-                .arg(format!("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar app_process / com.genymobile.scrcpy.Server {} scid={} log_level=info send_frame_meta=true tunnel_forward=true audio=true video=true control=true cleanup=true raw_stream=true audio_codec=aac audio_bit_rate={} max_size={} video_bit_rate={} video_codec=h264 new_display={}x{}/{} max_fps={}",scrcpy_version,scid, audio_bitrate, video_res_w, video_bitrate, video_res_w, video_res_h, screen_dpi, video_fps))
-                .output().await.unwrap();
-            let lines=adb::parse_response_lines(cmd_shell.stdout).expect("TODO: panic message");
+            let mut cmd_shell = vec![String::from("shell")];
+            cmd_shell.push(format!("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar app_process / com.genymobile.scrcpy.Server {} scid={} log_level=info send_frame_meta=true tunnel_forward=true audio=true video=true control=true cleanup=true raw_stream=true audio_codec=aac audio_bit_rate={} max_size={} video_bit_rate={} video_codec=h264 new_display={}x{}/{} max_fps={}",scrcpy_version,scid, audio_bitrate, video_res_w, video_bitrate, video_res_w, video_res_h, screen_dpi, video_fps));
+            let lines=adb::run_piped_cmd(cmd_shell).await?;
             if lines.len() > 0 {
                 for line in lines {
                     info!("ADB shell response: {:?}", line);
                 }
             }
-
             let tsk_scrcpy_video = tokio_uring::spawn(tsk_scrcpy_video(
                 config.clone(),
             ));
