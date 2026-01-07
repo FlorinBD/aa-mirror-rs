@@ -1084,7 +1084,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                                 final_length: None,
                                 payload: payload.clone(),
                             };
-                            scrcpy_cmd.send(pkt_rsp).await.expect("Error sending custom CMD");
+                            scrcpy_cmd.send(pkt_rsp).unwrap();
                         }
                         else
                         {
@@ -1448,7 +1448,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                                 final_length: None,
                                 payload: payload.clone(),
                             };
-                            scrcpy_cmd.send(pkt_rsp).await.expect("Error sending custom CMD");
+                            scrcpy_cmd.send(pkt_rsp).unwrap();
                         }
                         else
                         {
