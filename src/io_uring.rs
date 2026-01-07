@@ -246,7 +246,7 @@ async fn tcp_wait_for_md_connection(listener: &mut TcpListener) -> Result<TcpStr
 }
 
 async fn tsk_scrcpy_video(
-    cmd_rx: Receiver<Packet>,
+    mut cmd_rx: Receiver<Packet>,
     video_tx: Sender<Packet>,
     config: AppConfig,
 ) -> Result<()> {
@@ -263,7 +263,7 @@ async fn tsk_scrcpy_video(
 }
 
 async fn tsk_scrcpy_audio(
-    cmd_rx: Receiver<Packet>,
+    mut cmd_rx: Receiver<Packet>,
     audio_tx: Sender<Packet>,
     config: AppConfig,
 ) -> Result<()> {
@@ -385,9 +385,9 @@ pub async fn io_loop(
     let hex_requested = cfg.hexdump_level;
 
     //mpsc for scrcpy
-    let (tx_cmd_audio, rx_cmd_audio): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(5);
-    let (tx_cmd_video, rx_cmd_video): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(5);
-    let (tx_scrcpy, rx_scrcpy): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(30);
+    let (mut tx_cmd_audio, rx_cmd_audio): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(5);
+    let (mut tx_cmd_video, rx_cmd_video): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(5);
+    let (mut tx_scrcpy, rx_scrcpy): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(30);
 
     let mut tsk_adb;
     tsk_adb = tokio_uring::spawn(tsk_adb_scrcpy(

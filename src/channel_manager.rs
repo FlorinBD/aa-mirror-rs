@@ -363,7 +363,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
     mut hu_rx: Receiver<Packet>,
     mut srv_rx: Receiver<Packet>,
     srv_tx: Sender<Packet>,
-    scrcpy_rx: &mut Receiver<Packet>,
+    mut scrcpy_rx: Receiver<Packet>,
     r_statistics: Arc<AtomicUsize>,
     w_statistics: Arc<AtomicUsize>,
     dmp_level:HexdumpLevel,
