@@ -1076,7 +1076,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                             payload.insert(0, ((MESSAGE_CUSTOM_CMD as u16) >> 8) as u8);
                             payload.insert(1, ((MESSAGE_CUSTOM_CMD as u16) & 0xff) as u8);
                             //payload.push(&max_unack.to_be_bytes());
-                            payload.push(&bytes);
+                            payload.extend(&bytes);
                             let pkt_rsp = Packet {
                                 channel: ch_id as u8,
                                 flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
