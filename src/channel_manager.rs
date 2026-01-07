@@ -665,8 +665,8 @@ fn get_service_index(arr:&Vec<ServiceStatus>, ch:i32)->usize
 pub async fn ch_proxy(
     mut rx_srv: Receiver<Packet>,
     mut tx_srv: Sender<Packet>,
-    video_cmd: &Sender<Packet>,
-    audio_cmd: &Sender<Packet>,
+    video_cmd: &mut Sender<Packet>,
+    audio_cmd: &mut Sender<Packet>,
 ) -> Result<()> {
     info!( "{} Entering channel manager",get_name());
    // waiting for initial version frame (HU is starting transmission)
@@ -801,7 +801,7 @@ pub async fn ch_proxy(
                         };
                         let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                         srv_senders.push(tx);
-                        srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_audio_streaming(ch_id,true, tx_srv.clone(), rx, *audio_cmd, audio_cfg)));
+                        srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_audio_streaming(ch_id,true, tx_srv.clone(), rx, audio_cmd, audio_cfg)));
                     }
                     else {
                         error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
@@ -836,7 +836,7 @@ pub async fn ch_proxy(
                         fps:vfps,
                     };
 
-                    srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_video(ch_id,true, tx_srv.clone(), rx, *video_cmd, video_cfg)));
+                    srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_video(ch_id,true, tx_srv.clone(), rx, video_cmd, video_cfg)));
                 }
                 else {
                     error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
