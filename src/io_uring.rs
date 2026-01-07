@@ -246,8 +246,8 @@ async fn tcp_wait_for_md_connection(listener: &mut TcpListener) -> Result<TcpStr
 }
 
 async fn tsk_scrcpy_video(
-    mut cmd_rx: Receiver<Packet>,
-    video_tx: Sender<Packet>,
+    mut cmd_rx: broadcast::Receiver<Packet>,
+    video_tx: broadcast::Sender<Packet>,
     config: AppConfig,
 ) -> Result<()> {
     let mut stream = TokioTcpStream::connect(format!("127.0.0.1:{}", ADB_SERVER_PORT)).await?;
@@ -263,8 +263,8 @@ async fn tsk_scrcpy_video(
 }
 
 async fn tsk_scrcpy_audio(
-    mut cmd_rx: Receiver<Packet>,
-    audio_tx: Sender<Packet>,
+    mut cmd_rx: broadcast::Receiver<Packet>,
+    audio_tx: broadcast::Sender<Packet>,
     config: AppConfig,
 ) -> Result<()> {
     let mut stream = TokioTcpStream::connect(format!("127.0.0.1:{}", ADB_SERVER_PORT)).await?;
@@ -279,8 +279,8 @@ async fn tsk_scrcpy_audio(
     }
 }
 async fn tsk_adb_scrcpy(
-    video_cmd_rx: Receiver<Packet>,
-    audio_cmd_rx: Receiver<Packet>,
+    video_cmd_rx: broadcast::Receiver<Packet>,
+    audio_cmd_rx: broadcast::Receiver<Packet>,
     srv_tx: broadcast::Sender<Packet>,
     //audio_tx: Sender<Packet>,
     config: AppConfig,
@@ -330,13 +330,13 @@ async fn tsk_adb_scrcpy(
             let line=adb::run_piped_cmd(cmd_shell).await?;
             info!("ADB shell response: {:?}", line);
             let tsk_scrcpy_video = tokio_uring::spawn(tsk_scrcpy_video(
-                video_cmd_rx,
+                video_cmd_rx.resubscribe(),
                 srv_tx.clone(),
                 config.clone(),
             ));
             tokio::time::sleep(Duration::from_secs(5)).await;
             let tsk_scrcpy_audio = tokio_uring::spawn(tsk_scrcpy_audio(
-                audio_cmd_rx,
+                audio_cmd_rx.resubscribe(),
                 srv_tx,
                 config.clone(),
             ));
@@ -385,11 +385,10 @@ pub async fn io_loop(
     let hex_requested = cfg.hexdump_level;
 
     //mpsc for scrcpy
-    let (mut tx_cmd_audio, rx_cmd_audio): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(5);
-    let (mut tx_cmd_video, rx_cmd_video): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(5);
-    //let (tx_scrcpy, rx_scrcpy): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(30);
+    let (mut tx_cmd_audio, rx_cmd_audio)=broadcast::channel::<Packet>(5);
+    let (mut tx_cmd_video, rx_cmd_video)=broadcast::channel::<Packet>(5);
     let (tx_scrcpy, rx_scrcpy)=broadcast::channel::<Packet>(30);
-    
+
     let mut tsk_adb;
     tsk_adb = tokio_uring::spawn(tsk_adb_scrcpy(
         rx_cmd_video,
