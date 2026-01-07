@@ -74,7 +74,7 @@ pub struct ServiceStatus {
 
 #[derive(Serialize, Deserialize, Debug)]
 struct CmdStartVideoRec {
-    max_unack: i32,
+    max_unack: u32,
     bitrate: i32,
     res_w:i32,
     res_h:i32,
@@ -895,7 +895,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                                                     0xEB, 0xAE, 0xBA, 0xEB, 0xAE, 0xBA, 0xEB, 0xAE, 0xBA, 0xEB, 0xAE, 0xBA, 0xEB, 0xAE, 0xBA, 0xEB, 0xAF];
     info!( "{}: Starting...", get_name());
     let mut video_stream_started:bool=false;
-    let max_unack:u32;
+    let mut max_unack:u32;
     let mut session_id=1;
     loop {
         let pkt=  rx_srv.recv().await.ok_or("service reader channel hung up")?;
@@ -1331,7 +1331,7 @@ pub async fn th_media_sink_audio_guidance(ch_id: i32, enabled:bool, tx_srv: Send
 pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, scrcpy_cmd: &Sender<Packet>, acfg:AudioConfig)-> Result<()>{
     info!( "{}: Starting...", get_name());
     let mut audio_stream_started:bool=false;
-    let max_unack:u32;
+    let mut max_unack:u32;
     loop {
         let pkt=  rx_srv.recv().await.ok_or("service reader channel hung up")?;
         if pkt.channel !=ch_id as u8
