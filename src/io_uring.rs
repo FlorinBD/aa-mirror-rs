@@ -385,8 +385,8 @@ pub async fn io_loop(
     let hex_requested = cfg.hexdump_level;
 
     //mpsc for scrcpy
-    let (mut tx_cmd_audio, rx_cmd_audio)=broadcast::channel::<Packet>(5);
-    let (mut tx_cmd_video, rx_cmd_video)=broadcast::channel::<Packet>(5);
+    let (tx_cmd_audio, rx_cmd_audio)=broadcast::channel::<Packet>(5);
+    let (tx_cmd_video, rx_cmd_video)=broadcast::channel::<Packet>(5);
     let (tx_scrcpy, rx_scrcpy)=broadcast::channel::<Packet>(30);
 
     let mut tsk_adb;
