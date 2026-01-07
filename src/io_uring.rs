@@ -502,8 +502,8 @@ pub async fn io_loop(
         tsk_ch_manager = tokio_uring::spawn(ch_proxy(
             rx_srv,
             txr_srv,
-            &mut tx_cmd_video,
-            &mut tx_cmd_audio
+            tx_cmd_video.clone(),
+            tx_cmd_audio.clone()
         ));
         
         // Thread for monitoring transfer

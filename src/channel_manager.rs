@@ -27,7 +27,7 @@ use crate::channel_manager::ByeByeReason::USER_SELECTION;
 use crate::channel_manager::MessageStatus;
 use protobuf::text_format::print_to_string_pretty;
 use protobuf::{Enum, Message, MessageDyn};
-use tokio::sync::mpsc;
+use tokio::sync::{broadcast, mpsc};
 use protos::ControlMessageType::{self, *};
 use crate::aa_services::{VideoCodecResolution::*, VideoFPS::*, AudioStream::*, VideoConfig, AudioConfig, AudioChConfiguration, MediaCodec, MediaCodec::*, AudioStream, ServiceType, CommandState, ServiceStatus, th_bluetooth};
 use crate::aa_services::{th_input_source, th_media_sink_audio_guidance, th_media_sink_audio_streaming, th_media_sink_video, th_media_source, th_sensor_source, th_vendor_extension};
@@ -665,8 +665,8 @@ fn get_service_index(arr:&Vec<ServiceStatus>, ch:i32)->usize
 pub async fn ch_proxy(
     mut rx_srv: Receiver<Packet>,
     mut tx_srv: Sender<Packet>,
-    video_cmd: &mut Sender<Packet>,
-    audio_cmd: &mut Sender<Packet>,
+    video_cmd: broadcast::Sender<Packet>,
+    audio_cmd: broadcast::Sender<Packet>,
 ) -> Result<()> {
     info!( "{} Entering channel manager",get_name());
    // waiting for initial version frame (HU is starting transmission)
