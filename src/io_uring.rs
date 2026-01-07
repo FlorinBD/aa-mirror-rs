@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::broadcast::Sender as BroadcastSender;
 use tokio::sync::mpsc::{Receiver, Sender};
-use tokio::sync::{mpsc, Mutex, Notify};
+use tokio::sync::{broadcast, mpsc, Mutex, Notify};
 use tokio::task::JoinHandle;
 use tokio::time::{sleep, timeout};
 use tokio_uring::buf::BoundedBuf;
@@ -281,7 +281,7 @@ async fn tsk_scrcpy_audio(
 async fn tsk_adb_scrcpy(
     video_cmd_rx: Receiver<Packet>,
     audio_cmd_rx: Receiver<Packet>,
-    srv_tx: Sender<Packet>,
+    srv_tx: broadcast::Sender<Packet>,
     //audio_tx: Sender<Packet>,
     config: AppConfig,
 ) -> Result<()> {
@@ -387,8 +387,9 @@ pub async fn io_loop(
     //mpsc for scrcpy
     let (mut tx_cmd_audio, rx_cmd_audio): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(5);
     let (mut tx_cmd_video, rx_cmd_video): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(5);
-    let (tx_scrcpy, rx_scrcpy): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(30);
-
+    //let (tx_scrcpy, rx_scrcpy): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(30);
+    let (tx_scrcpy, rx_scrcpy)=broadcast::channel::<Packet>(30);
+    
     let mut tsk_adb;
     tsk_adb = tokio_uring::spawn(tsk_adb_scrcpy(
         rx_cmd_video,
@@ -493,7 +494,7 @@ pub async fn io_loop(
         }
 
         //service packet proxy
-        tsk_packet_proxy = tokio_uring::spawn(packet_tls_proxy(hu_w, rxr_hu, rxr_srv, tx_srv, rx_scrcpy, stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested));
+        tsk_packet_proxy = tokio_uring::spawn(packet_tls_proxy(hu_w, rxr_hu, rxr_srv, tx_srv, rx_scrcpy.resubscribe(), stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested));
 
         // dedicated reading threads:
         tsk_hu_read = tokio_uring::spawn(endpoint_reader(hu_r, txr_hu));
