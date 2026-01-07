@@ -387,7 +387,7 @@ pub async fn io_loop(
     //mpsc for scrcpy
     let (mut tx_cmd_audio, rx_cmd_audio): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(5);
     let (mut tx_cmd_video, rx_cmd_video): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(5);
-    let (mut tx_scrcpy, rx_scrcpy): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(30);
+    let (tx_scrcpy, rx_scrcpy): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(30);
 
     let mut tsk_adb;
     tsk_adb = tokio_uring::spawn(tsk_adb_scrcpy(
