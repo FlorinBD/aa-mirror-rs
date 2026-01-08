@@ -33,7 +33,7 @@ use tokio_uring::net::{TcpStream, TcpListener};
 use protos::*;
 use protos::ControlMessageType::{self, *};
 use crate::channel_manager::{Packet, ENCRYPTED, FRAME_TYPE_CONTROL, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
-use crate::config::{TCP_MEDIA_PORT};
+use crate::config::{ADB_MEDIA_PORT};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -1126,7 +1126,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
     }
 
     async fn listen_for_connections(tx: Sender<Packet>, ch_id: u8) -> Result<()> {
-        let bind_addr = format!("0.0.0.0:{}", TCP_MEDIA_PORT).parse().unwrap();
+        let bind_addr = format!("0.0.0.0:{}", ADB_MEDIA_PORT).parse().unwrap();
         let mut listener =Some(TcpListener::bind(bind_addr).unwrap());
         //listener.set_nonblocking(true);
         let mut total_bytes_read = 0;

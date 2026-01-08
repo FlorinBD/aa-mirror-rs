@@ -19,7 +19,7 @@ pub const TCP_DHU_PORT: i32 = 5277;
 pub const ADB_SERVER_PORT: u16 = 5037;
 
 pub const ADB_DEVICE_PORT: u16 = 5555;
-pub const TCP_MEDIA_PORT: i32 = 5291;
+pub const ADB_MEDIA_PORT: i32 = 5291;
 ///Delay after SDR to allow HU to configure its AV system, codecs, etc
 pub const HU_CONFIG_DELAY_MS: u64 = 600;
 
