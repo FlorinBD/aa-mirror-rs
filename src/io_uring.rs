@@ -47,7 +47,7 @@ const USB_ACCESSORY_PATH: &str = "/dev/usb_accessory";
 pub const BUFFER_LEN: usize = 16 * 1024;
 pub const TCP_CLIENT_TIMEOUT: Duration = Duration::new(30, 0);
 
-use crate::config::{Action, AppConfig, SharedConfig, ADB_DEVICE_PORT, ADB_SERVER_PORT};
+use crate::config::{Action, AppConfig, SharedConfig, ADB_DEVICE_PORT, TCP_MEDIA_PORT};
 use crate::config::{TCP_DHU_PORT, TCP_MD_SERVER_PORT};
 use crate::channel_manager::{endpoint_reader,ch_proxy, packet_tls_proxy};
 use crate::channel_manager::Packet;
@@ -285,7 +285,7 @@ async fn tsk_scrcpy_video(
     video_tx: broadcast::Sender<Packet>,
     config: AppConfig,
 ) -> Result<()> {
-    let addr_str=format!("127.0.0.1:{}", ADB_SERVER_PORT);
+    let addr_str=format!("127.0.0.1:{}", TCP_MEDIA_PORT);
     let addr: SocketAddr = SocketAddr::from_str(&addr_str).expect("invalid address");
     let mut stream = TcpStream::connect(addr).await?;
     stream.set_nodelay(true)?;
@@ -327,7 +327,7 @@ async fn tsk_scrcpy_audio(
     audio_tx: broadcast::Sender<Packet>,
     bitrate:i32
 ) -> Result<()> {
-    let addr_str=format!("127.0.0.1:{}", ADB_SERVER_PORT);
+    let addr_str=format!("127.0.0.1:{}", TCP_MEDIA_PORT);
     let addr: SocketAddr = SocketAddr::from_str(&addr_str).expect("invalid address");
     let mut stream = TcpStream::connect(addr).await?;
     stream.set_nodelay(true)?;
@@ -387,26 +387,39 @@ async fn tsk_adb_scrcpy(
             cmd_push.push(String::from("/etc/aa-mirror-rs/scrcpy-server"));
             cmd_push.push(String::from("/data/local/tmp/scrcpy-server-manual.jar"));
             let lines=adb::push_cmd(cmd_push).await?;
+            let mut push_ok=false;
             if lines.len() > 0 {
                 for line in lines {
+                    if line.contains("/s (")
+                    {
+                        push_ok=true;
+                    }
                     info!("ADB push response: {:?}", line);
                 }
             }
-            else {
-                info!("ADB push no response");
+
+            if !push_ok {
+                info!("ADB invalid push response received");
+                continue;
             }
 
             let mut cmd_portfw = vec![];
-            cmd_portfw.push(format!("tcp:{}", ADB_SERVER_PORT));
+            cmd_portfw.push(format!("tcp:{}", TCP_MEDIA_PORT));
             cmd_portfw.push(format!("localabstract:scrcpy_{}", scid));
             let lines=adb::forward_cmd(cmd_portfw).await?;
+            let mut port_fw_ok=true;
             if lines.len() > 0 {
                 for line in lines {
                     info!("ADB port fw. response: {:?}", line);
+                    if line.contains("error")
+                    {
+                        port_fw_ok=false;
+                    }
                 }
             }
-            else {
-                info!("ADB port fw no response");
+            if !push_ok {
+                info!("ADB invalid port forward response received");
+                continue;
             }
 
             let mut cmd_shell = vec![String::from("shell")];

@@ -9,7 +9,7 @@ use simplelog::info;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use crate::{adb, arp_common};
-use crate::config::{AppConfig, ADB_DEVICE_PORT, ADB_SERVER_PORT};
+use crate::config::{AppConfig, ADB_DEVICE_PORT};
 use simplelog;
 
 ///ADB wrapper, needs adb binary installed
@@ -156,9 +156,9 @@ where
         .args(args)
         .output().await?;
     let raw_rsp=adb_cmd.stderr;
-    info!("ADB stdout: {:?}", raw_rsp);
+    //info!("ADB stdout: {:?}", raw_rsp);
     let stdout = String::from_utf8_lossy(&raw_rsp);
-
+    
     Ok(stdout.lines().filter_map(|line| line.split('\t').next()) // first column
         .filter(|col| !col.is_empty())             // skip empty
         .map(|col| col.to_string())                // make owned
@@ -175,7 +175,7 @@ where
         .args(args)
         .output().await?;
     let raw_rsp=adb_cmd.stderr;
-    info!("ADB stdout: {:?}", raw_rsp);
+    //info!("ADB stdout: {:?}", raw_rsp);
     let stdout = String::from_utf8_lossy(&raw_rsp);
 
     Ok(stdout.lines().filter_map(|line| line.split('\t').next()) // first column
