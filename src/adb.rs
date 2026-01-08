@@ -145,3 +145,41 @@ where
            .map(|col| col.to_string())                // make owned
            .collect())
 }
+
+pub(crate) async fn push_cmd<I, S>(args: I) ->Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>>
+where
+    I: IntoIterator<Item = S>,
+    I::Item: AsRef<OsStr>,
+{
+    let adb_cmd = Command::new("adb")
+        .arg("push")
+        .args(args)
+        .output().await?;
+    let raw_rsp=adb_cmd.stderr;
+    info!("ADB stdout: {:?}", raw_rsp);
+    let stdout = String::from_utf8_lossy(&raw_rsp);
+
+    Ok(stdout.lines().filter_map(|line| line.split('\t').next()) // first column
+        .filter(|col| !col.is_empty())             // skip empty
+        .map(|col| col.to_string())                // make owned
+        .collect())
+}
+
+pub(crate) async fn forward_cmd<I, S>(args: I) ->Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>>
+where
+    I: IntoIterator<Item = S>,
+    I::Item: AsRef<OsStr>,
+{
+    let adb_cmd = Command::new("adb")
+        .arg("forward")
+        .args(args)
+        .output().await?;
+    let raw_rsp=adb_cmd.stderr;
+    info!("ADB stdout: {:?}", raw_rsp);
+    let stdout = String::from_utf8_lossy(&raw_rsp);
+
+    Ok(stdout.lines().filter_map(|line| line.split('\t').next()) // first column
+        .filter(|col| !col.is_empty())             // skip empty
+        .map(|col| col.to_string())                // make owned
+        .collect())
+}
