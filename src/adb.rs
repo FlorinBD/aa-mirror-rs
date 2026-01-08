@@ -145,5 +145,8 @@ where
 
     let stdout = String::from_utf8_lossy(&adb_cmd.stdout);
 
-    Ok(stdout.lines().map(|line| line.to_string()).collect())
+    Ok(stdout.lines().filter_map(|line| line.split('\t').next()) // first column
+           .filter(|col| !col.is_empty())             // skip empty
+           .map(|col| col.to_string())                // make owned
+           .collect())
 }
