@@ -1131,7 +1131,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
         //listener.set_nonblocking(true);
         let mut total_bytes_read = 0;
         loop {
-            info!("Server listening on port {}", TCP_VIDEO_PORT);
+            info!("Server listening on port {}", ADB_MEDIA_PORT);
             let retval =listener.as_mut().unwrap().accept();
             let (stream, addr) = match timeout(crate::io_uring::TCP_CLIENT_TIMEOUT, retval)
                 .await

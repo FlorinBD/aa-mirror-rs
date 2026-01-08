@@ -444,7 +444,7 @@ async fn tsk_adb_scrcpy(
 
                 tokio::time::sleep(Duration::from_secs(5)).await;
 
-                let mut stream = TokioTcpStream::connect(format!("127.0.0.1:{}", ADB_SERVER_PORT)).await?;
+                let mut stream = TokioTcpStream::connect(format!("127.0.0.1:{}", ADB_MEDIA_PORT)).await?;
 
                 info!("Connected to control server!");
 
