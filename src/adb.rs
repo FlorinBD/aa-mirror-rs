@@ -43,6 +43,7 @@ pub fn parse_response_lines_old(rsp: Vec<u8>) ->Result<Vec<String>, String>
     Ok(response)
 }
 
+///Find an ADB device, connect to it and return TCP address
 pub(crate) async fn get_first_adb_device(config: AppConfig) ->Option<String>
 {
     let interface = arp_common::interface_from(&config.iface);
