@@ -5,7 +5,7 @@ use std::cell::RefCell;
 use std::fmt::Debug;
 use std::io::stderr;
 use std::marker::PhantomData;
-use std::net::{Ipv4Addr, SocketAddrV4};
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -29,10 +29,12 @@ use port_check::is_port_reachable_with_timeout;
 use tokio::net::ToSocketAddrs;
 use crate::{adb, arp_common};
 use futures::StreamExt;
+use hyper::client::connect::Connect;
 use tokio::process::Command;
 use tokio::net::TcpStream as TokioTcpStream;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::broadcast::error::TryRecvError;
+use std::str::FromStr;
 
 // module name for logging engine
 const NAME: &str = "<i><bright-black> io_uring: </>";
@@ -283,8 +285,10 @@ async fn tsk_scrcpy_video(
     video_tx: broadcast::Sender<Packet>,
     config: AppConfig,
 ) -> Result<()> {
-    let mut stream = TokioTcpStream::connect(format!("127.0.0.1:{}", ADB_SERVER_PORT)).await?;
-
+    let addr_str=format!("127.0.0.1:{}", ADB_SERVER_PORT);
+    let addr: SocketAddr = SocketAddr::from_str(&addr_str).expect("invalid address");
+    let mut stream = TcpStream::connect(addr).await?;
+    stream.set_nodelay(true)?;
     info!("Connected to video server!");
     let dummy_byte:[u8;1]=[0];
     stream.write(&dummy_byte).await?;//start data streamaing
@@ -309,8 +313,10 @@ async fn tsk_scrcpy_audio(
     audio_tx: broadcast::Sender<Packet>,
     bitrate:i32
 ) -> Result<()> {
-    let mut stream = TokioTcpStream::connect(format!("127.0.0.1:{}", ADB_SERVER_PORT)).await?;
-
+    let addr_str=format!("127.0.0.1:{}", ADB_SERVER_PORT);
+    let addr: SocketAddr = SocketAddr::from_str(&addr_str).expect("invalid address");
+    let mut stream = TcpStream::connect(addr).await?;
+    stream.set_nodelay(true)?;
     info!("Connected to audio server!");
 
     let mut audio_cfg = [0u8; 5];
