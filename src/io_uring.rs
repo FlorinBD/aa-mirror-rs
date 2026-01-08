@@ -220,7 +220,7 @@ async fn tcp_wait_for_hu_connection_old(listener: & TcpListener) -> Result<TcpSt
     Ok(stream)
 }
 
-async fn tcp_wait_for_hu_connection(listener: & TcpListener) -> Result<TcpStream> {
+async fn tcp_wait_for_hu_connection_old2(listener: & TcpListener) -> Result<TcpStream> {
     tokio::select! {
         accept_result = listener.accept() => {
             match accept_result {
@@ -240,6 +240,16 @@ async fn tcp_wait_for_hu_connection(listener: & TcpListener) -> Result<TcpStream
             Err("Timeout waiting for client".into())
         }
     }
+}
+
+async fn tcp_wait_for_hu_connection(listener: & TcpListener) -> Result<TcpStream> {
+    // Accept one client
+    let (stream, addr) = listener.accept().await?;
+    println!("DHU Client connected: {:?}", addr);
+
+    // Disable Nagle algorithm if you want low-latency small packets
+    stream.set_nodelay(true)?;
+    Ok(stream)
 }
 
 /// Asynchronously wait for an inbound TCP connection
