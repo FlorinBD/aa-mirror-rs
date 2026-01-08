@@ -290,8 +290,10 @@ async fn tsk_scrcpy_video(
     let mut stream = TcpStream::connect(addr).await?;
     stream.set_nodelay(true)?;
     info!("Connected to video server!");
-    let dummy_byte:[u8;1]=[0];
-    stream.write(&dummy_byte).await?;//start data streamaing
+
+    let mut dummy_byte =Vec::with_capacity(1);
+    dummy_byte.push(0);
+    stream.write(dummy_byte).await;//start data streamaing
     info!("Video handshake done");
     let mut buf = vec![0u8; 65535];
     loop {
@@ -330,10 +332,10 @@ async fn tsk_scrcpy_audio(
     stream.set_nodelay(true)?;
     info!("Connected to audio server!");
 
-    let mut audio_cfg = [0u8; 5];
-    audio_cfg[0] = 1; // 0 = OPUS, 1 = AAC
-    audio_cfg[1..5].copy_from_slice(&bitrate.to_be_bytes());
-    stream.write(&audio_cfg).await?;
+    let mut audio_cfg = Vec::with_capacity(5);
+    audio_cfg.push(1); // 0 = OPUS, 1 = AAC
+    audio_cfg.extend_from_slice(&bitrate.to_be_bytes()); // 4 bytes in big-endian
+    stream.write(audio_cfg).await;
     info!("Audio handshake done");
     let mut buf = vec![0u8; 65535];
     loop {
