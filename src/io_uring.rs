@@ -293,7 +293,7 @@ async fn tsk_scrcpy_video(
 
     let mut dummy_byte =Vec::with_capacity(1);
     dummy_byte.push(0);
-    stream.write(dummy_byte).await;//start data streamaing
+    let (res, buf)=stream.write(dummy_byte).await;//start data streamaing
     info!("Video handshake done");
     let mut buf = vec![0u8; 0xffff];
     loop {
@@ -335,7 +335,7 @@ async fn tsk_scrcpy_audio(
     let mut audio_cfg = Vec::with_capacity(5);
     audio_cfg.push(1); // 0 = OPUS, 1 = AAC
     audio_cfg.extend_from_slice(&bitrate.to_be_bytes()); // 4 bytes in big-endian
-    stream.write(audio_cfg).await;
+    let (res, buf)=stream.write(audio_cfg).await;
     info!("Audio handshake done");
     let mut buf = vec![0u8; 0xffff];
     loop {
