@@ -197,7 +197,7 @@ async fn flatten<T>(handle: &mut JoinHandle<Result<T>>, dbg_info:String) -> Resu
 
 /// Asynchronously wait for an inbound TCP connection
 /// returning TcpStream of first client connected
-async fn tcp_wait_for_hu_connection(listener: &mut TcpListener) -> Result<TcpStream> {
+async fn tcp_wait_for_hu_connection(listener: & TcpListener) -> Result<TcpStream> {
     let retval = listener.accept();
     let (stream, addr) = match timeout(TCP_CLIENT_TIMEOUT, retval)
         .await
@@ -417,7 +417,7 @@ pub async fn io_loop(
             //info!("{} 🛰️ DHU TCP server: bind to local address",NAME);
             //dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
             info!("{} 🛰️ DHU TCP server: listening for `Desktop Head Unit` connection...",NAME);
-            if let Ok(s) = tcp_wait_for_hu_connection(&mut dhu_listener.as_mut().unwrap()).await {
+            if let Ok(s) = tcp_wait_for_hu_connection(& dhu_listener.as_mut().unwrap()).await {
                 hu_tcp = Some(s);
             } else {
                 // notify main loop to restart
