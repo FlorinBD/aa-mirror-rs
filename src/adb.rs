@@ -142,8 +142,9 @@ where
     /*if !adb_cmd.status.success() {
         return Err(format!("process exited with {}", adb_cmd.status).into());
     }*/
-
-    let stdout = String::from_utf8_lossy(&adb_cmd.stdout);
+    let raw_rsp=adb_cmd.stdout;
+    info!("ADB stdout: {:?}", raw_rsp);
+    let stdout = String::from_utf8_lossy(&raw_rsp);
 
     Ok(stdout.lines().filter_map(|line| line.split('\t').next()) // first column
            .filter(|col| !col.is_empty())             // skip empty

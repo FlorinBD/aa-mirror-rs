@@ -336,6 +336,9 @@ async fn tsk_adb_scrcpy(
                     info!("ADB push response: {:?}", line);
                 }
             }
+            else {
+                info!("ADB push no response");
+            }
 
             let mut cmd_portfw = vec![String::from("forward")];
             cmd_portfw.push(format!("tcp:{}", ADB_SERVER_PORT));
@@ -345,6 +348,9 @@ async fn tsk_adb_scrcpy(
                 for line in lines {
                     info!("ADB port fw. response: {:?}", line);
                 }
+            }
+            else {
+                info!("ADB port fw no response");
             }
 
             let mut cmd_shell = vec![String::from("shell")];
