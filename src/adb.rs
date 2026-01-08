@@ -92,7 +92,7 @@ pub(crate) async fn get_first_adb_device(config: AppConfig) ->Option<String>
             if lines.len() > 0 {
                 for line in lines {
                     info!("ADB devices response: {:?}", line);
-                    if line.contains("device") {
+                    if line.contains(" device") {
                         if connected_dev.is_empty() {
                             return None;
                         }
@@ -103,6 +103,7 @@ pub(crate) async fn get_first_adb_device(config: AppConfig) ->Option<String>
                     }
                 }
             }
+
         }
     }
     //info!("ADB Scan took {:?} seconds", scan_duration.as_secs());
