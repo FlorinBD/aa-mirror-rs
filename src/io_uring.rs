@@ -236,7 +236,7 @@ async fn tcp_wait_for_hu_connection(listener: & TcpListener) -> Result<TcpStream
             }
         }
         _ = sleep(TCP_CLIENT_TIMEOUT) => {
-            error!("{} 📵 HU TCP server: {}, timeout elapsed, restarting...", NAME, e);
+            error!("{} 📵 HU TCP server timeout elapsed, restarting...", NAME);
             Err("Timeout waiting for client".into())
         }
     }
