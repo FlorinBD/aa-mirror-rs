@@ -397,18 +397,20 @@ async fn tsk_adb_scrcpy(
                     srv_tx,
                     audio_bitrate,
                 ));
+
+                tokio::time::sleep(Duration::from_secs(5)).await;
+
+                let mut stream = TokioTcpStream::connect(format!("127.0.0.1:{}", ADB_SERVER_PORT)).await?;
+
+                info!("Connected to control server!");
+
+                loop {
+                    //stream.write_all(b"Hello, server!\n").await?;
+                    tokio::time::sleep(Duration::from_secs(50)).await;
+                }
             }
 
-            tokio::time::sleep(Duration::from_secs(5)).await;
 
-            let mut stream = TokioTcpStream::connect(format!("127.0.0.1:{}", ADB_SERVER_PORT)).await?;
-
-            info!("Connected to control server!");
-
-            loop {
-                //stream.write_all(b"Hello, server!\n").await?;
-                tokio::time::sleep(Duration::from_secs(50)).await;
-            }
             //FIXME add a cancellation token
         }
         else {
