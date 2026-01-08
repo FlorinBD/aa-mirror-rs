@@ -295,7 +295,7 @@ async fn tsk_scrcpy_video(
     dummy_byte.push(0);
     stream.write(dummy_byte).await;//start data streamaing
     info!("Video handshake done");
-    let mut buf = vec![0u8; 65535];
+    let mut buf = vec![0u8; 0xffff];
     loop {
         // Read response
         let (res, buf_out) = stream.read(buf).await;
@@ -337,7 +337,7 @@ async fn tsk_scrcpy_audio(
     audio_cfg.extend_from_slice(&bitrate.to_be_bytes()); // 4 bytes in big-endian
     stream.write(audio_cfg).await;
     info!("Audio handshake done");
-    let mut buf = vec![0u8; 65535];
+    let mut buf = vec![0u8; 0xffff];
     loop {
         // Read response
         let (res, buf_out) = stream.read(buf).await;
