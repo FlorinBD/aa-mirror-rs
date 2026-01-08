@@ -124,6 +124,7 @@ where
     let mut lines = BufReader::new(stdout).lines();
 
     if let Some(line) = lines.next_line().await? {
+        info!("ADB piped stdout: {:?}", line);
         return Ok(line);
     }
 
