@@ -64,7 +64,6 @@ pub(crate) async fn get_first_adb_device(config: AppConfig) ->Option<String>
     //let scan_duration = start.elapsed();
     info!("Found hosts: {}", occupied.clone().count());
     let dev_port=ADB_DEVICE_PORT;
-    let mut connected_dev=String::from("");
     for outcome in occupied {
         //info!("ADB try to connect to {:?}", outcome.target_ip);
         let dev_socket=SocketAddrV4::new(outcome.target_ip, dev_port);
@@ -79,9 +78,6 @@ pub(crate) async fn get_first_adb_device(config: AppConfig) ->Option<String>
             if lines.len() > 0 {
                 for line in lines {
                     info!("ADB connect response: {:?}", line);
-                    if line.contains("connected") {
-                        connected_dev=dev_socket.to_string();
-                    }
                 }
             }
             tokio::time::sleep(Duration::from_secs(5)).await;
@@ -92,13 +88,8 @@ pub(crate) async fn get_first_adb_device(config: AppConfig) ->Option<String>
             if lines.len() > 0 {
                 for line in lines {
                     info!("ADB devices response: {:?}", line);
-                    if line.contains(&format!("{} device", ADB_DEVICE_PORT)) {
-                        if connected_dev.is_empty() {
-                            return None;
-                        }
-                        else {
-                            return  Some(connected_dev);
-                        }
+                    if line.contains(&dev_socket.to_string()) {
+                        return  Some(dev_socket.to_string());
 
                     }
                 }

@@ -459,7 +459,7 @@ pub async fn io_loop(
                 hu_tcp = Some(s);
             } else {
                 // notify main loop to restart
-                let _ = need_restart.send(None);
+                //let _ = need_restart.send(None);
                 //drop(dhu_listener);
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 continue;
@@ -480,8 +480,8 @@ pub async fn io_loop(
                 Err(e) => {
                     error!("{} 🔴 Error opening USB accessory: {}", NAME, e);
                     // notify main loop to restart
-                    let _ = need_restart.send(None);
-                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    //let _ = need_restart.send(None);
+                    tokio::time::sleep(Duration::from_secs(2)).await;
                     continue;
                 }
             }
