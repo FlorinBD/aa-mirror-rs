@@ -303,7 +303,7 @@ async fn tsk_scrcpy_video(
         let n = res?;
 
         if n == 0 {
-            info!("Audio connection closed");
+            info!("Video connection closed");
             break;
         }
 
