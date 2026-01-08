@@ -1,5 +1,5 @@
 name: Build aa-mirror-rs
-run-name: Build aa-mirror-rs:${{github.event.inputs.buildLevel}}
+run-name: Build aa-mirror-rs:" ${{github.event.inputs.buildLevel}}"
 on:
   #push:
     #branches: [ "main" ]
