@@ -421,6 +421,9 @@ async fn tsk_adb_scrcpy(
                 info!("ADB invalid port forward response received");
                 continue;
             }
+            else {
+                info!("ADB port forwarding done to {}", ADB_MEDIA_PORT);
+            }
 
             let mut cmd_shell = vec![String::from("shell")];
             cmd_shell.push(format!("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar app_process / com.genymobile.scrcpy.Server {} scid={} log_level=info send_frame_meta=true tunnel_forward=true audio=true video=true control=true cleanup=true raw_stream=false audio_codec=aac audio_bit_rate={} max_size={} video_bit_rate={} video_codec=h264 new_display={}x{}/{} max_fps={}",scrcpy_version,scid, audio_bitrate, video_res_w, video_bitrate, video_res_w, video_res_h, screen_dpi, video_fps));

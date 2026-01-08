@@ -117,7 +117,7 @@ where
     let mut lines = BufReader::new(stdout).lines();
 
     if let Some(line) = lines.next_line().await? {
-        info!("ADB piped stdout: {:?}", line);
+        //info!("ADB piped stdout: {:?}", line);
         return Ok(line);
     }
 
@@ -158,7 +158,7 @@ where
     let raw_rsp=adb_cmd.stderr;
     //info!("ADB stdout: {:?}", raw_rsp);
     let stdout = String::from_utf8_lossy(&raw_rsp);
-    
+
     Ok(stdout.lines().filter_map(|line| line.split('\t').next()) // first column
         .filter(|col| !col.is_empty())             // skip empty
         .map(|col| col.to_string())                // make owned
