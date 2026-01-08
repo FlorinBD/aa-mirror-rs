@@ -382,15 +382,17 @@ async fn tsk_adb_scrcpy(
             cmd_shell.push(format!("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar app_process / com.genymobile.scrcpy.Server {} scid={} log_level=info send_frame_meta=true tunnel_forward=true audio=true video=true control=true cleanup=true raw_stream=false audio_codec=aac audio_bit_rate={} max_size={} video_bit_rate={} video_codec=h264 new_display={}x{}/{} max_fps={}",scrcpy_version,scid, audio_bitrate, video_res_w, video_bitrate, video_res_w, video_res_h, screen_dpi, video_fps));
             let line=adb::run_piped_cmd(cmd_shell).await?;
             info!("ADB shell response: {:?}", line);
+            let hnd_scrcpy_video;
+            let hnd_scrcpy_audio;
             if line.contains("[server] INFO: Device:")
             {
-                let tsk_scrcpy_video = tokio_uring::spawn(tsk_scrcpy_video(
+                hnd_scrcpy_video = tokio_uring::spawn(tsk_scrcpy_video(
                     video_cmd_rx.resubscribe(),
                     srv_tx.clone(),
                     config.clone(),
                 ));
                 tokio::time::sleep(Duration::from_secs(5)).await;
-                let tsk_scrcpy_audio = tokio_uring::spawn(tsk_scrcpy_audio(
+                hnd_scrcpy_audio = tokio_uring::spawn(tsk_scrcpy_audio(
                     audio_cmd_rx.resubscribe(),
                     srv_tx,
                     audio_bitrate,
@@ -409,8 +411,7 @@ async fn tsk_adb_scrcpy(
             }
 
             //FIXME add a cancellation token
-            tsk_scrcpy_video.abort();
-            tsk_scrcpy_audio.await;
+
         }
         else {
             error!("{}: No device with ADB connection found, trying again...", NAME)
