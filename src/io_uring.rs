@@ -197,7 +197,7 @@ async fn flatten<T>(handle: &mut JoinHandle<Result<T>>, dbg_info:String) -> Resu
 
 /// Asynchronously wait for an inbound TCP connection
 /// returning TcpStream of first client connected
-async fn tcp_wait_for_hu_connection(listener: & TcpListener) -> Result<TcpStream> {
+async fn tcp_wait_for_hu_connection_old(listener: & TcpListener) -> Result<TcpStream> {
     let retval = listener.accept();
     let (stream, addr) = match timeout(TCP_CLIENT_TIMEOUT, retval)
         .await
@@ -218,6 +218,28 @@ async fn tcp_wait_for_hu_connection(listener: & TcpListener) -> Result<TcpStream
     // even if there is only a small amount of data
     stream.set_nodelay(true)?;
     Ok(stream)
+}
+
+async fn tcp_wait_for_hu_connection(listener: & TcpListener) -> Result<TcpStream> {
+    tokio::select! {
+        accept_result = listener.accept() => {
+            match accept_result {
+                Ok((stream, addr)) => {
+                    info!("HU TCP Client connected: {:?}", addr);
+                    stream.set_nodelay(true)?;
+                    Ok(stream)
+                }
+                Err(e) => {
+                    error!("{} 📵 HU TCP server error: {}, restarting...", NAME, e);
+                    Err(Box::new(e))
+                }
+            }
+        }
+        _ = sleep(TCP_CLIENT_TIMEOUT) => {
+            error!("{} 📵 HU TCP server: {}, timeout elapsed, restarting...", NAME, e);
+            Err("Timeout waiting for client".into())
+        }
+    }
 }
 
 /// Asynchronously wait for an inbound TCP connection

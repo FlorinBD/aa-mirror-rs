@@ -8,3 +8,6 @@ adb_client is 1.18 ATM because 1.19 requires rustc 1.91 and is not working with 
 
 versions:
 scrcpy-server version: 3.3.4
+
+todo:
+implement tokio_uring for adb reading task
