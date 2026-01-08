@@ -293,13 +293,22 @@ async fn tsk_scrcpy_video(
     let dummy_byte:[u8;1]=[0];
     stream.write(&dummy_byte).await?;//start data streamaing
     info!("Video handshake done");
+    let mut buf = vec![0u8; 65535];
     loop {
         // Read response
-        let mut buffer = vec![];
-        // Read from the stream
-        let (res, buf) = stream.read(buffer).await;
+        let (res, buf_out) = stream.read(buf).await;
         let n = res?;
-        info!("Video task Read {} bytes: {:?}", n, &buf[..n]);
+
+        if n == 0 {
+            info!("Audio connection closed");
+            break;
+        }
+
+        info!("Video task Read {} bytes: {:?}", n, &buf_out[..n]);
+
+        // Reuse buffer
+        buf = buf_out;
+        //Check custom Service command
         match cmd_rx.try_recv() {
             Ok(packet) => {
                 info!("tsk_scrcpy_video Received command packet {:?}", packet);
@@ -307,6 +316,7 @@ async fn tsk_scrcpy_video(
             _ => {}
         }
     }
+    Ok(())
 }
 
 async fn tsk_scrcpy_audio(
@@ -325,14 +335,23 @@ async fn tsk_scrcpy_audio(
     audio_cfg[1..5].copy_from_slice(&bitrate.to_be_bytes());
     stream.write(&audio_cfg).await?;
     info!("Audio handshake done");
+    let mut buf = vec![0u8; 65535];
     loop {
         // Read response
-        let mut buffer = vec![];
-        // Read from the stream
-        let (res, buf) = stream.read(buffer).await;
+        let (res, buf_out) = stream.read(buf).await;
         let n = res?;
-        info!("Audio task Read {} bytes: {:?}", n, &buf[..n]);
+
+        if n == 0 {
+            info!("Audio connection closed");
+            break;
+        }
+
+        info!("Audio task Read {} bytes: {:?}", n, &buf_out[..n]);
+
+        // Reuse buffer
+        buf = buf_out;
     }
+    Ok(())
 }
 async fn tsk_adb_scrcpy(
     video_cmd_rx: broadcast::Receiver<Packet>,
