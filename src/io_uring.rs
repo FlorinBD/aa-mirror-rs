@@ -294,11 +294,12 @@ async fn tsk_scrcpy_video(
     stream.write(&dummy_byte).await?;//start data streamaing
     info!("Video handshake done");
     loop {
-
         // Read response
         let mut buffer = vec![];
-        let n = stream.read(&mut buffer).await?;
-        info!("Video task received {} bytes: {}", n, buffer.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" "));
+        // Read from the stream
+        let (res, buf) = stream.read(buffer).await;
+        let n = res?;
+        info!("Video task Read {} bytes: {:?}", n, &buf[..n]);
         match cmd_rx.try_recv() {
             Ok(packet) => {
                 info!("tsk_scrcpy_video Received command packet {:?}", packet);
@@ -327,8 +328,10 @@ async fn tsk_scrcpy_audio(
     loop {
         // Read response
         let mut buffer = vec![];
-        let n = stream.read(&mut buffer).await?;
-        info!("Audio task received {} bytes: {}", n, buffer.iter().map(|b| format!("{:02x}", b)).collect::<Vec<_>>().join(" "));
+        // Read from the stream
+        let (res, buf) = stream.read(buffer).await;
+        let n = res?;
+        info!("Audio task Read {} bytes: {:?}", n, &buf[..n]);
     }
 }
 async fn tsk_adb_scrcpy(
