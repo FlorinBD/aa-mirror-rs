@@ -409,9 +409,7 @@ async fn tsk_adb_scrcpy(
                 //stream.write_all(b"Hello, server!\n").await?;
                 tokio::time::sleep(Duration::from_secs(50)).await;
             }
-
             //FIXME add a cancellation token
-
         }
         else {
             error!("{}: No device with ADB connection found, trying again...", NAME)
