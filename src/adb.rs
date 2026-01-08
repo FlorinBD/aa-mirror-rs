@@ -84,7 +84,7 @@ pub(crate) async fn get_first_adb_device(config: AppConfig) ->Option<String>
                     }
                 }
             }
-
+            tokio::time::sleep(Duration::from_secs(5)).await;
             let cmd_dev = Command::new("adb")
                 .arg("devices")
                 .output().await.unwrap();
