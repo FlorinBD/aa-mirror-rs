@@ -311,7 +311,7 @@ async fn tsk_scrcpy_video(
 
             if n == 0 {
                 info!("Video connection closed by server?");
-                //break;
+                break;
             }
 
             info!("Video task Read {} bytes: {:?}", n, &buf_out[..n]);
@@ -358,7 +358,7 @@ async fn tsk_scrcpy_audio(
 
             if n == 0 {
                 info!("Audio connection closed by server?");
-                //break;
+                break;
             }
 
             info!("Audio task Read {} bytes: {:?}", n, &buf_out[..n]);
