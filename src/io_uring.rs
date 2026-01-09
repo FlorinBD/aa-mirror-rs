@@ -305,6 +305,9 @@ async fn tsk_scrcpy_video(
             info!("ADB push response: {:?}", line);
         }
     }
+    if !push_ok {
+        error!("ADB invalid push response received for video task");
+    }
 
     let mut cmd_shell = vec![];
     cmd_shell.push(format!("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar app_process / com.genymobile.scrcpy.Server {} scid={} log_level=info send_frame_meta=true tunnel_forward=true audio=false video=true control=false send_dummy_byte=false cleanup=true raw_stream=true max_size={} video_bit_rate={} video_codec=h264 new_display={}x{}/{} max_fps={}",SCRCPY_VERSION.to_string(),SCID_VIDEO.to_string(), video_res_w, video_bitrate, video_res_w, video_res_h, screen_dpi, video_fps));
@@ -374,6 +377,10 @@ async fn tsk_scrcpy_audio(
             }
             info!("ADB push response: {:?}", line);
         }
+    }
+
+    if !push_ok {
+        error!("ADB invalid push response received for audio task");
     }
 
     let audio_bitrate:i32=48000;
@@ -533,7 +540,7 @@ async fn tsk_adb_scrcpy(
             }
 
             if !push_ok {
-                error!("ADB invalid push response received");
+                error!("ADB invalid push response received for control task");
             }
             let mut cmd_shell = vec![];
             cmd_shell.push(format!("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar app_process / com.genymobile.scrcpy.Server {} scid={} log_level=info tunnel_forward=true audio=false video=false control=true raw_stream=true",SCRCPY_VERSION.to_string(),SCID_CTRL.to_string()));
