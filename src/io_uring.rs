@@ -291,18 +291,18 @@ async fn tsk_scrcpy_video(
     let video_fps=60;
     let screen_dpi=160;
 
-    let addr_str = format!("127.0.0.1:{}", SCRCPY_VIDEO_PORT);
-    let addr: SocketAddr = SocketAddr::from_str(&addr_str).expect("invalid address");
-    let mut stream = TcpStream::connect(addr).await?;
-    stream.set_nodelay(true)?;
-    info!("Connected to video server!");
-
     let mut cmd_shell = vec![];
     cmd_shell.push(format!("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar app_process / com.genymobile.scrcpy.Server {} scid={} log_level=info send_frame_meta=true tunnel_forward=true audio=false video=true control=false send_dummy_byte=false cleanup=true raw_stream=true max_size={} video_bit_rate={} video_codec=h264 new_display={}x{}/{} max_fps={}",SCRCPY_VERSION.to_string(),SCID_VIDEO.to_string(), video_res_w, video_bitrate, video_res_w, video_res_h, screen_dpi, video_fps));
     let line=adb::shell_cmd(cmd_shell).await?;
     info!("ADB video shell response: {:?}", line);
     if line.contains("[server] INFO: Device:")
     {
+        let addr_str = format!("127.0.0.1:{}", SCRCPY_VIDEO_PORT);
+        let addr: SocketAddr = SocketAddr::from_str(&addr_str).expect("invalid address");
+        //connect AFTER shell cmd
+        let mut stream = TcpStream::connect(addr).await?;
+        stream.set_nodelay(true)?;
+        info!("Connected to video server!");
 
         let mut buf = vec![0u8; 0xffff];
         let mut i=0;
@@ -344,11 +344,6 @@ async fn tsk_scrcpy_audio(
     mut cmd_rx: broadcast::Receiver<Packet>,
     audio_tx: broadcast::Sender<Packet>,
 ) -> Result<()> {
-    let addr_str = format!("127.0.0.1:{}", SCRCPY_AUDIO_PORT);
-    let addr: SocketAddr = SocketAddr::from_str(&addr_str).expect("invalid address");
-    let mut stream = TcpStream::connect(addr).await?;
-    stream.set_nodelay(true)?;
-    info!("Connected to audio server!");
 
     let audio_bitrate:i32=48000;
     let mut cmd_shell = vec![];
@@ -357,6 +352,13 @@ async fn tsk_scrcpy_audio(
     info!("ADB audio shell response: {:?}", line);
     if line.contains("[server] INFO: Device:")
     {
+        let addr_str = format!("127.0.0.1:{}", SCRCPY_AUDIO_PORT);
+        let addr: SocketAddr = SocketAddr::from_str(&addr_str).expect("invalid address");
+        //connect AFTER shell cmd
+        let mut stream = TcpStream::connect(addr).await?;
+        stream.set_nodelay(true)?;
+        info!("Connected to audio server!");
+
         let mut i=0;
         let mut buf = vec![0u8; 0xffff];
         loop {
@@ -502,15 +504,17 @@ async fn tsk_adb_scrcpy(
                 audio_cmd_rx.resubscribe(),
                 srv_tx.clone(),
             ));
-            let mut stream = TokioTcpStream::connect(format!("127.0.0.1:{}", SCRCPY_CONTROL_PORT)).await?;
 
-            info!("Connected to control server!");
             let mut cmd_shell = vec![];
             cmd_shell.push(format!("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar app_process / com.genymobile.scrcpy.Server {} scid={} log_level=info tunnel_forward=true audio=false video=false control=true raw_stream=true",SCRCPY_VERSION.to_string(),SCID_CTRL.to_string()));
             let line=adb::shell_cmd(cmd_shell).await?;
             info!("ADB audio shell response: {:?}", line);
             if line.contains("[server] INFO: Device:")
             {
+                let mut stream = TokioTcpStream::connect(format!("127.0.0.1:{}", SCRCPY_CONTROL_PORT)).await?;
+                stream.set_nodelay(true)?;
+                info!("Connected to control server!");
+
                 loop {
                     //stream.write_all(b"Hello, server!\n").await?;
                     tokio::time::sleep(Duration::from_secs(50)).await;
