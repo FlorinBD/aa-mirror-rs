@@ -512,7 +512,6 @@ async fn tsk_adb_scrcpy(
             else {
                 error!("Invalid response for ADB shell on control channel");
             }
-
             //FIXME add a cancellation token
         }
         else {
