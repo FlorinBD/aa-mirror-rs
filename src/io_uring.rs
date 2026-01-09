@@ -344,7 +344,6 @@ async fn tsk_scrcpy_audio(
     info!("ADB audio shell response: {:?}", line);
     if line.contains("[server] INFO: Device:")
     {
-
         let addr_str = format!("127.0.0.1:{}", SCRCPY_AUDIO_PORT);
         let addr: SocketAddr = SocketAddr::from_str(&addr_str).expect("invalid address");
         let mut stream = TcpStream::connect(addr).await?;
