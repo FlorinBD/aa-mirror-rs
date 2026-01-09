@@ -315,7 +315,7 @@ async fn tsk_scrcpy_video(
     info!("ADB video shell response: {:?}", line);
     if line.contains("[server] INFO: Device:") && shell.id().is_some()
     {
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        //tokio::time::sleep(Duration::from_secs(1)).await;
         let addr_str = format!("127.0.0.1:{}", SCRCPY_VIDEO_PORT);
         let addr: SocketAddr = SocketAddr::from_str(&addr_str).expect("invalid address");
         //connect AFTER shell cmd
@@ -390,7 +390,7 @@ async fn tsk_scrcpy_audio(
     info!("ADB audio shell response: {:?}", line);
     if line.contains("[server] INFO: Device:") && shell.id().is_some()
     {
-        tokio::time::sleep(Duration::from_secs(1)).await;
+        //tokio::time::sleep(Duration::from_secs(1)).await;
         let addr_str = format!("127.0.0.1:{}", SCRCPY_AUDIO_PORT);
         let addr: SocketAddr = SocketAddr::from_str(&addr_str).expect("invalid address");
         //connect AFTER shell cmd
@@ -511,7 +511,7 @@ async fn tsk_adb_scrcpy(
                 info!("ADB port forwarding done to {}", SCRCPY_CONTROL_PORT);
             }
 
-            tokio::time::sleep(Duration::from_secs(3)).await;
+            //tokio::time::sleep(Duration::from_secs(3)).await;
             let hnd_scrcpy_video;
             let hnd_scrcpy_audio;
             hnd_scrcpy_video = tokio_uring::spawn(tsk_scrcpy_video(
@@ -519,11 +519,12 @@ async fn tsk_adb_scrcpy(
                 srv_tx.clone(),
                 config.clone(),
             ));
+            tokio::time::sleep(Duration::from_secs(3)).await;//give some time to start the shell
             hnd_scrcpy_audio = tokio_uring::spawn(tsk_scrcpy_audio(
                 audio_cmd_rx.resubscribe(),
                 srv_tx.clone(),
             ));
-
+            tokio::time::sleep(Duration::from_secs(3)).await;//give some time to start the shell
             let mut cmd_push = vec![];
             cmd_push.push(String::from("/etc/aa-mirror-rs/scrcpy-server"));
             cmd_push.push(String::from("/data/local/tmp/scrcpy-server-manual.jar"));
@@ -548,7 +549,7 @@ async fn tsk_adb_scrcpy(
             info!("ADB audio shell response: {:?}", line);
             if line.contains("[server] INFO: Device:") && shell.id().is_some()
             {
-                tokio::time::sleep(Duration::from_secs(3)).await;
+                //tokio::time::sleep(Duration::from_secs(3)).await;
                 let mut stream = TokioTcpStream::connect(format!("127.0.0.1:{}", SCRCPY_CONTROL_PORT)).await?;
                 stream.set_nodelay(true)?;
                 info!("Connected to control server!");
