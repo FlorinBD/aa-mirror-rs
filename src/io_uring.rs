@@ -493,7 +493,7 @@ async fn tsk_adb_scrcpy(
 
             info!("Connected to control server!");
             let mut cmd_shell = vec![];
-            cmd_shell.push(format!("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar app_process / com.genymobile.scrcpy.Server {} scid={} log_level=info tunnel_forward=true audio=false video=false control=true raw_stream=false",SCRCPY_VERSION.to_string(),SCID_CTRL.to_string()));
+            cmd_shell.push(format!("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar app_process / com.genymobile.scrcpy.Server {} scid={} log_level=info tunnel_forward=true audio=false video=false control=true raw_stream=true",SCRCPY_VERSION.to_string(),SCID_CTRL.to_string()));
             let line=adb::shell_cmd(cmd_shell).await?;
             info!("ADB audio shell response: {:?}", line);
             if line.contains("[server] INFO: Device:")
