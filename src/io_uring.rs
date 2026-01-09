@@ -292,7 +292,7 @@ async fn tsk_scrcpy_video(
     let screen_dpi=160;
 
     let mut cmd_shell = vec![String::from("shell")];
-    cmd_shell.push(format!("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar app_process / com.genymobile.scrcpy.Server {} scid={} log_level=info send_frame_meta=true tunnel_forward=true audio=false video=true control=false send_dummy_byte=false cleanup=true raw_stream=false max_size={} video_bit_rate={} video_codec=h264 new_display={}x{}/{} max_fps={}",SCRCPY_VERSION,SCID_VIDEO, video_res_w, video_bitrate, video_res_w, video_res_h, screen_dpi, video_fps));
+    cmd_shell.push(format!("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar app_process / com.genymobile.scrcpy.Server {} scid={} log_level=info send_frame_meta=true tunnel_forward=true audio=false video=true control=false send_dummy_byte=false cleanup=true raw_stream=false max_size={} video_bit_rate={} video_codec=h264 new_display={}x{}/{} max_fps={}",SCRCPY_VERSION.to_string(),SCID_VIDEO.to_string(), video_res_w, video_bitrate, video_res_w, video_res_h, screen_dpi, video_fps));
     let line=adb::run_piped_cmd(cmd_shell).await?;
     info!("ADB video shell response: {:?}", line);
     if line.contains("[server] INFO: Device:")
@@ -310,7 +310,7 @@ async fn tsk_scrcpy_video(
             let n = res?;
 
             if n == 0 {
-                info!("Video connection closed");
+                info!("Video connection closed by server");
                 break;
             }
 
@@ -339,7 +339,7 @@ async fn tsk_scrcpy_audio(
 ) -> Result<()> {
     let audio_bitrate:i32=48000;
     let mut cmd_shell = vec![String::from("shell")];
-    cmd_shell.push(format!("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar app_process / com.genymobile.scrcpy.Server {} scid={} log_level=info send_frame_meta=true tunnel_forward=true audio=true video=false control=false send_dummy_byte=false cleanup=true raw_stream=false audio_codec=aac audio_bit_rate={}",SCRCPY_VERSION,SCID_AUDIO, audio_bitrate));
+    cmd_shell.push(format!("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar app_process / com.genymobile.scrcpy.Server {} scid={} log_level=info send_frame_meta=true tunnel_forward=true audio=true video=false control=false send_dummy_byte=false cleanup=true raw_stream=false audio_codec=aac audio_bit_rate={}",SCRCPY_VERSION.to_string(),SCID_AUDIO.to_string(), audio_bitrate));
     let line=adb::run_piped_cmd(cmd_shell).await?;
     info!("ADB audio shell response: {:?}", line);
     if line.contains("[server] INFO: Device:")
@@ -419,7 +419,7 @@ async fn tsk_adb_scrcpy(
 
             let mut cmd_portfw = vec![];
             cmd_portfw.push(format!("tcp:{}", SCRCPY_VIDEO_PORT));
-            cmd_portfw.push(format!("localabstract:scrcpy_{}", SCID_VIDEO));
+            cmd_portfw.push(format!("localabstract:scrcpy_{}", SCID_VIDEO.to_string()));
             let lines=adb::forward_cmd(cmd_portfw).await?;
             let mut port_fw_ok=true;
             if lines.len() > 0 {
@@ -441,7 +441,7 @@ async fn tsk_adb_scrcpy(
 
             let mut cmd_portfw = vec![];
             cmd_portfw.push(format!("tcp:{}", SCRCPY_AUDIO_PORT));
-            cmd_portfw.push(format!("localabstract:scrcpy_{}", SCID_AUDIO));
+            cmd_portfw.push(format!("localabstract:scrcpy_{}", SCID_AUDIO.to_string()));
             let lines=adb::forward_cmd(cmd_portfw).await?;
             let mut port_fw_ok=true;
             if lines.len() > 0 {
@@ -463,7 +463,7 @@ async fn tsk_adb_scrcpy(
 
             let mut cmd_portfw = vec![];
             cmd_portfw.push(format!("tcp:{}", SCRCPY_CONTROL_PORT));
-            cmd_portfw.push(format!("localabstract:scrcpy_{}", SCID_CTRL));
+            cmd_portfw.push(format!("localabstract:scrcpy_{}", SCID_CTRL.to_string()));
             let lines=adb::forward_cmd(cmd_portfw).await?;
             let mut port_fw_ok=true;
             if lines.len() > 0 {
@@ -499,7 +499,7 @@ async fn tsk_adb_scrcpy(
 
             info!("Connected to control server!");
             let mut cmd_shell = vec![String::from("shell")];
-            cmd_shell.push(format!("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar app_process / com.genymobile.scrcpy.Server {} scid={} log_level=info tunnel_forward=true audio=false video=false control=true raw_stream=false",SCRCPY_VERSION,SCID_CTRL));
+            cmd_shell.push(format!("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar app_process / com.genymobile.scrcpy.Server {} scid={} log_level=info tunnel_forward=true audio=false video=false control=true raw_stream=false",SCRCPY_VERSION.to_string(),SCID_CTRL.to_string()));
             let line=adb::run_piped_cmd(cmd_shell).await?;
             info!("ADB audio shell response: {:?}", line);
             if line.contains("[server] INFO: Device:")

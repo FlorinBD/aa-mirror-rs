@@ -23,10 +23,10 @@ pub const SCRCPY_VIDEO_PORT: i32 = 5291;
 pub const SCRCPY_AUDIO_PORT: i32 = 5292;
 pub const SCRCPY_CONTROL_PORT: i32 = 5293;
 
-pub const SCID_VIDEO: String = "00000001".to_string();
-pub const SCID_AUDIO: String = "00000002".to_string();
-pub const SCID_CTRL: String = "00000003".to_string();
-pub const SCRCPY_VERSION: String = "3.3.4".to_string();
+pub const SCID_VIDEO: &str = "00000001";
+pub const SCID_AUDIO: &str = "00000002";
+pub const SCID_CTRL: &str = "00000003";
+pub const SCRCPY_VERSION: &str = "3.3.4";
 ///Delay after SDR to allow HU to configure its AV system, codecs, etc
 pub const HU_CONFIG_DELAY_MS: u64 = 600;
 
