@@ -124,7 +124,7 @@ where
     Err("no output received".into())
 }
 
-pub(crate) async fn shell_cmd<I,S>(args: I) ->Result<String, Box<dyn std::error::Error + Send + Sync>>
+pub(crate) async fn shell_cmd<I,S>(args: I) ->Result<(tokio::process::Child, String), Box<dyn std::error::Error + Send + Sync>>
 where
     I: IntoIterator<Item = S>,
     I::Item: AsRef<OsStr>,
@@ -139,12 +139,17 @@ where
     let stdout = adb_cmd.stdout.take().unwrap();
     let mut lines = BufReader::new(stdout).lines();
 
-    if let Some(line) = lines.next_line().await? {
-        //info!("ADB piped stdout: {:?}", line);
-        return Ok(line);
-    }
+    // Read first line (or first meaningful line)
+    let first_line = match lines.next_line().await? {
+        Some(line) => line,
+        None => return Err("no output received".into()),
+    };
 
-    Err("no output received".into())
+    // IMPORTANT:
+    // - child is still alive
+    // - stdout is now partially consumed
+    // - process keeps running
+    Ok((adb_cmd, first_line))
 }
 
 pub(crate) async fn run_cmd<I, S>(args: I) ->Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>>

@@ -293,7 +293,7 @@ async fn tsk_scrcpy_video(
 
     let mut cmd_shell = vec![];
     cmd_shell.push(format!("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar app_process / com.genymobile.scrcpy.Server {} scid={} log_level=info send_frame_meta=true tunnel_forward=true audio=false video=true control=false send_dummy_byte=false cleanup=true raw_stream=true max_size={} video_bit_rate={} video_codec=h264 new_display={}x{}/{} max_fps={}",SCRCPY_VERSION.to_string(),SCID_VIDEO.to_string(), video_res_w, video_bitrate, video_res_w, video_res_h, screen_dpi, video_fps));
-    let line=adb::shell_cmd(cmd_shell).await?;
+    let (shell,line)=adb::shell_cmd(cmd_shell).await?;
     info!("ADB video shell response: {:?}", line);
     if line.contains("[server] INFO: Device:")
     {
@@ -348,7 +348,7 @@ async fn tsk_scrcpy_audio(
     let audio_bitrate:i32=48000;
     let mut cmd_shell = vec![];
     cmd_shell.push(format!("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar app_process / com.genymobile.scrcpy.Server {} scid={} log_level=info send_frame_meta=true tunnel_forward=true audio=true video=false control=false send_dummy_byte=false raw_stream=true audio_codec=aac audio_bit_rate={}",SCRCPY_VERSION.to_string(),SCID_AUDIO.to_string(), audio_bitrate));
-    let line=adb::shell_cmd(cmd_shell).await?;
+    let (shell,line)=adb::shell_cmd(cmd_shell).await?;
     info!("ADB audio shell response: {:?}", line);
     if line.contains("[server] INFO: Device:")
     {
@@ -507,7 +507,7 @@ async fn tsk_adb_scrcpy(
 
             let mut cmd_shell = vec![];
             cmd_shell.push(format!("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar app_process / com.genymobile.scrcpy.Server {} scid={} log_level=info tunnel_forward=true audio=false video=false control=true raw_stream=true",SCRCPY_VERSION.to_string(),SCID_CTRL.to_string()));
-            let line=adb::shell_cmd(cmd_shell).await?;
+            let (shell,line)=adb::shell_cmd(cmd_shell).await?;
             info!("ADB audio shell response: {:?}", line);
             if line.contains("[server] INFO: Device:")
             {
