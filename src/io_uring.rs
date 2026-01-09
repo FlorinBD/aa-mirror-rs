@@ -305,6 +305,7 @@ async fn tsk_scrcpy_video(
     {
 
         let mut buf = vec![0u8; 0xffff];
+        let mut i=0;
         loop {
             // Read response
             let (res, buf_out) = stream.read(buf).await;
@@ -312,10 +313,15 @@ async fn tsk_scrcpy_video(
 
             if n == 0 {
                 info!("Video connection closed by server?");
+                tokio::time::sleep(Duration::from_secs(3)).await;
                 //break;
             }
+            if i<10
+            {
+                info!("Video task Read {} bytes: {:?}", n, &buf_out[..n]);
+                i=i+1;
+            }
 
-            info!("Video task Read {} bytes: {:?}", n, &buf_out[..n]);
 
             // Reuse buffer
             buf = buf_out;
@@ -351,6 +357,7 @@ async fn tsk_scrcpy_audio(
     info!("ADB audio shell response: {:?}", line);
     if line.contains("[server] INFO: Device:")
     {
+        let mut i=0;
         let mut buf = vec![0u8; 0xffff];
         loop {
             // Read response
@@ -359,10 +366,15 @@ async fn tsk_scrcpy_audio(
 
             if n == 0 {
                 info!("Audio connection closed by server?");
+                tokio::time::sleep(Duration::from_secs(3)).await;
                 //break;
             }
+            if i< 10
+            {
+                info!("Audio task Read {} bytes: {:?}", n, &buf_out[..n]);
+                i=i+1;
+            }
 
-            info!("Audio task Read {} bytes: {:?}", n, &buf_out[..n]);
 
             // Reuse buffer
             buf = buf_out;
