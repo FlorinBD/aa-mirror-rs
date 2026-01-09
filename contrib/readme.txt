@@ -10,4 +10,4 @@ versions:
 scrcpy-server version: 3.3.4
 
 todo:
-implement tokio_uring for adb reading task
+done: implement tokio_uring for adb reading task
