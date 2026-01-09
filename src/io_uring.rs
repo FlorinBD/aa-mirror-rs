@@ -297,6 +297,7 @@ async fn tsk_scrcpy_video(
     info!("ADB video shell response: {:?}", line);
     if line.contains("[server] INFO: Device:") && shell.id().is_some()
     {
+        tokio::time::sleep(Duration::from_secs(3)).await;
         let addr_str = format!("127.0.0.1:{}", SCRCPY_VIDEO_PORT);
         let addr: SocketAddr = SocketAddr::from_str(&addr_str).expect("invalid address");
         //connect AFTER shell cmd
@@ -352,6 +353,7 @@ async fn tsk_scrcpy_audio(
     info!("ADB audio shell response: {:?}", line);
     if line.contains("[server] INFO: Device:") && shell.id().is_some()
     {
+        tokio::time::sleep(Duration::from_secs(3)).await;
         let addr_str = format!("127.0.0.1:{}", SCRCPY_AUDIO_PORT);
         let addr: SocketAddr = SocketAddr::from_str(&addr_str).expect("invalid address");
         //connect AFTER shell cmd
@@ -511,6 +513,7 @@ async fn tsk_adb_scrcpy(
             info!("ADB audio shell response: {:?}", line);
             if line.contains("[server] INFO: Device:") && shell.id().is_some()
             {
+                tokio::time::sleep(Duration::from_secs(3)).await;
                 let mut stream = TokioTcpStream::connect(format!("127.0.0.1:{}", SCRCPY_CONTROL_PORT)).await?;
                 stream.set_nodelay(true)?;
                 info!("Connected to control server!");
