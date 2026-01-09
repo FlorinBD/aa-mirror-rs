@@ -519,12 +519,12 @@ async fn tsk_adb_scrcpy(
                 srv_tx.clone(),
                 config.clone(),
             ));
-            tokio::time::sleep(Duration::from_secs(3)).await;//give some time to start the shell
+            //tokio::time::sleep(Duration::from_secs(3)).await;//give some time to start the shell
             hnd_scrcpy_audio = tokio_uring::spawn(tsk_scrcpy_audio(
                 audio_cmd_rx.resubscribe(),
                 srv_tx.clone(),
             ));
-            tokio::time::sleep(Duration::from_secs(3)).await;//give some time to start the shell
+            //tokio::time::sleep(Duration::from_secs(3)).await;//give some time to start the shell
             let mut cmd_push = vec![];
             cmd_push.push(String::from("/etc/aa-mirror-rs/scrcpy-server"));
             cmd_push.push(String::from("/data/local/tmp/scrcpy-server-manual.jar"));
