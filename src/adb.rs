@@ -124,6 +124,29 @@ where
     Err("no output received".into())
 }
 
+pub(crate) async fn shell_cmd<I,S>(args: I) ->Result<String, Box<dyn std::error::Error + Send + Sync>>
+where
+    I: IntoIterator<Item = S>,
+    I::Item: AsRef<OsStr>,
+{
+    let mut adb_cmd = Command::new("adb")
+        .arg("shell")
+        .args(args)
+        .stdout(Stdio::piped())
+        //.stderr(Stdio::piped())
+        .spawn()?;
+
+    let stdout = adb_cmd.stdout.take().unwrap();
+    let mut lines = BufReader::new(stdout).lines();
+
+    if let Some(line) = lines.next_line().await? {
+        //info!("ADB piped stdout: {:?}", line);
+        return Ok(line);
+    }
+
+    Err("no output received".into())
+}
+
 pub(crate) async fn run_cmd<I, S>(args: I) ->Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>>
 where
     I: IntoIterator<Item = S>,
