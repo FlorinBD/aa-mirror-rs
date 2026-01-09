@@ -308,11 +308,11 @@ async fn tsk_scrcpy_video(
         loop {
             // Read response
             let (res, buf_out) = stream.read(buf).await;
-            let n = res?;
+            let n = res.unwrap();
 
             if n == 0 {
                 info!("Video connection closed by server?");
-                break;
+                //break;
             }
 
             info!("Video task Read {} bytes: {:?}", n, &buf_out[..n]);
@@ -355,11 +355,11 @@ async fn tsk_scrcpy_audio(
         loop {
             // Read response
             let (res, buf_out) = stream.read(buf).await;
-            let n = res?;
+            let n = res.unwrap();
 
             if n == 0 {
                 info!("Audio connection closed by server?");
-                break;
+                //break;
             }
 
             info!("Audio task Read {} bytes: {:?}", n, &buf_out[..n]);
@@ -478,7 +478,7 @@ async fn tsk_adb_scrcpy(
                 info!("ADB port forwarding done to {}", SCRCPY_CONTROL_PORT);
             }
 
-
+            tokio::time::sleep(Duration::from_secs(3)).await;
             let hnd_scrcpy_video;
             let hnd_scrcpy_audio;
             hnd_scrcpy_video = tokio_uring::spawn(tsk_scrcpy_video(
