@@ -410,9 +410,6 @@ async fn tsk_adb_scrcpy(
                 info!("ADB port forwarding done to {}", SCRCPY_PORT);
             }
 
-
-
-
             let video_bitrate=8000000;
             let video_res_w=800;
             let video_res_h=480;
