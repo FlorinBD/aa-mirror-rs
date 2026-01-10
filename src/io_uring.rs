@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::broadcast::Sender as BroadcastSender;
 use tokio::sync::mpsc::{Receiver, Sender};
-use tokio::sync::{broadcast, mpsc, Mutex, Notify};
+use tokio::sync::{broadcast, mpsc, oneshot, Mutex, Notify};
 use tokio::task::JoinHandle;
 use tokio::time::{sleep, timeout};
 use tokio_uring::buf::BoundedBuf;
@@ -294,8 +294,8 @@ async fn tsk_scrcpy_video(
         let n = res?;
         if n == 0 {
             info!("Video connection closed by server?");
-            tokio::time::sleep(Duration::from_secs(3)).await;
-            //break;
+            //tokio::time::sleep(Duration::from_secs(3)).await;
+            break;
         }
         if i<10
         {
@@ -330,8 +330,8 @@ async fn tsk_scrcpy_audio(
         let n = res?;
         if n == 0 {
             info!("Audio connection closed by server?");
-            tokio::time::sleep(Duration::from_secs(3)).await;
-            //break;
+            //tokio::time::sleep(Duration::from_secs(3)).await;
+            break;
         }
         if i<10
         {
@@ -463,7 +463,28 @@ async fn tsk_adb_scrcpy(
 
             tokio::time::sleep(Duration::from_secs(1)).await;//give some time to map adb sockets
             let mut cmd_shell = vec![];
-            cmd_shell.push(format!("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar app_process / com.genymobile.scrcpy.Server {} scid={} log_level=info send_frame_meta=true tunnel_forward=true audio=true video=true control=true send_dummy_byte=false cleanup=true raw_stream=true audio_codec=aac audio_bit_rate={} max_size={} video_bit_rate={} video_codec=h264 new_display={}x{}/{} max_fps={}",SCRCPY_VERSION.to_string(),SCID_VIDEO.to_string(),audio_bitrate, video_res_w, video_bitrate, video_res_w, video_res_h, screen_dpi, video_fps));
+            //cmd_shell.push(format!("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar app_process / com.genymobile.scrcpy.Server {} scid={} log_level=info send_frame_meta=true tunnel_forward=true audio=true video=true control=true send_dummy_byte=false cleanup=true raw_stream=true audio_codec=aac audio_bit_rate={} max_size={} video_bit_rate={} video_codec=h264 new_display={}x{}/{} max_fps={}",SCRCPY_VERSION.to_string(),SCID_VIDEO.to_string(),audio_bitrate, video_res_w, video_bitrate, video_res_w, video_res_h, screen_dpi, video_fps));
+            cmd_shell.push("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar".to_string());
+            cmd_shell.push("app_process".to_string());
+            cmd_shell.push("/".to_string());
+            cmd_shell.push(format!("com.genymobile.scrcpy.Server {}", SCRCPY_VERSION.to_string()));
+            cmd_shell.push(format!("scid={}", SCID_VIDEO.to_string()));
+            cmd_shell.push("log_level=info".to_string());
+            cmd_shell.push("send_frame_meta=true".to_string());
+            cmd_shell.push("tunnel_forward=true".to_string());
+            cmd_shell.push("audio=true".to_string());
+            cmd_shell.push("video=true".to_string());
+            cmd_shell.push("control=true".to_string());
+            cmd_shell.push("send_dummy_byte=false".to_string());
+            cmd_shell.push("cleanup=true".to_string());
+            cmd_shell.push("raw_stream=true".to_string());
+            cmd_shell.push("audio_codec=aac".to_string());
+            cmd_shell.push(format!("audio_bit_rate={}", audio_bitrate));
+            cmd_shell.push(format!("max_size={}", video_res_w));
+            cmd_shell.push("vide_codec=h264".to_string());
+            cmd_shell.push(format!("video_bit_rate={}", video_bitrate));
+            cmd_shell.push(format!("new_display={}x{}/{}", video_res_w, video_res_h, screen_dpi));
+            cmd_shell.push(format!("max_fps={}", video_fps));
             let (shell,line)=adb::shell_cmd(cmd_shell).await?;
             info!("ADB video shell response: {:?}", line);
             if line.contains("[server] INFO: Device:") && shell.id().is_some()
@@ -483,31 +504,42 @@ async fn tsk_adb_scrcpy(
                 let hnd_scrcpy_audio;
                 let video_tx = srv_tx.clone();
                 let audio_tx = srv_tx.clone();
+                let (done_th_tx_video, mut done_th_rx_video) = oneshot::channel();
+                let (done_th_tx_audio, mut done_th_rx_audio) = oneshot::channel();
                 hnd_scrcpy_video = tokio_uring::spawn(async move {
-                    if let Err(e) = tsk_scrcpy_video(
+                    let res = tsk_scrcpy_video(
                                                     video_stream,
                                                     video_cmd_rx.resubscribe(),
                                                     video_tx,
-                                                    ).await
-                    {
-                        error!("SCRCPY video task error: {e}");
-                    }
+                                                    ).await;
+                    let _ = done_th_tx_video.send(res);
+
                 });
                 hnd_scrcpy_audio = tokio_uring::spawn(async move {
-                    if let Err(e) = tsk_scrcpy_audio(
+                    let res = tsk_scrcpy_audio(
                                                     audio_stream,
                                                     audio_cmd_rx.resubscribe(),
                                                     audio_tx,
-                                                    ).await
-                    {
-                        error!("SCRCPY audio task error: {e}");
-                    }
+                                                    ).await;
+                    let _ = done_th_tx_audio.send(res);
                 });
 
                 info!("Connected to control server!");
 
                 loop {
-                    tokio::time::sleep(Duration::from_secs(50)).await;
+
+                    if done_th_rx_video.try_recv().is_ok() {
+                        info!("SCRCPY Video Task finished");
+                        tokio::time::sleep(Duration::from_secs(5)).await;
+                    }
+                    else if done_th_rx_audio.try_recv().is_ok() {
+                        info!("SCRCPY Audio Task finished");
+                        tokio::time::sleep(Duration::from_secs(5)).await;
+                    }
+                    else {
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                    }
+                    //TODO check audio/video task if they finished to restart connection
                 }
             }
             else {
