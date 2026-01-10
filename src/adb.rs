@@ -129,9 +129,15 @@ where
     I: IntoIterator<Item = S>,
     I::Item: AsRef<OsStr>,
 {
+    let shell_args = args
+        .iter()
+        .map(|a| shell_escape(&a.as_ref().to_string_lossy()))
+        .collect::<Vec<_>>()
+        .join(" ");
     let mut adb_cmd = Command::new("adb")
         .arg("shell")
-        .args(args)
+        //.args(args)
+        .arg(&shell_args)
         .stdout(Stdio::piped())
         //.stderr(Stdio::piped())
         .spawn()?;
@@ -210,4 +216,12 @@ where
         .filter(|col| !col.is_empty())             // skip empty
         .map(|col| col.to_string())                // make owned
         .collect())
+}
+
+fn shell_escape(s: &str) -> String {
+    if s.contains([' ', '"', '\'', '$', '&', '|', ';', '<', '>']) {
+        format!("'{}'", s.replace('\'', r"'\''"))
+    } else {
+        s.to_string()
+    }
 }
