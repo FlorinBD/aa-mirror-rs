@@ -281,7 +281,7 @@ async fn tcp_wait_for_md_connection(listener: &mut TcpListener) -> Result<TcpStr
 }
 
 async fn tsk_scrcpy_video(
-    mut stream: TokioTcpStream,
+    mut stream: TcpStream,
     mut cmd_rx: broadcast::Receiver<Packet>,
     video_tx: broadcast::Sender<Packet>,
     config: AppConfig,
@@ -291,8 +291,8 @@ async fn tsk_scrcpy_video(
     let mut buf = vec![0u8; 0xffff];
     let mut i=0;
     loop {
-        // Read response
-        let n = stream.read(&mut buf).await?;
+        let (res, buf_out) = stream.read(buf).await;
+        let n = res?;
         if n == 0 {
             info!("Video connection closed by server?");
             tokio::time::sleep(Duration::from_secs(3)).await;
@@ -300,9 +300,11 @@ async fn tsk_scrcpy_video(
         }
         if i<10
         {
-            info!("Video task Read {} bytes: {:?}", n, &buf[..n]);
+            info!("Video task Read {} bytes: {:?}", n, &buf_out[..n]);
             i=i+1;
         }
+        // Reuse buffer
+        buf = buf_out;
         //Check custom Service command
         match cmd_rx.try_recv() {
             Ok(packet) => {
@@ -315,7 +317,7 @@ async fn tsk_scrcpy_video(
 }
 
 async fn tsk_scrcpy_audio(
-    mut stream: TokioTcpStream,
+    mut stream: TcpStream,
     mut cmd_rx: broadcast::Receiver<Packet>,
     audio_tx: broadcast::Sender<Packet>,
 ) -> Result<()> {
@@ -325,8 +327,8 @@ async fn tsk_scrcpy_audio(
     let mut buf = vec![0u8; 0xffff];
     let mut i=0;
     loop {
-        // Read response
-        let n = stream.read(&mut buf).await?;
+        let (res, buf_out) = stream.read(buf).await;
+        let n = res?;
         if n == 0 {
             info!("Audio connection closed by server?");
             tokio::time::sleep(Duration::from_secs(3)).await;
@@ -334,9 +336,11 @@ async fn tsk_scrcpy_audio(
         }
         if i<10
         {
-            info!("Audio task Read {} bytes: {:?}", n, &buf[..n]);
+            info!("Audio task Read {} bytes: {:?}", n, &buf_out[..n]);
             i=i+1;
         }
+        // Reuse buffer
+        buf = buf_out;
         //Check custom Service command
         match cmd_rx.try_recv() {
             Ok(packet) => {
@@ -466,11 +470,14 @@ async fn tsk_adb_scrcpy(
             if line.contains("[server] INFO: Device:") && shell.id().is_some()
             {
                 tokio::time::sleep(Duration::from_secs(3)).await;//give some time to start sockets
-                let mut video_stream = TokioTcpStream::connect(format!("127.0.0.1:{}", SCRCPY_VIDEO_PORT)).await?;
+                let addr = format!("127.0.0.1:{}", SCRCPY_VIDEO_PORT).parse().unwrap();
+                let mut video_stream = TcpStream::connect(addr).await?;
                 video_stream.set_nodelay(true)?;
-                let mut audio_stream = TokioTcpStream::connect(format!("127.0.0.1:{}", SCRCPY_AUDIO_PORT)).await?;
+                let addr = format!("127.0.0.1:{}", SCRCPY_AUDIO_PORT).parse().unwrap();
+                let mut audio_stream = TcpStream::connect(addr).await?;
                 audio_stream.set_nodelay(true)?;
-                let mut ctrl_stream = TokioTcpStream::connect(format!("127.0.0.1:{}", SCRCPY_CONTROL_PORT)).await?;
+                let addr = format!("127.0.0.1:{}", SCRCPY_CONTROL_PORT).parse().unwrap();
+                let mut ctrl_stream = TcpStream::connect(addr).await?;
                 ctrl_stream.set_nodelay(true)?;
                 info!("SCRCPY connected to all 3 sockets");
                 let hnd_scrcpy_video;
@@ -492,7 +499,7 @@ async fn tsk_adb_scrcpy(
                     if let Err(e) = tsk_scrcpy_audio(
                                                     audio_stream,
                                                     audio_cmd_rx.resubscribe(),
-                                                    srv_tx.clone(),
+                                                    srv_tx,
                                                     ).await
                     {
                         error!("SCRCPY audio task error: {e}");
