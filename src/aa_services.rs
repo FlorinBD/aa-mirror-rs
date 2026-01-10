@@ -33,7 +33,7 @@ use tokio_uring::net::{TcpStream, TcpListener};
 use protos::*;
 use protos::ControlMessageType::{self, *};
 use crate::channel_manager::{Packet, ENCRYPTED, FRAME_TYPE_CONTROL, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
-use crate::config::{SCRCPY_VIDEO_PORT};
+use crate::config::{SCRCPY_PORT};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -1126,12 +1126,12 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
     }
 
     async fn listen_for_connections(tx: Sender<Packet>, ch_id: u8) -> Result<()> {
-        let bind_addr = format!("0.0.0.0:{}", SCRCPY_VIDEO_PORT).parse().unwrap();
+        let bind_addr = format!("0.0.0.0:{}", SCRCPY_PORT).parse().unwrap();
         let mut listener =Some(TcpListener::bind(bind_addr).unwrap());
         //listener.set_nonblocking(true);
         let mut total_bytes_read = 0;
         loop {
-            info!("Server listening on port {}", SCRCPY_VIDEO_PORT);
+            info!("Server listening on port {}", SCRCPY_PORT);
             let retval =listener.as_mut().unwrap().accept();
             let (stream, addr) = match timeout(crate::io_uring::TCP_CLIENT_TIMEOUT, retval)
                 .await

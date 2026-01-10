@@ -19,13 +19,7 @@ pub const TCP_DHU_PORT: i32 = 5277;
 pub const ADB_SERVER_PORT: u16 = 5037;
 
 pub const ADB_DEVICE_PORT: u16 = 5555;
-pub const SCRCPY_VIDEO_PORT: i32 = 5291;
-pub const SCRCPY_AUDIO_PORT: i32 = 5292;
-pub const SCRCPY_CONTROL_PORT: i32 = 5293;
-
-pub const SCID_VIDEO: &str = "00000001";
-pub const SCID_AUDIO: &str = "00000002";
-pub const SCID_CTRL: &str = "00000003";
+pub const SCRCPY_PORT: i32 = 5291;
 pub const SCRCPY_VERSION: &str = "3.3.4";
 ///Delay after SDR to allow HU to configure its AV system, codecs, etc
 pub const HU_CONFIG_DELAY_MS: u64 = 600;

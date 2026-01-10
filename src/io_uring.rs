@@ -47,7 +47,7 @@ const USB_ACCESSORY_PATH: &str = "/dev/usb_accessory";
 pub const BUFFER_LEN: usize = 16 * 1024;
 pub const TCP_CLIENT_TIMEOUT: Duration = Duration::new(30, 0);
 
-use crate::config::{Action, AppConfig, SharedConfig, ADB_DEVICE_PORT, SCID_AUDIO, SCID_CTRL, SCID_VIDEO, SCRCPY_AUDIO_PORT, SCRCPY_CONTROL_PORT, SCRCPY_VERSION, SCRCPY_VIDEO_PORT};
+use crate::config::{Action, AppConfig, SharedConfig, ADB_DEVICE_PORT, SCRCPY_VERSION, SCRCPY_PORT};
 use crate::config::{TCP_DHU_PORT, TCP_MD_SERVER_PORT};
 use crate::channel_manager::{endpoint_reader,ch_proxy, packet_tls_proxy};
 use crate::channel_manager::Packet;
@@ -369,72 +369,6 @@ async fn tsk_adb_scrcpy(
         if let Some(device)=adb::get_first_adb_device(config.clone()).await {
             info!("{}: ADB device found: {:?}, trying to get video/audio from it now",NAME, device);
 
-            let mut cmd_portfw = vec![];
-            cmd_portfw.push(format!("tcp:{}", SCRCPY_VIDEO_PORT));
-            cmd_portfw.push(format!("localabstract:scrcpy_{}", SCID_VIDEO.to_string()));
-            let lines=adb::forward_cmd(cmd_portfw).await?;
-            let mut port_fw_ok=true;
-            if lines.len() > 0 {
-                for line in lines {
-                    info!("ADB port fw. response: {:?}", line);
-                    if line.contains("error")
-                    {
-                        port_fw_ok=false;
-                    }
-                }
-            }
-            if !port_fw_ok {
-                info!("ADB invalid port forward response received");
-                continue;
-            }
-            else {
-                info!("ADB port forwarding done to {}", SCRCPY_VIDEO_PORT);
-            }
-
-            let mut cmd_portfw = vec![];
-            cmd_portfw.push(format!("tcp:{}", SCRCPY_AUDIO_PORT));
-            cmd_portfw.push(format!("localabstract:scrcpy_audio_{}", SCID_VIDEO.to_string()));
-            let lines=adb::forward_cmd(cmd_portfw).await?;
-            let mut port_fw_ok=true;
-            if lines.len() > 0 {
-                for line in lines {
-                    info!("ADB port fw. response: {:?}", line);
-                    if line.contains("error")
-                    {
-                        port_fw_ok=false;
-                    }
-                }
-            }
-            if !port_fw_ok {
-                info!("ADB invalid port forward response received");
-                continue;
-            }
-            else {
-                info!("ADB port forwarding done to {}", SCRCPY_AUDIO_PORT);
-            }
-
-            let mut cmd_portfw = vec![];
-            cmd_portfw.push(format!("tcp:{}", SCRCPY_CONTROL_PORT));
-            cmd_portfw.push(format!("localabstract:scrcpy_control_{}", SCID_VIDEO.to_string()));
-            let lines=adb::forward_cmd(cmd_portfw).await?;
-            let mut port_fw_ok=true;
-            if lines.len() > 0 {
-                for line in lines {
-                    info!("ADB port fw. response: {:?}", line);
-                    if line.contains("error")
-                    {
-                        port_fw_ok=false;
-                    }
-                }
-            }
-            if !port_fw_ok {
-                info!("ADB invalid port forward response received");
-                continue;
-            }
-            else {
-                info!("ADB port forwarding done to {}", SCRCPY_CONTROL_PORT);
-            }
-
             let mut cmd_push = vec![];
             cmd_push.push(String::from("/etc/aa-mirror-rs/scrcpy-server"));
             cmd_push.push(String::from("/data/local/tmp/scrcpy-server-manual.jar"));
@@ -449,11 +383,36 @@ async fn tsk_adb_scrcpy(
                     info!("ADB push response: {:?}", line);
                 }
             }
-
             if !push_ok {
                 error!("ADB invalid push response received for control task");
                 continue;
             }
+
+            let mut cmd_portfw = vec![];
+            cmd_portfw.push(format!("tcp:{}", SCRCPY_PORT));
+            cmd_portfw.push("localabstract:scrcpy{}".to_string());
+            let lines=adb::forward_cmd(cmd_portfw).await?;
+            let mut port_fw_ok=true;
+            if lines.len() > 0 {
+                for line in lines {
+                    info!("ADB port fw. response: {:?}", line);
+                    if line.contains("error")
+                    {
+                        port_fw_ok=false;
+                    }
+                }
+            }
+            if !port_fw_ok {
+                info!("ADB invalid port forward response received");
+                continue;
+            }
+            else {
+                info!("ADB port forwarding done to {}", SCRCPY_PORT);
+            }
+
+
+
+
             let video_bitrate=8000000;
             let video_res_w=800;
             let video_res_h=480;
@@ -468,7 +427,6 @@ async fn tsk_adb_scrcpy(
             cmd_shell.push("app_process".to_string());
             cmd_shell.push("/".to_string());
             cmd_shell.push(format!("com.genymobile.scrcpy.Server {}", SCRCPY_VERSION.to_string()));
-            cmd_shell.push(format!("scid={}", SCID_VIDEO.to_string()));
             cmd_shell.push("log_level=info".to_string());
             cmd_shell.push("send_frame_meta=true".to_string());
             cmd_shell.push("tunnel_forward=true".to_string());
@@ -490,13 +448,13 @@ async fn tsk_adb_scrcpy(
             if line.contains("[server] INFO: Device:") && shell.id().is_some()
             {
                 tokio::time::sleep(Duration::from_secs(3)).await;//give some time to start sockets
-                let addr = format!("127.0.0.1:{}", SCRCPY_VIDEO_PORT).parse().unwrap();
+                let addr = format!("127.0.0.1:{}", SCRCPY_PORT).parse().unwrap();
                 let mut video_stream = TcpStream::connect(addr).await?;
                 video_stream.set_nodelay(true)?;
-                let addr = format!("127.0.0.1:{}", SCRCPY_AUDIO_PORT).parse().unwrap();
+                let addr = format!("127.0.0.1:{}", SCRCPY_PORT).parse().unwrap();
                 let mut audio_stream = TcpStream::connect(addr).await?;
                 audio_stream.set_nodelay(true)?;
-                let addr = format!("127.0.0.1:{}", SCRCPY_CONTROL_PORT).parse().unwrap();
+                let addr = format!("127.0.0.1:{}", SCRCPY_PORT).parse().unwrap();
                 let mut ctrl_stream = TcpStream::connect(addr).await?;
                 ctrl_stream.set_nodelay(true)?;
                 info!("SCRCPY connected to all 3 sockets");
