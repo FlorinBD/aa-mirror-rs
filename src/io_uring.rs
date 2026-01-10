@@ -281,148 +281,69 @@ async fn tcp_wait_for_md_connection(listener: &mut TcpListener) -> Result<TcpStr
 }
 
 async fn tsk_scrcpy_video(
+    mut stream: TokioTcpStream,
     mut cmd_rx: broadcast::Receiver<Packet>,
     video_tx: broadcast::Sender<Packet>,
     config: AppConfig,
 ) -> Result<()> {
-    let video_bitrate=8000000;
-    let video_res_w=800;
-    let video_res_h=480;
-    let video_fps=60;
-    let screen_dpi=160;
+    info!("Starting video server!");
 
-    let mut cmd_push = vec![];
-    cmd_push.push(String::from("/etc/aa-mirror-rs/scrcpy-server"));
-    cmd_push.push(String::from("/data/local/tmp/scrcpy-server-manual.jar"));
-    let lines=adb::push_cmd(cmd_push).await?;
-    let mut push_ok=false;
-    if lines.len() > 0 {
-        for line in lines {
-            if line.contains("/s (")
-            {
-                push_ok=true;
-            }
-            info!("ADB push response: {:?}", line);
+    let mut buf = vec![0u8; 0xffff];
+    let mut i=0;
+    loop {
+        // Read response
+        let n = stream.read(&mut buf).await?;
+        if n == 0 {
+            info!("Video connection closed by server?");
+            tokio::time::sleep(Duration::from_secs(3)).await;
+            //break;
         }
-    }
-    if !push_ok {
-        error!("ADB invalid push response received for video task");
-    }
-
-    let mut cmd_shell = vec![];
-    cmd_shell.push(format!("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar app_process / com.genymobile.scrcpy.Server {} scid={} log_level=info send_frame_meta=true tunnel_forward=true audio=false video=true control=false send_dummy_byte=false cleanup=true raw_stream=true max_size={} video_bit_rate={} video_codec=h264 new_display={}x{}/{} max_fps={}",SCRCPY_VERSION.to_string(),SCID_VIDEO.to_string(), video_res_w, video_bitrate, video_res_w, video_res_h, screen_dpi, video_fps));
-    let (shell,line)=adb::shell_cmd(cmd_shell).await?;
-    info!("ADB video shell response: {:?}", line);
-    if line.contains("[server] INFO: Device:") && shell.id().is_some()
-    {
-        //tokio::time::sleep(Duration::from_secs(1)).await;
-        let addr_str = format!("127.0.0.1:{}", SCRCPY_VIDEO_PORT);
-        let addr: SocketAddr = SocketAddr::from_str(&addr_str).expect("invalid address");
-        //connect AFTER shell cmd
-        let mut stream = TcpStream::connect(addr).await?;
-        stream.set_nodelay(true)?;
-        info!("Connected to video server!");
-
-        let mut buf = vec![0u8; 0xffff];
-        let mut i=0;
-        loop {
-            // Read response
-            let (res, buf_out) = stream.read(buf).await;
-            let n = res.unwrap();
-
-            if n == 0 {
-                info!("Video connection closed by server?");
-                tokio::time::sleep(Duration::from_secs(3)).await;
-                //break;
-            }
-            if i<10
-            {
-                info!("Video task Read {} bytes: {:?}", n, &buf_out[..n]);
-                i=i+1;
-            }
-
-
-            // Reuse buffer
-            buf = buf_out;
-            //Check custom Service command
-            match cmd_rx.try_recv() {
-                Ok(packet) => {
-                    info!("tsk_scrcpy_video Received command packet {:?}", packet);
-                }
-                _ => {}
-            }
+        if i<10
+        {
+            info!("Video task Read {} bytes: {:?}", n, &buf[..n]);
+            i=i+1;
         }
-    }
-    else {
-        error!("Invalid response for ADB shell on video channel");
+        //Check custom Service command
+        match cmd_rx.try_recv() {
+            Ok(packet) => {
+                info!("tsk_scrcpy_video Received command packet {:?}", packet);
+            }
+            _ => {}
+        }
     }
     Ok(())
 }
 
 async fn tsk_scrcpy_audio(
+    mut stream: TokioTcpStream,
     mut cmd_rx: broadcast::Receiver<Packet>,
     audio_tx: broadcast::Sender<Packet>,
 ) -> Result<()> {
 
-    let mut cmd_push = vec![];
-    cmd_push.push(String::from("/etc/aa-mirror-rs/scrcpy-server"));
-    cmd_push.push(String::from("/data/local/tmp/scrcpy-server-manual.jar"));
-    let lines=adb::push_cmd(cmd_push).await?;
-    let mut push_ok=false;
-    if lines.len() > 0 {
-        for line in lines {
-            if line.contains("/s (")
-            {
-                push_ok=true;
-            }
-            info!("ADB push response: {:?}", line);
+    info!("Starting audio server!");
+
+    let mut buf = vec![0u8; 0xffff];
+    let mut i=0;
+    loop {
+        // Read response
+        let n = stream.read(&mut buf).await?;
+        if n == 0 {
+            info!("Audio connection closed by server?");
+            tokio::time::sleep(Duration::from_secs(3)).await;
+            //break;
         }
-    }
-
-    if !push_ok {
-        error!("ADB invalid push response received for audio task");
-    }
-
-    let audio_bitrate:i32=48000;
-    let mut cmd_shell = vec![];
-    cmd_shell.push(format!("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar app_process / com.genymobile.scrcpy.Server {} scid={} log_level=info send_frame_meta=true tunnel_forward=true audio=true video=false control=false send_dummy_byte=false raw_stream=true audio_codec=aac audio_bit_rate={}",SCRCPY_VERSION.to_string(),SCID_AUDIO.to_string(), audio_bitrate));
-    let (shell,line)=adb::shell_cmd(cmd_shell).await?;
-    info!("ADB audio shell response: {:?}", line);
-    if line.contains("[server] INFO: Device:") && shell.id().is_some()
-    {
-        //tokio::time::sleep(Duration::from_secs(1)).await;
-        let addr_str = format!("127.0.0.1:{}", SCRCPY_AUDIO_PORT);
-        let addr: SocketAddr = SocketAddr::from_str(&addr_str).expect("invalid address");
-        //connect AFTER shell cmd
-        let mut stream = TcpStream::connect(addr).await?;
-        stream.set_nodelay(true)?;
-        info!("Connected to audio server!");
-
-        let mut i=0;
-        let mut buf = vec![0u8; 0xffff];
-        loop {
-            // Read response
-            let (res, buf_out) = stream.read(buf).await;
-            let n = res.unwrap();
-
-            if n == 0 {
-                info!("Audio connection closed by server?");
-                tokio::time::sleep(Duration::from_secs(3)).await;
-                //break;
-            }
-            if i< 10
-            {
-                info!("Audio task Read {} bytes: {:?}", n, &buf_out[..n]);
-                i=i+1;
-            }
-
-
-            // Reuse buffer
-            buf = buf_out;
+        if i<10
+        {
+            info!("Audio task Read {} bytes: {:?}", n, &buf[..n]);
+            i=i+1;
         }
-    }
-    else {
-        error!("Invalid response for ADB shell on audio channel");
+        //Check custom Service command
+        match cmd_rx.try_recv() {
+            Ok(packet) => {
+                info!("tsk_scrcpy_audio Received command packet {:?}", packet);
+            }
+            _ => {}
+        }
     }
     Ok(())
 }
@@ -469,7 +390,7 @@ async fn tsk_adb_scrcpy(
 
             let mut cmd_portfw = vec![];
             cmd_portfw.push(format!("tcp:{}", SCRCPY_AUDIO_PORT));
-            cmd_portfw.push(format!("localabstract:scrcpy_{}", SCID_AUDIO.to_string()));
+            cmd_portfw.push(format!("localabstract:scrcpy_audio_{}", SCID_VIDEO.to_string()));
             let lines=adb::forward_cmd(cmd_portfw).await?;
             let mut port_fw_ok=true;
             if lines.len() > 0 {
@@ -491,7 +412,7 @@ async fn tsk_adb_scrcpy(
 
             let mut cmd_portfw = vec![];
             cmd_portfw.push(format!("tcp:{}", SCRCPY_CONTROL_PORT));
-            cmd_portfw.push(format!("localabstract:scrcpy_{}", SCID_CTRL.to_string()));
+            cmd_portfw.push(format!("localabstract:scrcpy_control_{}", SCID_VIDEO.to_string()));
             let lines=adb::forward_cmd(cmd_portfw).await?;
             let mut port_fw_ok=true;
             if lines.len() > 0 {
@@ -511,20 +432,6 @@ async fn tsk_adb_scrcpy(
                 info!("ADB port forwarding done to {}", SCRCPY_CONTROL_PORT);
             }
 
-            //tokio::time::sleep(Duration::from_secs(3)).await;
-            let hnd_scrcpy_video;
-            let hnd_scrcpy_audio;
-            hnd_scrcpy_video = tokio_uring::spawn(tsk_scrcpy_video(
-                video_cmd_rx.resubscribe(),
-                srv_tx.clone(),
-                config.clone(),
-            ));
-            //tokio::time::sleep(Duration::from_secs(3)).await;//give some time to start the shell
-            hnd_scrcpy_audio = tokio_uring::spawn(tsk_scrcpy_audio(
-                audio_cmd_rx.resubscribe(),
-                srv_tx.clone(),
-            ));
-            //tokio::time::sleep(Duration::from_secs(3)).await;//give some time to start the shell
             let mut cmd_push = vec![];
             cmd_push.push(String::from("/etc/aa-mirror-rs/scrcpy-server"));
             cmd_push.push(String::from("/data/local/tmp/scrcpy-server-manual.jar"));
@@ -542,25 +449,65 @@ async fn tsk_adb_scrcpy(
 
             if !push_ok {
                 error!("ADB invalid push response received for control task");
+                continue;
             }
+            let video_bitrate=8000000;
+            let video_res_w=800;
+            let video_res_h=480;
+            let video_fps=60;
+            let screen_dpi=160;
+            let audio_bitrate:i32=48000;
+
+            tokio::time::sleep(Duration::from_secs(3)).await;//give some time to map adb sockets
             let mut cmd_shell = vec![];
-            cmd_shell.push(format!("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar app_process / com.genymobile.scrcpy.Server {} scid={} log_level=info tunnel_forward=true audio=false video=false control=true raw_stream=true",SCRCPY_VERSION.to_string(),SCID_CTRL.to_string()));
+            cmd_shell.push(format!("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar app_process / com.genymobile.scrcpy.Server {} scid={} log_level=info send_frame_meta=true tunnel_forward=true audio=true video=true control=true send_dummy_byte=false cleanup=true raw_stream=true audio_codec=aac audio_bit_rate={} max_size={} video_bit_rate={} video_codec=h264 new_display={}x{}/{} max_fps={}",SCRCPY_VERSION.to_string(),SCID_VIDEO.to_string(),audio_bitrate, video_res_w, video_bitrate, video_res_w, video_res_h, screen_dpi, video_fps));
             let (shell,line)=adb::shell_cmd(cmd_shell).await?;
-            info!("ADB audio shell response: {:?}", line);
+            info!("ADB video shell response: {:?}", line);
             if line.contains("[server] INFO: Device:") && shell.id().is_some()
             {
-                //tokio::time::sleep(Duration::from_secs(3)).await;
-                let mut stream = TokioTcpStream::connect(format!("127.0.0.1:{}", SCRCPY_CONTROL_PORT)).await?;
-                stream.set_nodelay(true)?;
+                tokio::time::sleep(Duration::from_secs(3)).await;//give some time to start sockets
+                let mut video_stream = TokioTcpStream::connect(format!("127.0.0.1:{}", SCRCPY_VIDEO_PORT)).await?;
+                video_stream.set_nodelay(true)?;
+                let mut audio_stream = TokioTcpStream::connect(format!("127.0.0.1:{}", SCRCPY_AUDIO_PORT)).await?;
+                audio_stream.set_nodelay(true)?;
+                let mut ctrl_stream = TokioTcpStream::connect(format!("127.0.0.1:{}", SCRCPY_CONTROL_PORT)).await?;
+                ctrl_stream.set_nodelay(true)?;
+                info!("SCRCPY connected to all 3 sockets");
+                let hnd_scrcpy_video;
+                let hnd_scrcpy_audio;
+
+
+                hnd_scrcpy_video = tokio_uring::spawn(async move {
+                    if let Err(e) = tsk_scrcpy_video(
+                                                    video_stream,
+                                                    video_cmd_rx.resubscribe(),
+                                                    srv_tx.clone(),
+                                                    config.clone(),
+                                                    ).await
+                    {
+                        error!("SCRCPY video task error: {e}");
+                    }
+                });
+                hnd_scrcpy_audio = tokio_uring::spawn(async move {
+                    if let Err(e) = tsk_scrcpy_audio(
+                                                    audio_stream,
+                                                    audio_cmd_rx.resubscribe(),
+                                                    srv_tx.clone(),
+                                                    ).await
+                    {
+                        error!("SCRCPY audio task error: {e}");
+                    }
+                });
+
                 info!("Connected to control server!");
 
                 loop {
-                    //stream.write_all(b"Hello, server!\n").await?;
                     tokio::time::sleep(Duration::from_secs(50)).await;
                 }
             }
             else {
-                error!("Invalid response for ADB shell on control channel");
+                error!("Invalid response for ADB shell");
+                continue;
             }
             //FIXME add a cancellation token
         }
