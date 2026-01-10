@@ -481,12 +481,13 @@ async fn tsk_adb_scrcpy(
                 info!("SCRCPY connected to all 3 sockets");
                 let hnd_scrcpy_video;
                 let hnd_scrcpy_audio;
-                let srv_tx_cloned = srv_tx.clone();
+                let video_tx = srv_tx.clone();
+                let audio_tx = srv_tx.clone();
                 hnd_scrcpy_video = tokio_uring::spawn(async move {
                     if let Err(e) = tsk_scrcpy_video(
                                                     video_stream,
                                                     video_cmd_rx.resubscribe(),
-                                                    srv_tx_cloned.clone(),
+                                                    video_tx,
                                                     ).await
                     {
                         error!("SCRCPY video task error: {e}");
@@ -496,7 +497,7 @@ async fn tsk_adb_scrcpy(
                     if let Err(e) = tsk_scrcpy_audio(
                                                     audio_stream,
                                                     audio_cmd_rx.resubscribe(),
-                                                    srv_tx_cloned.clone(),
+                                                    audio_tx,
                                                     ).await
                     {
                         error!("SCRCPY audio task error: {e}");
