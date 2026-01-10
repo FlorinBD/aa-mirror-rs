@@ -129,6 +129,10 @@ where
     I: IntoIterator<Item = S>,
     I::Item: AsRef<OsStr>,
 {
+    // Collect args so we can reuse them
+    let args: Vec<S> = args.into_iter().collect();
+
+    // Build the shell command string safely
     let shell_args = args
         .iter()
         .map(|a| shell_escape(&a.as_ref().to_string_lossy()))
@@ -218,8 +222,10 @@ where
         .collect())
 }
 
+/// Escape a shell argument safely for single-token usage
 fn shell_escape(s: &str) -> String {
     if s.contains([' ', '"', '\'', '$', '&', '|', ';', '<', '>']) {
+        // Wrap in single quotes, escape existing single quotes
         format!("'{}'", s.replace('\'', r"'\''"))
     } else {
         s.to_string()
