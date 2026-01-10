@@ -5,7 +5,7 @@ sdr>audio focus>wait 600>open & setup all at once works
 
 problems:
 adb_client is 1.18 ATM because 1.19 requires rustc 1.91 and is not working with buildroot due to a libm.so.6 error
-for scrcpy if you don't wait between tasks shell few seconds, is closing the sockets. maybe we need a single thread?
+for scrcpy  we need a single thread, spawn only TcpStream's for reading
 
 versions:
 scrcpy-server version: 3.3.4
