@@ -132,16 +132,10 @@ where
     // Collect args so we can reuse them
     let args: Vec<S> = args.into_iter().collect();
 
-    // Build the shell command string safely
-    let shell_args = args
-        .iter()
-        .map(|a| shell_escape(&a.as_ref().to_string_lossy()))
-        .collect::<Vec<_>>()
-        .join(" ");
     let mut adb_cmd = Command::new("adb")
         .arg("shell")
         //.args(args)
-        .arg(&shell_args)
+        .args(&args)
         .stdout(Stdio::piped())
         //.stderr(Stdio::piped())
         .spawn()?;
