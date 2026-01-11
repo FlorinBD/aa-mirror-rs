@@ -474,7 +474,7 @@ async fn tsk_adb_scrcpy(
             }
 
             let mut cmd_portfw = vec![];
-            cmd_portfw.push(format!("tcp:{}", SCRCPY_PORT.to_string()));
+            cmd_portfw.push(format!("tcp:{}", SCRCPY_PORT));
             cmd_portfw.push("localabstract:scrcpy".to_string());
             let lines=adb::forward_cmd(cmd_portfw).await?;
             let mut port_fw_ok=true;
