@@ -554,7 +554,7 @@ async fn tsk_adb_scrcpy(
             info!("ADB video shell response: {:?}", line);
             if line.contains("[server] INFO: Device:") && shell.id().is_some()
             {
-                tokio::time::sleep(Duration::from_secs(1)).await;//give some time to start sockets
+                tokio::time::sleep(Duration::from_secs(3)).await;//give some time to start sockets
                 let addr = format!("127.0.0.1:{}", SCRCPY_PORT).parse().unwrap();
                 let mut video_stream = TcpStream::connect(addr).await?;
                 video_stream.set_nodelay(true)?;
