@@ -320,13 +320,13 @@ async fn tsk_scrcpy_video(
     let codec_id = u32::from_be_bytes(buf_out[0..4].try_into().unwrap());
     let video_res_w = u32::from_be_bytes(buf_out[4..4].try_into().unwrap());
     let video_res_h = u32::from_be_bytes(buf_out[8..4].try_into().unwrap());
-    if (codec_id !=0) || (video_res_w != 800) || (video_res_h != 480) {
+    /*if (codec_id !=0) || (video_res_w != 800) || (video_res_h != 480) {
         error!("SCRCPY Invalid Video codec configuration");
         return Err(Box::new(io::Error::new(
             io::ErrorKind::Other,
             "SCRCPY Invalid Video codec configuration",
         )));
-    }
+    }*/
     loop {
         //TODO read packet size, not all available
         let (res, buf_out) = stream.read(buf).await;
