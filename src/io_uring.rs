@@ -302,13 +302,13 @@ async fn tsk_scrcpy_video(
     //discard codec metadata
     let (res, buf_out) = stream.read(codec_buf).await;
     let n = res?;
-    if n == 0 {
+    /*if n == 0 {
         error!("Video connection closed by server?");
         return Err(Box::new(io::Error::new(
             io::ErrorKind::Other,
             "Video connection closed by server?",
         )));
-    }
+    }*/
     if n != 12 {
         error!("Video codec reading error");
         return Err(Box::new(io::Error::new(
@@ -413,11 +413,11 @@ async fn tsk_scrcpy_audio(
     loop {
         let (res, buf_out) = stream.read(buf).await;
         let n = res?;
-        if n == 0 {
+        /*if n == 0 {
             info!("Audio connection closed by server?");
-            //tokio::time::sleep(Duration::from_secs(3)).await;
+            tokio::time::sleep(Duration::from_secs(3)).await;
             break;
-        }
+        }*/
         if i<10
         {
             info!("Audio task Read {} bytes: {:?}", n, &buf_out[..n]);
@@ -511,14 +511,15 @@ async fn tsk_adb_scrcpy(
             cmd_shell.push("com.genymobile.scrcpy.Server".to_string());
             cmd_shell.push(SCRCPY_VERSION.to_string());
             cmd_shell.push("log_level=info".to_string());
+            cmd_shell.push("raw_stream=false".to_string());
             cmd_shell.push("send_frame_meta=true".to_string());
+            cmd_shell.push("send_dummy_byte=false".to_string());
+            cmd_shell.push("send_device_meta=false".to_string());
             cmd_shell.push("tunnel_forward=true".to_string());
             cmd_shell.push("audio=true".to_string());
             cmd_shell.push("video=true".to_string());
             cmd_shell.push("control=true".to_string());
-            cmd_shell.push("send_dummy_byte=false".to_string());
             cmd_shell.push("cleanup=true".to_string());
-            cmd_shell.push("raw_stream=true".to_string());
             cmd_shell.push("audio_codec=aac".to_string());
             cmd_shell.push(format!("audio_bit_rate={}", audio_bitrate));
             cmd_shell.push(format!("max_size={}", video_res_w));
