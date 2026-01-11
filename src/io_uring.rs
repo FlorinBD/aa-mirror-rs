@@ -329,6 +329,7 @@ async fn tsk_scrcpy_video(
             "SCRCPY Invalid Video codec configuration",
         )));
     }
+    let timestamp: u64 = 0;//is not used by HU
     loop {
         //TODO read packet size, not all available
         let (res, buf_out) = stream.read(buf).await;
@@ -350,13 +351,17 @@ async fn tsk_scrcpy_video(
         {
             let pts = u64::from_be_bytes(buf_out[0..8].try_into().unwrap());
             let mut payload: Vec<u8>=Vec::new();
-            payload.extend_from_slice(&buf_out[12..n-12]);
+
             if (pts & 0x8000000000000000) >0
             {
+                payload.extend_from_slice(&buf_out[12..n-12]);
                 payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16) >> 8) as u8);
                 payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16) & 0xff) as u8);
             }
             else {
+
+                payload.extend_from_slice(&timestamp.to_be_bytes());
+                payload.extend_from_slice(&buf_out[12..n-12]);
                 payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) >> 8) as u8);
                 payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) & 0xff) as u8);
             }
@@ -412,6 +417,8 @@ async fn tsk_scrcpy_audio(
 ) -> Result<()> {
 
     info!("Starting audio server!");
+    let mut streaming_on=false;
+    let mut ch_id:u8=0;
     //discard codec metadata
     let codec_buf = vec![0u8; 4];
     let (res, buf_out) = stream.read(codec_buf).await;
@@ -435,6 +442,7 @@ async fn tsk_scrcpy_audio(
     info!("SCRCPY Audio codec id: {}", codec_id);
     let mut buf = vec![0u8; 0xffff];
     let mut i=0;
+    let timestamp: u64 = 0;//is not used by HU
     loop {
         let (res, buf_out) = stream.read(buf).await;
         let n = res?;
@@ -450,6 +458,24 @@ async fn tsk_scrcpy_audio(
         {
             info!("Audio task Read {} bytes: {:?}", n, &buf_out[..dbg_len]);
             i=i+1;
+        }
+        if streaming_on
+        {
+            let mut payload: Vec<u8>=Vec::new();
+            payload.extend_from_slice(&timestamp.to_be_bytes());
+            payload.extend_from_slice(&buf_out[12..n-12]);
+            payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) >> 8) as u8);
+            payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) & 0xff) as u8);
+
+            let pkt_rsp = Packet {
+                channel: ch_id,
+                flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                final_length: None,
+                payload: payload,
+            };
+            if let Err(_) = audio_tx.send(pkt_rsp){
+                error!( "SCRCPY audio frame send error");
+            };
         }
         // Reuse buffer
         buf = buf_out;
