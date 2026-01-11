@@ -437,7 +437,7 @@ async fn tsk_adb_scrcpy(
             cmd_shell.push("audio_codec=aac".to_string());
             cmd_shell.push(format!("audio_bit_rate={}", audio_bitrate));
             cmd_shell.push(format!("max_size={}", video_res_w));
-            cmd_shell.push("vide_codec=h264".to_string());
+            cmd_shell.push("video_codec=h264".to_string());
             cmd_shell.push(format!("video_bit_rate={}", video_bitrate));
             cmd_shell.push(format!("new_display={}x{}/{}", video_res_w, video_res_h, screen_dpi));
             cmd_shell.push(format!("max_fps={}", video_fps));
