@@ -42,6 +42,7 @@ include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use protos::*;
 use protos::ControlMessageType::{self, *};
 use protobuf::{Message};
+use std::cmp::min;
 
 // module name for logging engine
 const NAME: &str = "<i><bright-black> io_uring: </>";
@@ -339,9 +340,10 @@ async fn tsk_scrcpy_video(
                 "Video connection closed by server?",
             )));
         }
-        if i<2
+        let dbg_len=min(n,16);
+        if i<5
         {
-            info!("Video task Read {} bytes: {:?}", n, &buf_out[..n]);
+            info!("Video task Read {} bytes: {:?}", n, &buf_out[..dbg_len]);
             i=i+1;
         }
         if streaming_on
@@ -443,9 +445,10 @@ async fn tsk_scrcpy_audio(
                 "Audio connection closed by server?",
             )));
         }
-        if i<2
+        let dbg_len=min(n,16);
+        if i<5
         {
-            info!("Audio task Read {} bytes: {:?}", n, &buf_out[..n]);
+            info!("Audio task Read {} bytes: {:?}", n, &buf_out[..dbg_len]);
             i=i+1;
         }
         // Reuse buffer
