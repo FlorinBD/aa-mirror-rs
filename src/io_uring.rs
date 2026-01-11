@@ -407,7 +407,25 @@ async fn tsk_scrcpy_audio(
 ) -> Result<()> {
 
     info!("Starting audio server!");
-
+    //discard codec metadata
+    let codec_buf = vec![0u8; 4];
+    let (res, buf_out) = stream.read(codec_buf).await;
+    let n = res?;
+    /*if n == 0 {
+        error!("Audio connection closed by server?");
+        return Err(Box::new(io::Error::new(
+            io::ErrorKind::Other,
+            "Audio connection closed by server?",
+        )));
+    }*/
+    if n != 4 {
+        error!("Audio codec reading error");
+        return Err(Box::new(io::Error::new(
+            io::ErrorKind::Other,
+            "Audio codec reading error",
+        )));
+    }
+    info!("SCRCPY Audio codec metadata: {:?}", &buf_out[..n]);
     let mut buf = vec![0u8; 0xffff];
     let mut i=0;
     loop {
