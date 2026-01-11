@@ -302,13 +302,13 @@ async fn tsk_scrcpy_video(
     //discard codec metadata
     let (res, buf_out) = stream.read(codec_buf).await;
     let n = res?;
-    /*if n == 0 {
+    if n == 0 {
         error!("Video connection closed by server?");
         return Err(Box::new(io::Error::new(
             io::ErrorKind::Other,
             "Video connection closed by server?",
         )));
-    }*/
+    }
     if n != 12 {
         error!("Video codec reading error");
         return Err(Box::new(io::Error::new(
@@ -332,12 +332,13 @@ async fn tsk_scrcpy_video(
         let (res, buf_out) = stream.read(buf).await;
         let n = res?;
         if n == 0 {
-            i=0;
-            //error!("Video connection closed by server?");
-            //tokio::time::sleep(Duration::from_secs(3)).await;
-            //break;
+            error!("Video connection closed by server?");
+            return Err(Box::new(io::Error::new(
+                io::ErrorKind::Other,
+                "Video connection closed by server?",
+            )));
         }
-        if (i<4) && (n > 0)
+        if i<2
         {
             info!("Video task Read {} bytes: {:?}", n, &buf_out[..n]);
             i=i+1;
@@ -412,13 +413,13 @@ async fn tsk_scrcpy_audio(
     let codec_buf = vec![0u8; 4];
     let (res, buf_out) = stream.read(codec_buf).await;
     let n = res?;
-    /*if n == 0 {
+    if n == 0 {
         error!("Audio connection closed by server?");
         return Err(Box::new(io::Error::new(
             io::ErrorKind::Other,
             "Audio connection closed by server?",
         )));
-    }*/
+    }
     if n != 4 {
         error!("Audio codec reading error");
         return Err(Box::new(io::Error::new(
@@ -433,13 +434,13 @@ async fn tsk_scrcpy_audio(
         let (res, buf_out) = stream.read(buf).await;
         let n = res?;
         if n == 0 {
-            i=0;
-            //Audio can pause
-            /*info!("Audio connection closed by server?");
-            tokio::time::sleep(Duration::from_secs(3)).await;
-            break;*/
+            info!("Audio connection closed by server?");
+            return Err(Box::new(io::Error::new(
+                io::ErrorKind::Other,
+                "Audio connection closed by server?",
+            )));
         }
-        if (i<4) && (n > 0)
+        if i<2
         {
             info!("Audio task Read {} bytes: {:?}", n, &buf_out[..n]);
             i=i+1;
