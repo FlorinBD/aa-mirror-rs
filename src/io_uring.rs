@@ -332,11 +332,12 @@ async fn tsk_scrcpy_video(
         let (res, buf_out) = stream.read(buf).await;
         let n = res?;
         if n == 0 {
-            error!("Video connection closed by server?");
+            i=0;
+            //error!("Video connection closed by server?");
             //tokio::time::sleep(Duration::from_secs(3)).await;
-            break;
+            //break;
         }
-        if i<10
+        if (i<4) && (n > 0)
         {
             info!("Video task Read {} bytes: {:?}", n, &buf_out[..n]);
             i=i+1;
@@ -431,12 +432,13 @@ async fn tsk_scrcpy_audio(
     loop {
         let (res, buf_out) = stream.read(buf).await;
         let n = res?;
-        /*if n == 0 {
-            info!("Audio connection closed by server?");
+        if n == 0 {
+            i=0;
+            /*info!("Audio connection closed by server?");
             tokio::time::sleep(Duration::from_secs(3)).await;
-            break;
-        }*/
-        if i<10
+            break;*/
+        }
+        if (i<4) && (n > 0)
         {
             info!("Audio task Read {} bytes: {:?}", n, &buf_out[..n]);
             i=i+1;
