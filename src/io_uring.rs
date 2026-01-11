@@ -345,7 +345,7 @@ async fn tsk_scrcpy_video(
         if streaming_on
         {
             let pts = u64::from_be_bytes(buf_out[0..8].try_into().unwrap());
-            let mut payload: Vec<u8>;
+            let mut payload: Vec<u8>=Vec::new();
             payload.extend_from_slice(&buf_out[12..n-12]);
             if (pts & 0x8000000000000000) >0
             {
