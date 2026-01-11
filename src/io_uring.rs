@@ -4,6 +4,7 @@ use simplelog::*;
 use std::cell::RefCell;
 use std::fmt::Debug;
 use std::io::stderr;
+use std::io;
 use std::marker::PhantomData;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::rc::Rc;
@@ -304,11 +305,17 @@ async fn tsk_scrcpy_video(
     let n = res?;
     if n == 0 {
         error!("Video connection closed by server?");
-        Ok(()).expect("TODO: panic message");
+        return Err(Box::new(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "Video connection closed by server?",
+        )));
     }
     if n != 12 {
         error!("Video codec reading error");
-        Ok(()).expect("TODO: panic message");
+        return Err(Box::new(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "Video codec reading error",
+        )));
     }
     info!("SCRCPY Video codec metadata: {:?}", &buf_out[..n]);
     let codec_id = u32::from_be_bytes(buf_out[0..4].try_into().unwrap());
@@ -316,7 +323,10 @@ async fn tsk_scrcpy_video(
     let video_res_h = u32::from_be_bytes(buf_out[8..4].try_into().unwrap());
     if (codec_id !=0) || (video_res_w != 800) || (video_res_h != 480) {
         error!("SCRCPY Invalid Video codec configuration");
-        Ok(()).expect("TODO: panic message");
+        return Err(Box::new(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            "SCRCPY Invalid Video codec configuration",
+        )));
     }
     loop {
         //TODO read packet size, not all available
