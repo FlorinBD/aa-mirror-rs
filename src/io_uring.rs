@@ -43,7 +43,6 @@ use protos::*;
 use protos::ControlMessageType::{self, *};
 use protobuf::{Message};
 
-
 // module name for logging engine
 const NAME: &str = "<i><bright-black> io_uring: </>";
 
@@ -475,8 +474,8 @@ async fn tsk_adb_scrcpy(
             }
 
             let mut cmd_portfw = vec![];
-            cmd_portfw.push(format!("tcp:{}", SCRCPY_PORT));
-            cmd_portfw.push("localabstract:scrcpy{}".to_string());
+            cmd_portfw.push(format!("tcp:{}", SCRCPY_PORT.to_string()));
+            cmd_portfw.push("localabstract:scrcpy".to_string());
             let lines=adb::forward_cmd(cmd_portfw).await?;
             let mut port_fw_ok=true;
             if lines.len() > 0 {
@@ -495,7 +494,7 @@ async fn tsk_adb_scrcpy(
             else {
                 info!("ADB port forwarding done to {}", SCRCPY_PORT);
             }
-
+            tokio::time::sleep(Duration::from_secs(1)).await;//give some time to forward port, it is needed?
             let video_bitrate=8000000;
             let video_res_w=800;
             let video_res_h=480;
@@ -531,7 +530,7 @@ async fn tsk_adb_scrcpy(
             info!("ADB video shell response: {:?}", line);
             if line.contains("[server] INFO: Device:") && shell.id().is_some()
             {
-                tokio::time::sleep(Duration::from_secs(5)).await;//give some time to start sockets
+                tokio::time::sleep(Duration::from_secs(1)).await;//give some time to start sockets
                 let addr = format!("127.0.0.1:{}", SCRCPY_PORT).parse().unwrap();
                 let mut video_stream = TcpStream::connect(addr).await?;
                 video_stream.set_nodelay(true)?;
@@ -596,6 +595,51 @@ async fn tsk_adb_scrcpy(
         tokio::time::sleep(Duration::from_secs(5)).await;
     }
     //Err(Box::new(stderr()))
+
+    async fn wait_for_scrcpy(skaddr: SocketAddr, timeout_secs: u64, ) -> io::Result<(TcpStream, [u8; 12])> {
+        let deadline = Duration::from_secs(timeout_secs);
+
+        // Wrap everything in a timeout
+        timeout(deadline, async {
+            loop {
+                match TcpStream::connect(skaddr) {
+                    Ok(mut stream) => {
+                        let mut buf = [0u8; 12];
+                        let mut offset = 0;
+
+                        // Keep reading until we get all 12 bytes
+                        while offset < 12 {
+                            match stream.read(&mut buf[offset..]).await {
+                                Ok(0) => {
+                                    // EOF — server not ready yet
+                                    sleep(Duration::from_millis(50)).await;
+                                    offset = 0; // reset, try reading again
+                                    continue;
+                                }
+                                Ok(n) => offset += n,
+                                Err(_) => {
+                                    // Temporary read error — retry
+                                    sleep(Duration::from_millis(50)).await;
+                                    continue;
+                                }
+                            }
+                        }
+
+                        // Successfully read 12 bytes
+                        return Ok((stream, buf));
+                    }
+                    Err(_) => {
+                        // connect failed — server not ready yet
+                        sleep(Duration::from_millis(50)).await;
+                        continue;
+                    }
+                }
+            }
+        })
+            .await
+            .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "Timeout waiting for scrcpy"))?
+    }
+
 }
 
 pub async fn io_loop(
