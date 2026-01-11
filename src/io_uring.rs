@@ -305,15 +305,15 @@ async fn tsk_scrcpy_video(
     let n = res?;
     if n == 0 {
         error!("Video connection closed by server?");
-        return Err(Box::new(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        return Err(Box::new(io::Error::new(
+            io::ErrorKind::Other,
             "Video connection closed by server?",
         )));
     }
     if n != 12 {
         error!("Video codec reading error");
-        return Err(Box::new(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        return Err(Box::new(io::Error::new(
+            io::ErrorKind::Other,
             "Video codec reading error",
         )));
     }
@@ -323,8 +323,8 @@ async fn tsk_scrcpy_video(
     let video_res_h = u32::from_be_bytes(buf_out[8..4].try_into().unwrap());
     if (codec_id !=0) || (video_res_w != 800) || (video_res_h != 480) {
         error!("SCRCPY Invalid Video codec configuration");
-        return Err(Box::new(std::io::Error::new(
-            std::io::ErrorKind::Other,
+        return Err(Box::new(io::Error::new(
+            io::ErrorKind::Other,
             "SCRCPY Invalid Video codec configuration",
         )));
     }
