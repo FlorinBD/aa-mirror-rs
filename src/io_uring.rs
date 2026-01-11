@@ -37,6 +37,8 @@ use tokio::sync::broadcast::error::TryRecvError;
 use std::str::FromStr;
 use tokio_util::bytes::BufMut;
 use crate::aa_services::{CmdStartVideoRec};
+include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
+use protos::*;
 
 // module name for logging engine
 const NAME: &str = "<i><bright-black> io_uring: </>";
@@ -348,7 +350,7 @@ async fn tsk_scrcpy_video(
                 final_length: None,
                 payload: payload,
             };
-            if let Err(_) = video_tx.send(pkt_rsp).await{
+            if let Err(_) = video_tx.send(pkt_rsp){
                 error!( "SCRCPY video frame send error");
             };
         }
