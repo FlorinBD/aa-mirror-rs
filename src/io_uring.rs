@@ -452,8 +452,8 @@ async fn tsk_scrcpy_audio(
         buf = buf_out;
         //Check custom Service command
         match cmd_rx.try_recv() {
-            Ok(packet) => {
-                info!("tsk_scrcpy_audio Received command packet {:?}", packet);
+            Ok(pkt) => {
+                info!("tsk_scrcpy_audio Received command packet {:?}", pkt);
             }
             _ => {}
         }
