@@ -595,51 +595,6 @@ async fn tsk_adb_scrcpy(
         tokio::time::sleep(Duration::from_secs(5)).await;
     }
     //Err(Box::new(stderr()))
-
-    async fn wait_for_scrcpy(skaddr: SocketAddr, timeout_secs: u64, ) -> io::Result<(TcpStream, [u8; 12])> {
-        let deadline = Duration::from_secs(timeout_secs);
-
-        // Wrap everything in a timeout
-        timeout(deadline, async {
-            loop {
-                match TcpStream::connect(skaddr) {
-                    Ok(mut stream) => {
-                        let mut buf = [0u8; 12];
-                        let mut offset = 0;
-
-                        // Keep reading until we get all 12 bytes
-                        while offset < 12 {
-                            match stream.read(&mut buf[offset..]).await {
-                                Ok(0) => {
-                                    // EOF — server not ready yet
-                                    sleep(Duration::from_millis(50)).await;
-                                    offset = 0; // reset, try reading again
-                                    continue;
-                                }
-                                Ok(n) => offset += n,
-                                Err(_) => {
-                                    // Temporary read error — retry
-                                    sleep(Duration::from_millis(50)).await;
-                                    continue;
-                                }
-                            }
-                        }
-
-                        // Successfully read 12 bytes
-                        return Ok((stream, buf));
-                    }
-                    Err(_) => {
-                        // connect failed — server not ready yet
-                        sleep(Duration::from_millis(50)).await;
-                        continue;
-                    }
-                }
-            }
-        })
-            .await
-            .map_err(|_| io::Error::new(io::ErrorKind::TimedOut, "Timeout waiting for scrcpy"))?
-    }
-
 }
 
 pub async fn io_loop(
