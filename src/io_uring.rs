@@ -423,7 +423,8 @@ async fn tsk_adb_scrcpy(
             cmd_shell.push("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar".to_string());
             cmd_shell.push("app_process".to_string());
             cmd_shell.push("/".to_string());
-            cmd_shell.push(format!("com.genymobile.scrcpy.Server {}", SCRCPY_VERSION.to_string()));
+            cmd_shell.push("com.genymobile.scrcpy.Server".to_string());
+            cmd_shell.push(SCRCPY_VERSION.to_string());
             cmd_shell.push("log_level=info".to_string());
             cmd_shell.push("send_frame_meta=true".to_string());
             cmd_shell.push("tunnel_forward=true".to_string());
