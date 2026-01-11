@@ -434,6 +434,7 @@ async fn tsk_scrcpy_audio(
         let n = res?;
         if n == 0 {
             i=0;
+            //Audio can pause
             /*info!("Audio connection closed by server?");
             tokio::time::sleep(Duration::from_secs(3)).await;
             break;*/
