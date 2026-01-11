@@ -74,7 +74,7 @@ pub struct ServiceStatus {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-struct CmdStartVideoRec {
+pub(crate) struct CmdStartVideoRec {
     max_unack: u32,
     bitrate: i32,
     res_w:i32,

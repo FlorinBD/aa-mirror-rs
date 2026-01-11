@@ -35,6 +35,8 @@ use tokio::net::TcpStream as TokioTcpStream;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::broadcast::error::TryRecvError;
 use std::str::FromStr;
+use tokio_util::bytes::BufMut;
+use crate::aa_services::{CmdStartVideoRec};
 
 // module name for logging engine
 const NAME: &str = "<i><bright-black> io_uring: </>";
@@ -49,7 +51,7 @@ pub const TCP_CLIENT_TIMEOUT: Duration = Duration::new(30, 0);
 
 use crate::config::{Action, AppConfig, SharedConfig, ADB_DEVICE_PORT, SCRCPY_VERSION, SCRCPY_PORT};
 use crate::config::{TCP_DHU_PORT, TCP_MD_SERVER_PORT};
-use crate::channel_manager::{endpoint_reader,ch_proxy, packet_tls_proxy};
+use crate::channel_manager::{endpoint_reader, ch_proxy, packet_tls_proxy, ENCRYPTED, FRAME_TYPE_CONTROL, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
 use crate::channel_manager::Packet;
 use crate::config_types::HexdumpLevel;
 use crate::usb_stream::{UsbStreamRead, UsbStreamWrite};
@@ -286,14 +288,37 @@ async fn tsk_scrcpy_video(
     video_tx: broadcast::Sender<Packet>,
 ) -> Result<()> {
     info!("Starting video server!");
-
+    let mut streaming_on=false;
     let mut buf = vec![0u8; 0xffff];
+    let codec_buf = vec![0u8; 12];
     let mut i=0;
+    let mut ch_id:u8=0;
+
+    //discard codec metadata
+    let (res, buf_out) = stream.read(codec_buf).await;
+    let n = res?;
+    if n == 0 {
+        error!("Video connection closed by server?");
+        Ok(()).expect("TODO: panic message");
+    }
+    if n != 12 {
+        error!("Video codec reading error");
+        Ok(()).expect("TODO: panic message");
+    }
+    info!("SCRCPY Video codec metadata: {:?}", &buf_out[..n]);
+    let codec_id = u32::from_be_bytes(buf_out[0..4].try_into().unwrap());
+    let video_res_w = u32::from_be_bytes(buf_out[4..4].try_into().unwrap());
+    let video_res_h = u32::from_be_bytes(buf_out[8..4].try_into().unwrap());
+    if (codec_id !=0) || (video_res_w != 800) || (video_res_h != 480) {
+        error!("SCRCPY Invalid Video codec configuration");
+        Ok(()).expect("TODO: panic message");
+    }
     loop {
+        //TODO read packet size, not all available
         let (res, buf_out) = stream.read(buf).await;
         let n = res?;
         if n == 0 {
-            info!("Video connection closed by server?");
+            error!("Video connection closed by server?");
             //tokio::time::sleep(Duration::from_secs(3)).await;
             break;
         }
@@ -302,12 +327,58 @@ async fn tsk_scrcpy_video(
             info!("Video task Read {} bytes: {:?}", n, &buf_out[..n]);
             i=i+1;
         }
+        if streaming_on
+        {
+            let pts = u64::from_be_bytes(buf_out[0..8].try_into().unwrap());
+            let mut payload: Vec<u8>;
+            payload.extend_from_slice(&buf_out[12..n-12]);
+            if (pts & 0x8000000000000000) >0
+            {
+                payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16) >> 8) as u8);
+                payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16) & 0xff) as u8);
+            }
+            else {
+                payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) >> 8) as u8);
+                payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) & 0xff) as u8);
+            }
+
+            let pkt_rsp = Packet {
+                channel: ch_id,
+                flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                final_length: None,
+                payload: payload,
+            };
+            if let Err(_) = video_tx.send(pkt_rsp).await{
+                error!( "SCRCPY video frame send error");
+            };
+        }
         // Reuse buffer
         buf = buf_out;
         //Check custom Service command
         match cmd_rx.try_recv() {
-            Ok(packet) => {
-                info!("tsk_scrcpy_video Received command packet {:?}", packet);
+            Ok(pkt) => {
+                info!("tsk_scrcpy_video Received command packet {:?}", pkt);
+                let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+                if message_id == MESSAGE_CUSTOM_CMD  as i32
+                {
+                    let data = &pkt.payload[2..]; // start of message data, without message_id
+                    if let Ok(msg) = CustomCommandMessage::parse_from_bytes(&data) {
+                        if msg.cmd() == CustomCommand::CMD_START_VIDEO_RECORDING
+                        {
+                            streaming_on=true;
+                            if let Ok(cmd) = postcard::from_bytes::<CmdStartVideoRec>(&data[4..]) {
+                                ch_id=&pkt.channel;
+                            }
+                            else {
+                                error!("tsk_scrcpy_video parsing error for CmdStartVideoRec");
+                            }
+                        }
+                        else if msg.cmd() == CustomCommand::CMD_STOP_VIDEO_RECORDING
+                        {
+                            streaming_on=false;
+                        }
+                    }
+                }
             }
             _ => {}
         }
