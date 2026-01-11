@@ -39,6 +39,7 @@ use tokio_util::bytes::BufMut;
 use crate::aa_services::{CmdStartVideoRec};
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use protos::*;
+use protobuf::{Message};
 
 // module name for logging engine
 const NAME: &str = "<i><bright-black> io_uring: </>";
@@ -369,7 +370,7 @@ async fn tsk_scrcpy_video(
                         {
                             streaming_on=true;
                             if let Ok(cmd) = postcard::from_bytes::<CmdStartVideoRec>(&data[4..]) {
-                                ch_id=&pkt.channel;
+                                ch_id=pkt.channel;
                             }
                             else {
                                 error!("tsk_scrcpy_video parsing error for CmdStartVideoRec");
