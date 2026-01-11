@@ -317,16 +317,17 @@ async fn tsk_scrcpy_video(
         )));
     }
     info!("SCRCPY Video codec metadata: {:?}", &buf_out[..n]);
-    let codec_id = u32::from_be_bytes(buf_out[0..4].try_into().unwrap());
+    let codec_id=String::from_utf8_lossy(&buf_out[0..4]).to_string();
+    //let codec_id = u32::from_be_bytes(buf_out[0..4].try_into().unwrap());
     let video_res_w = u32::from_be_bytes(buf_out[4..4].try_into().unwrap());
     let video_res_h = u32::from_be_bytes(buf_out[8..4].try_into().unwrap());
-    /*if (codec_id !=0) || (video_res_w != 800) || (video_res_h != 480) {
+    if (codec_id != "h264".to_string()) || (video_res_w != 800) || (video_res_h != 480) {
         error!("SCRCPY Invalid Video codec configuration");
         return Err(Box::new(io::Error::new(
             io::ErrorKind::Other,
             "SCRCPY Invalid Video codec configuration",
         )));
-    }*/
+    }
     loop {
         //TODO read packet size, not all available
         let (res, buf_out) = stream.read(buf).await;
@@ -428,6 +429,8 @@ async fn tsk_scrcpy_audio(
         )));
     }
     info!("SCRCPY Audio codec metadata: {:?}", &buf_out[..n]);
+    let codec_id=String::from_utf8_lossy(&buf_out[0..4]).to_string();
+    info!("SCRCPY Audio codec id: {}", codec_id);
     let mut buf = vec![0u8; 0xffff];
     let mut i=0;
     loop {
