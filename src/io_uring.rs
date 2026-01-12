@@ -33,7 +33,7 @@ use futures::StreamExt;
 use hyper::client::connect::Connect;
 use tokio::process::Command;
 use tokio::net::TcpStream as TokioTcpStream;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::broadcast::error::TryRecvError;
 use std::str::FromStr;
 use tokio_util::bytes::BufMut;
@@ -318,17 +318,19 @@ async fn tsk_scrcpy_video(
         )));
     }
     info!("SCRCPY Video codec metadata: {:?}", &buf_out[..n]);
-    let codec_id=String::from_utf8_lossy(&buf_out[0..4]).to_string();
+    let codec_id=String::from_utf8_lossy(&buf_out[0..4]).to_string().chars()
+        .filter(|c| c.is_ascii_graphic() || *c == ' ')
+        .collect();
     //let codec_id = u32::from_be_bytes(buf_out[0..4].try_into().unwrap());
     let video_res_w = u32::from_be_bytes(buf_out[4..4].try_into().unwrap());
     let video_res_h = u32::from_be_bytes(buf_out[8..4].try_into().unwrap());
-    if (codec_id != "h264".to_string()) || (video_res_w != 800) || (video_res_h != 480) {
+    /*if (codec_id != "h264".to_string()) || (video_res_w != 800) || (video_res_h != 480) {
         error!("SCRCPY Invalid Video codec configuration");
         return Err(Box::new(io::Error::new(
             io::ErrorKind::Other,
             "SCRCPY Invalid Video codec configuration",
         )));
-    }
+    }*/
     let timestamp: u64 = 0;//is not used by HU
     loop {
         //TODO read packet size, not all available
@@ -438,7 +440,9 @@ async fn tsk_scrcpy_audio(
         )));
     }
     info!("SCRCPY Audio codec metadata: {:?}", &buf_out[..n]);
-    let codec_id=String::from_utf8_lossy(&buf_out[0..4]).to_string();
+    let codec_id=String::from_utf8_lossy(&buf_out[0..4]).to_string().chars()
+        .filter(|c| c.is_ascii_graphic() || *c == ' ')
+        .collect();
     info!("SCRCPY Audio codec id: {}", codec_id);
     let mut buf = vec![0u8; 0xffff];
     let mut i=0;
@@ -582,7 +586,7 @@ async fn tsk_adb_scrcpy(
             cmd_shell.push(format!("video_bit_rate={}", video_bitrate));
             cmd_shell.push(format!("new_display={}x{}/{}", video_res_w, video_res_h, screen_dpi));
             cmd_shell.push(format!("max_fps={}", video_fps));
-            let (shell,line)=adb::shell_cmd(cmd_shell).await?;
+            let (mut shell,line)=adb::shell_cmd(cmd_shell).await?;
             info!("ADB video shell response: {:?}", line);
             if line.contains("[server] INFO: Device:") && shell.id().is_some()
             {
@@ -620,22 +624,28 @@ async fn tsk_adb_scrcpy(
                                                     ).await;
                     let _ = done_th_tx_audio.send(res);
                 });
-
+                let stdout = shell.stdout.take().unwrap();
+                let mut shell_lines = BufReader::new(stdout).lines();
                 info!("Connected to control server!");
 
                 loop {
 
                     if done_th_rx_video.try_recv().is_ok() {
                         info!("SCRCPY Video Task finished");
-                        tokio::time::sleep(Duration::from_secs(5)).await;
+                        tokio::time::sleep(Duration::from_secs(1)).await;
                     }
                     else if done_th_rx_audio.try_recv().is_ok() {
                         info!("SCRCPY Audio Task finished");
-                        tokio::time::sleep(Duration::from_secs(5)).await;
+                        tokio::time::sleep(Duration::from_secs(1)).await;
                     }
                     else {
                         tokio::time::sleep(Duration::from_secs(1)).await;
                     }
+                    // Read first line (or first meaningful line)
+                    let first_line = match shell_lines.next_line().await? {
+                        Some(line) => {info!("shell stdout: {}", line)},
+                        None => {},
+                    };
                     //TODO check audio/video task if they finished to restart connection
                 }
             }
