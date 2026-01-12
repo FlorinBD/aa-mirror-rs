@@ -624,8 +624,8 @@ async fn tsk_adb_scrcpy(
                                                     ).await;
                     let _ = done_th_tx_audio.send(res);
                 });
-                let stdout = shell.stdout.take().unwrap();
-                let mut shell_lines = BufReader::new(stdout).lines();
+
+                let mut shell_reader = BufReader::new(shell.stdout.take().unwrap());
                 info!("Connected to control server!");
 
                 loop {
@@ -641,11 +641,22 @@ async fn tsk_adb_scrcpy(
                     else {
                         tokio::time::sleep(Duration::from_secs(1)).await;
                     }
-                    // Read first line (or first meaningful line)
-                    let first_line = match shell_lines.next_line().await? {
-                        Some(line) => {info!("shell stdout: {}", line)},
-                        None => {},
-                    };
+                    let mut buf = [0u8; 1024];
+
+                    match timeout(Duration::from_millis(100), shell_reader.read(&mut buf)).await {
+                        Ok(Ok(n)) if n > 0 => {
+                            println!("shell stdout: {}", String::from_utf8_lossy(&buf[..n]));
+                        }
+                        Ok(Ok(_)) => {
+                            // EOF
+                        }
+                        Ok(Err(e)) => {
+                            eprintln!("read error: {}", e);
+                        }
+                        Err(_) => {
+                            // no data yet (non-blocking behavior)
+                        }
+                    }
                     //TODO check audio/video task if they finished to restart connection
                 }
             }
