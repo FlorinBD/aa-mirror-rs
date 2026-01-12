@@ -346,17 +346,19 @@ async fn tsk_scrcpy_video(
             )));
         }
         let dbg_len=min(n,16);
-        if i<5
+        /*if i<5
         {
             info!("Video task Read {} bytes: {:02x?}", n, &buf_out[..dbg_len]);
             i=i+1;
-        }
+        }*/
         if streaming_on
         {
             let pts = u64::from_be_bytes(buf_out[0..8].try_into().unwrap());
+            let rec_ts=pts & 0x3FFF_FFFF_FFFF_FFFFu64;
             let mut payload: Vec<u8>=Vec::new();
-
-            if (pts & 0x8000000000000000) >0
+            let key_frame=(pts & 0x4000_0000_0000_0000u64) >0;
+            let config_frame=(pts & 0x8000_0000_0000_0000u64) >0;
+            if config_frame
             {
                 payload.extend_from_slice(&buf_out[12..n]);
                 payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16) >> 8) as u8);
@@ -384,7 +386,7 @@ async fn tsk_scrcpy_video(
         //Check custom Service command
         match cmd_rx.try_recv() {
             Ok(pkt) => {
-                info!("tsk_scrcpy_video Received command packet {:?}", pkt);
+                info!("tsk_scrcpy_video Received command packet {:02x?}", pkt);
                 let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
                 if message_id == MESSAGE_CUSTOM_CMD  as i32
                 {
@@ -393,10 +395,12 @@ async fn tsk_scrcpy_video(
                         if msg.cmd() == CustomCommand::CMD_START_VIDEO_RECORDING
                         {
                             streaming_on=true;
+                            info!("tsk_scrcpy_video Video streaming started");
                             if let Ok(cmd) = postcard::from_bytes::<CmdStartVideoRec>(&data[4..]) {
                                 ch_id=pkt.channel;
                             }
-                            else {
+                            else
+                            {
                                 error!("tsk_scrcpy_video parsing error for CmdStartVideoRec");
                             }
                         }
@@ -405,6 +409,13 @@ async fn tsk_scrcpy_video(
                             streaming_on=false;
                         }
                     }
+                    else {
+                        error!("tsk_scrcpy_video parsing error for CustomCommandMessage");
+                    }
+                }
+                else
+                {
+                    error!("tsk_scrcpy_video unknown message id: {}", message_id);
                 }
             }
             _ => {}
@@ -488,7 +499,7 @@ async fn tsk_scrcpy_audio(
         //Check custom Service command
         match cmd_rx.try_recv() {
             Ok(pkt) => {
-                info!("tsk_scrcpy_audio Received command packet {:?}", pkt);
+                info!("tsk_scrcpy_audio Received command packet {:02x?}", pkt);
             }
             _ => {}
         }
