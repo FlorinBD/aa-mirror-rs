@@ -317,7 +317,7 @@ async fn tsk_scrcpy_video(
             "Video codec reading error",
         )));
     }
-    info!("SCRCPY Video codec metadata: {:?}", &buf_out[..n]);
+    info!("SCRCPY Video codec metadata: {:02x?}", &buf_out[..n]);
     let mut codec_id=String::from_utf8_lossy(&buf_out[0..4]).to_string();
         codec_id=codec_id.chars()
         .filter(|c| c.is_ascii_graphic() || *c == ' ')
@@ -348,7 +348,7 @@ async fn tsk_scrcpy_video(
         let dbg_len=min(n,16);
         if i<5
         {
-            info!("Video task Read {} bytes: {:?}", n, &buf_out[..dbg_len]);
+            info!("Video task Read {} bytes: {:02x?}", n, &buf_out[..dbg_len]);
             i=i+1;
         }
         if streaming_on
@@ -440,7 +440,7 @@ async fn tsk_scrcpy_audio(
             "Audio codec reading error",
         )));
     }
-    info!("SCRCPY Audio codec metadata: {:?}", &buf_out[..n]);
+    info!("SCRCPY Audio codec metadata: {:02x?}", &buf_out[..n]);
     let mut codec_id=String::from_utf8_lossy(&buf_out[0..4]).to_string();
         codec_id=codec_id.chars()
         .filter(|c| c.is_ascii_graphic() || *c == ' ')
@@ -462,7 +462,7 @@ async fn tsk_scrcpy_audio(
         let dbg_len=min(n,16);
         if i<5
         {
-            info!("Audio task Read {} bytes: {:?}", n, &buf_out[..dbg_len]);
+            info!("Audio task Read {} bytes: {:02x?}", n, &buf_out[..dbg_len]);
             i=i+1;
         }
         if streaming_on
