@@ -318,7 +318,8 @@ async fn tsk_scrcpy_video(
         )));
     }
     info!("SCRCPY Video codec metadata: {:?}", &buf_out[..n]);
-    let codec_id=String::from_utf8_lossy(&buf_out[0..4]).to_string().chars()
+    let mut codec_id=String::from_utf8_lossy(&buf_out[0..4]).to_string();
+        codec_id=codec_id.chars()
         .filter(|c| c.is_ascii_graphic() || *c == ' ')
         .collect();
     //let codec_id = u32::from_be_bytes(buf_out[0..4].try_into().unwrap());
@@ -441,7 +442,8 @@ async fn tsk_scrcpy_audio(
         )));
     }
     info!("SCRCPY Audio codec metadata: {:?}", &buf_out[..n]);
-    let codec_id=String::from_utf8_lossy(&buf_out[0..4]).to_string().chars()
+    let mut codec_id=String::from_utf8_lossy(&buf_out[0..4]).to_string();
+        codec_id=codec_id.chars()
         .filter(|c| c.is_ascii_graphic() || *c == ' ')
         .collect();
     info!("SCRCPY Audio codec id: {}", codec_id);
