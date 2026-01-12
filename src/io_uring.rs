@@ -307,7 +307,7 @@ async fn tsk_scrcpy_video(
         error!("Video connection closed by server?");
         return Err(Box::new(io::Error::new(
             io::ErrorKind::Other,
-            "Video connection closed by server?",
+            "Video connection closed by server",
         )));
     }
     if n != 12 {
@@ -457,7 +457,7 @@ async fn tsk_scrcpy_audio(
             info!("Audio connection closed by server?");
             return Err(Box::new(io::Error::new(
                 io::ErrorKind::Other,
-                "Audio connection closed by server?",
+                "Audio connection closed by server",
             )));
         }
         let dbg_len=min(n,16);
@@ -646,7 +646,7 @@ async fn tsk_adb_scrcpy(
                     }
                     let mut buf = [0u8; 1024];
 
-                    match timeout(Duration::from_millis(100), shell_reader.read(&mut buf)).await {
+                    match timeout(Duration::from_millis(1000), shell_reader.read(&mut buf)).await {
                         Ok(Ok(n)) if n > 0 => {
                             println!("shell stdout: {}", String::from_utf8_lossy(&buf[..n]));
                         }
