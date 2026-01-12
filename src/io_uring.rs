@@ -508,8 +508,8 @@ async fn tsk_scrcpy_audio(
     Ok(())
 }
 async fn tsk_adb_scrcpy(
-    video_cmd_rx: broadcast::Receiver<Packet>,
-    audio_cmd_rx: broadcast::Receiver<Packet>,
+    srv_cmd_rx_video: broadcast::Receiver<Packet>,
+    srv_cmd_rx_audio: broadcast::Receiver<Packet>,
     srv_tx: broadcast::Sender<Packet>,
     //audio_tx: Sender<Packet>,
     config: AppConfig,
@@ -623,18 +623,18 @@ async fn tsk_adb_scrcpy(
                 let (done_th_tx_audio, mut done_th_rx_audio) = oneshot::channel();
                 hnd_scrcpy_video = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_video(
-                                                    video_stream,
-                                                    video_cmd_rx.resubscribe(),
-                                                    video_tx,
+                        video_stream,
+                        srv_cmd_rx_video.resubscribe(),
+                        video_tx,
                                                     ).await;
                     let _ = done_th_tx_video.send(res);
 
                 });
                 hnd_scrcpy_audio = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_audio(
-                                                    audio_stream,
-                                                    audio_cmd_rx.resubscribe(),
-                                                    audio_tx,
+                        audio_stream,
+                        srv_cmd_rx_audio.resubscribe(),
+                        audio_tx,
                                                     ).await;
                     let _ = done_th_tx_audio.send(res);
                 });
