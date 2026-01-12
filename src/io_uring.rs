@@ -407,6 +407,7 @@ async fn tsk_scrcpy_video(
                         else if msg.cmd() == CustomCommand::CMD_STOP_VIDEO_RECORDING
                         {
                             streaming_on=false;
+                            info!("tsk_scrcpy_video Video streaming stopped");
                         }
                     }
                     else {
