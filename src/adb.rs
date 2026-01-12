@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use async_arp::{Client, ClientConfigBuilder, ClientSpinner, ProbeStatus};
 use port_check::is_port_reachable_with_timeout;
 use simplelog::info;
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 use tokio::process::Command;
 use crate::{adb, arp_common};
 use crate::config::{AppConfig, ADB_DEVICE_PORT};
@@ -152,7 +152,7 @@ where
     Ok((adb_cmd, first_line))
 }
 
-pub(crate) async fn shell_cmd<I,S>(args: I) ->Result<(tokio::process::Child, String), Box<dyn std::error::Error + Send + Sync>>
+pub(crate) async fn shell_cmd<I,S>(args: I) ->Result<(tokio::process::Child, BufReader<tokio::process::ChildStdout>, String), Box<dyn std::error::Error + Send + Sync>>
 where
     I: IntoIterator<Item = S>,
     I::Item: AsRef<OsStr>,
@@ -168,20 +168,26 @@ where
         //.stderr(Stdio::piped())
         .spawn()?;
 
-    let stdout = adb_cmd.stdout.take().unwrap();
-    let mut lines = BufReader::new(stdout).lines();
+    let stdout = adb_cmd
+        .stdout
+        .take()
+        .ok_or("stdout not piped")?;
+    let mut reader = BufReader::new(stdout);
+    let mut buf = vec![0u8; 1024];
 
-    // Read first line (or first meaningful line)
-    let first_line = match lines.next_line().await? {
-        Some(line) => line,
-        None => return Err("no output received".into()),
-    };
+    // Read *some* output, not a full line
+    let n = reader.read(&mut buf).await?;
+    if n == 0 {
+        return Err("no output received".into());
+    }
+
+    let first_output = String::from_utf8_lossy(&buf[..n]).to_string();
 
     // IMPORTANT:
     // - child is still alive
     // - stdout is now partially consumed
     // - process keeps running
-    Ok((adb_cmd, first_line))
+    Ok((adb_cmd,reader, first_output))
 }
 
 pub(crate) async fn run_cmd<I, S>(args: I) ->Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>>

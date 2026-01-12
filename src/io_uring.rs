@@ -589,7 +589,7 @@ async fn tsk_adb_scrcpy(
             cmd_shell.push(format!("video_bit_rate={}", video_bitrate));
             cmd_shell.push(format!("new_display={}x{}/{}", video_res_w, video_res_h, screen_dpi));
             cmd_shell.push(format!("max_fps={}", video_fps));
-            let (mut shell,line)=adb::shell_cmd(cmd_shell).await?;
+            let (mut shell, mut sh_reader,line)=adb::shell_cmd(cmd_shell).await?;
             info!("ADB video shell response: {:?}", line);
             if line.contains("[server] INFO: Device:") && shell.id().is_some()
             {
@@ -628,7 +628,7 @@ async fn tsk_adb_scrcpy(
                     let _ = done_th_tx_audio.send(res);
                 });
 
-                let mut shell_reader = BufReader::new(shell.stdout.take().unwrap());
+
                 info!("Connected to control server!");
 
                 loop {
@@ -646,7 +646,7 @@ async fn tsk_adb_scrcpy(
                     }
                     let mut buf = [0u8; 1024];
 
-                    match timeout(Duration::from_millis(1000), shell_reader.read(&mut buf)).await {
+                    match timeout(Duration::from_millis(1000), sh_reader.read(&mut buf)).await {
                         Ok(Ok(n)) if n > 0 => {
                             println!("shell stdout: {}", String::from_utf8_lossy(&buf[..n]));
                         }
@@ -662,6 +662,8 @@ async fn tsk_adb_scrcpy(
                     }
                     //TODO check audio/video task if they finished to restart connection
                 }
+                // When done, stop the shell
+                shell.kill().await?;
             }
             else {
                 error!("Invalid response for ADB shell");
