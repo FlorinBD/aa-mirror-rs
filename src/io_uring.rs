@@ -323,8 +323,8 @@ async fn tsk_scrcpy_video(
         .filter(|c| c.is_ascii_graphic() || *c == ' ')
         .collect();
     //let codec_id = u32::from_be_bytes(buf_out[0..4].try_into().unwrap());
-    let video_res_w = u32::from_be_bytes(buf_out[4..4].try_into().unwrap());
-    let video_res_h = u32::from_be_bytes(buf_out[8..4].try_into().unwrap());
+    let video_res_w = u32::from_be_bytes(buf_out[4..8].try_into().unwrap());
+    let video_res_h = u32::from_be_bytes(buf_out[8..12].try_into().unwrap());
     info!("SCRCPY Video metadata decoded: id={}, res_w={}, res_h={}", codec_id, video_res_w, video_res_h);
     /*if (codec_id != "h264".to_string()) || (video_res_w != 800) || (video_res_h != 480) {
         error!("SCRCPY Invalid Video codec configuration");
@@ -358,14 +358,13 @@ async fn tsk_scrcpy_video(
 
             if (pts & 0x8000000000000000) >0
             {
-                payload.extend_from_slice(&buf_out[12..n-12]);
+                payload.extend_from_slice(&buf_out[12..n]);
                 payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16) >> 8) as u8);
                 payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16) & 0xff) as u8);
             }
             else {
-
                 payload.extend_from_slice(&timestamp.to_be_bytes());
-                payload.extend_from_slice(&buf_out[12..n-12]);
+                payload.extend_from_slice(&buf_out[12..n]);
                 payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) >> 8) as u8);
                 payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) & 0xff) as u8);
             }
@@ -470,7 +469,7 @@ async fn tsk_scrcpy_audio(
         {
             let mut payload: Vec<u8>=Vec::new();
             payload.extend_from_slice(&timestamp.to_be_bytes());
-            payload.extend_from_slice(&buf_out[12..n-12]);
+            payload.extend_from_slice(&buf_out[12..n]);
             payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) >> 8) as u8);
             payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) & 0xff) as u8);
 
