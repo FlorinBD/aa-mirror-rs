@@ -562,7 +562,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
             // the next iteration rx.recv().await will be None and we'll
             // break from the outer loop anyway.
             Err(_) => {
-                //if both errors ant this one also we must wait to prevent tokio starvation
+                //if both errors and this one also we must wait to prevent tokio runtime starvation
                 if hu_read_err && srv_read_err
                 {
                     tokio::time::sleep(Duration::from_millis(1)).await;
