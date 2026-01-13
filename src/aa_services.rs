@@ -1067,8 +1067,8 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                             tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
 
                             info!( "{} Send custom CMD_START_VIDEO_RECORDING for ch {}",get_name(), ch_id);
-                            let mut cmd_req = CustomCommandMessage::new();
-                            cmd_req.set_cmd(CustomCommand::CMD_START_VIDEO_RECORDING);
+                            //let mut cmd_req = CustomCommandMessage::new();
+                            //cmd_req.set_cmd(CustomCommand::CMD_START_VIDEO_RECORDING);
 
 
                             let struc = CmdStartVideoRec { max_unack:max_unack, res_h:480, res_w:800, dpi:160, fps:60, bitrate:8000000};
@@ -1076,7 +1076,8 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                             //let mut payload: Vec<u8> = cmd_req.write_to_bytes()?;
                             let mut payload = Vec::new();
                             payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
-                            payload.extend_from_slice(&cmd_req.write_to_bytes()?);
+                            payload.extend_from_slice(&(CustomCommand::CMD_START_VIDEO_RECORDING as u16).to_be_bytes());
+                            //payload.extend_from_slice(&cmd_req.write_to_bytes()?);
                             payload.extend_from_slice(&bytes);
 
                             //payload.insert(0, ((MESSAGE_CUSTOM_CMD as u16) >> 8) as u8);

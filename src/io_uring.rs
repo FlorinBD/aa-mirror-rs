@@ -388,31 +388,26 @@ async fn tsk_scrcpy_video(
                 let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
                 if message_id == MESSAGE_CUSTOM_CMD  as i32
                 {
-                    let data = &pkt.payload[2..]; // start of message data, without message_id
-                    if let Ok(msg) = CustomCommandMessage::parse_from_bytes(&data) {
-                        if msg.cmd() == CustomCommand::CMD_START_VIDEO_RECORDING
+                    let cmd_id: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
+                    let data = &pkt.payload[4..]; // start of message data, without message_id
+                        if cmd_id == CustomCommand::CMD_START_VIDEO_RECORDING as i32
                         {
-                            streaming_on=true;
+                            streaming_on = true;
                             info!("tsk_scrcpy_video Video streaming started");
                             // Advance by the ACTUAL protobuf length
                             let cmd_len = msg.write_to_bytes()?.len();
-                            if let Ok(cmd) = postcard::take_from_bytes::<CmdStartVideoRec>(&data[cmd_len..]) {
-                                ch_id=pkt.channel;
-                            }
-                            else
-                            {
+                            if let Ok(cmd) = postcard::take_from_bytes::<CmdStartVideoRec>(&data) {
+                                ch_id = pkt.channel;
+                            } else {
                                 error!("tsk_scrcpy_video parsing error for CmdStartVideoRec");
                             }
                         }
                         else if msg.cmd() == CustomCommand::CMD_STOP_VIDEO_RECORDING
                         {
-                            streaming_on=false;
+                            streaming_on = false;
                             info!("tsk_scrcpy_video Video streaming stopped");
                         }
-                    }
-                    else {
-                        error!("tsk_scrcpy_video parsing error for CustomCommandMessage");
-                    }
+
                 }
                 else
                 {
