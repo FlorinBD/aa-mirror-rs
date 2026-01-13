@@ -539,12 +539,12 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                     error!( "{}: tls proxy error: received encrypted message from service before TLS handshake", get_name());
                 }
                 else {
-                    let _ = pkt_debug(
+                    /*let _ = pkt_debug(
                         HexdumpLevel::DecryptedOutput,
                         dmp_level,
                         &msg,
                         "SCRCPY".parse().unwrap()
-                    ).await;
+                    ).await;*/
                     match msg.encrypt_payload(&mut mem_buf, &mut server).await {
                         Ok(_) => {
                             // Increment byte counters for statistics
@@ -957,7 +957,7 @@ pub async fn ch_proxy(
                             for (idx, _) in srv_senders.iter().enumerate()
                             {
                                 info!( "{} Send custom CMD_OPEN_CH for ch {}",get_name(), channel_status[idx].ch_id);
-                                
+
                                 let mut payload= Vec::new();
                                 payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
                                 payload.extend_from_slice(&(CustomCommand::CMD_OPEN_CH as u16).to_be_bytes());
