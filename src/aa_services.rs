@@ -74,7 +74,7 @@ pub struct ServiceStatus {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub(crate) struct CmdStartVideoRec {
+pub(crate) struct CmdStartMediaRec {
     pub(crate) max_unack: u32,
 }
 
@@ -1062,7 +1062,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
 
                             info!( "{} Send custom CMD_START_VIDEO_RECORDING for ch {}",get_name(), ch_id);
                             
-                            let struc = CmdStartVideoRec { max_unack:max_unack};
+                            let struc = CmdStartMediaRec { max_unack:max_unack};
                             let bytes: Vec<u8> = postcard::to_stdvec(&struc)?;
                             let mut payload = Vec::new();
                             payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());

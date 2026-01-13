@@ -37,7 +37,7 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::broadcast::error::TryRecvError;
 use std::str::FromStr;
 use tokio_util::bytes::BufMut;
-use crate::aa_services::{CmdStartStreaming, CmdStartVideoRec};
+use crate::aa_services::{CmdStartStreaming, CmdStartMediaRec};
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use protos::*;
 use protos::ControlMessageType::{self, *};
@@ -394,7 +394,7 @@ async fn tsk_scrcpy_video(
                         {
                             streaming_on = true;
                             info!("tsk_scrcpy_video Video streaming started");
-                            match postcard::take_from_bytes::<CmdStartVideoRec>(data) {
+                            match postcard::take_from_bytes::<CmdStartMediaRec>(data) {
                                 Ok((cmd, rest)) => {
                                     ch_id = pkt.channel;
                                     info!("Parsed CmdStartVideoRec: {:?}", cmd);
@@ -544,7 +544,7 @@ async fn tsk_adb_scrcpy(
                     let data = &pkt.payload[4..]; // start of message data, without message_id
                     if cmd_id == CustomCommand::CMD_START_DEVICE_RECORDING as i32
                     {
-                        match postcard::take_from_bytes::<CmdStartVideoRec>(data) {
+                        match postcard::take_from_bytes::<CmdStartMediaRec>(data) {
                             Ok((cmd, rest)) => {
                                 info!("Parsed CmdStartVideoRec: {:?}", cmd);
                                 info!("Remaining bytes: {}", rest.len());
