@@ -544,7 +544,7 @@ async fn tsk_adb_scrcpy(
                     let data = &pkt.payload[4..]; // start of message data, without message_id
                     if cmd_id == CustomCommand::CMD_START_DEVICE_RECORDING as i32
                     {
-                        match postcard::take_from_bytes::<CmdStartMediaRec>(data) {
+                        match postcard::take_from_bytes::<CmdStartStreaming>(data) {
                             Ok((cmd, rest)) => {
                                 info!("Parsed CmdStartVideoRec: {:?}", cmd);
                                 info!("Remaining bytes: {}", rest.len());
