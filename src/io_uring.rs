@@ -394,8 +394,6 @@ async fn tsk_scrcpy_video(
                         {
                             streaming_on = true;
                             info!("tsk_scrcpy_video Video streaming started");
-                            // Advance by the ACTUAL protobuf length
-                            let cmd_len = msg.write_to_bytes()?.len();
                             if let Ok(cmd) = postcard::take_from_bytes::<CmdStartVideoRec>(&data) {
                                 ch_id = pkt.channel;
                             } else {
