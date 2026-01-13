@@ -524,13 +524,7 @@ async fn tsk_adb_scrcpy(
         error!("ADB server can't start");
     }
 
-    let mut video_codec_params = CmdStartStreaming {
-        bitrate: 0,
-        res_w: 0,
-        res_h: 0,
-        fps: 0,
-        dpi: 0,
-    };
+    let mut video_codec_params = CmdStartStreaming::default();
     //wait for custom CMD to start recording
     loop {
         match srv_cmd_rx_scrcpy.recv().await {

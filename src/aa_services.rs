@@ -87,6 +87,18 @@ pub(crate) struct CmdStartStreaming {
     pub(crate) dpi:i32,
 }
 
+impl Default for CmdStartStreaming {
+    fn default() -> Self {
+        Self {
+            bitrate: 8_000_000, // sensible default
+            res_w: 800,
+            res_h: 480,
+            fps: 60,
+            dpi: 160,
+        }
+    }
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum VideoCodecResolution {
     Video_800x480 = 1,
