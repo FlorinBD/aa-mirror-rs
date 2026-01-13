@@ -400,7 +400,7 @@ async fn tsk_scrcpy_video(
                                 error!("tsk_scrcpy_video parsing error for CmdStartVideoRec");
                             }
                         }
-                        else if msg.cmd() == CustomCommand::CMD_STOP_VIDEO_RECORDING
+                        else if cmd_id == CustomCommand::CMD_STOP_VIDEO_RECORDING as i32
                         {
                             streaming_on = false;
                             info!("tsk_scrcpy_video Video streaming stopped");
