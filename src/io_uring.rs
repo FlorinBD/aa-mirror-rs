@@ -396,7 +396,7 @@ async fn tsk_scrcpy_video(
                         {
                             streaming_on=true;
                             info!("tsk_scrcpy_video Video streaming started");
-                            if let Ok(cmd) = postcard::from_bytes::<CmdStartVideoRec>(&data[4..]) {
+                            if let Ok(cmd) = postcard::from_bytes::<CmdStartVideoRec>(&data[2..]) {
                                 ch_id=pkt.channel;
                             }
                             else
