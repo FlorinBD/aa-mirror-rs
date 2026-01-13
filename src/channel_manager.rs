@@ -915,9 +915,7 @@ pub async fn ch_proxy(
             payload: payload.clone(),
         };
 
-        if let Err(_) = scrcpy_cmd.send(pkt_rsp).await{
-            error!( "{} tls proxy send custom cmd error",get_name());
-        };
+        scrcpy_cmd.send(pkt_rsp).unwrap();
 
     }
     else {
