@@ -201,7 +201,7 @@ pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, 
         format!("<i><bright-black> aa-mirror/{}: </>", dev)
     }
 }
-pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, scrcpy_cmd: broadcast::Sender<Packet>, vcfg:VideoConfig)-> Result<()>{
+pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, scrcpy_cmd: broadcast::Sender<Packet>)-> Result<()>{
     //pre-rendered frames using openh264 lib from a C# app (1 frame out of static 800x480 bmp)
     let wait_screen_config_frame: Vec<u8> = vec![0x00, 0x00, 0x00, 0x01, 0x67, 0x42, 0xC0, 0x1E, 0x8C, 0x8D, 0x40, 0x64, 0x1E, 0x90, 0x0F, 0x08, 0x84, 0x6A, 0x00, 0x00, 0x00, 0x01, 0x68, 0xCE, 0x3C, 0x80];
     let wait_screen_first_frame: Vec<u8> = vec![0x00, 0x00, 0x00, 0x01, 0x65, 0xB8, 0x00, 0x04, 0x00, 0x00, 0x78, 0x8C, 0x50, 0x00, 0x27, 0x1C,
@@ -1024,63 +1024,56 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                     if rsp.focus() == VideoFocusMode::VIDEO_FOCUS_PROJECTED
                     {
                         info!( "{}, channel {:?}: Starting video capture", get_name(), pkt.channel);
-                        if vcfg.resolution == VideoCodecResolution::Video_800x480
-                        {
-                            video_stream_started=true;
-                            //Send config frame
-                            let mut payload=wait_screen_config_frame.to_vec();
-                            payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16) >> 8) as u8);
-                            payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16) & 0xff) as u8);
+                        video_stream_started=true;
+                        //Send config frame
+                        let mut payload=wait_screen_config_frame.to_vec();
+                        payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16) >> 8) as u8);
+                        payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16) & 0xff) as u8);
 
-                            let pkt_rsp = Packet {
-                                channel: ch_id as u8,
-                                flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                                final_length: None,
-                                payload: payload,
-                            };
-                            tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+                        let pkt_rsp = Packet {
+                            channel: ch_id as u8,
+                            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                            final_length: None,
+                            payload: payload,
+                        };
+                        tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
 
-                            //Send first frame
-                            let mut payload=wait_screen_first_frame.to_vec();
-                            payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) >> 8) as u8);
-                            payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) & 0xff) as u8);
-                            payload.insert(2, 0);//timestamp 0.0
-                            payload.insert(3, 0);
-                            payload.insert(4, 0);
-                            payload.insert(5, 0);
-                            payload.insert(6, 0);
-                            payload.insert(7, 0);
-                            payload.insert(8, 0);
-                            payload.insert(9, 0);
-                            let pkt_rsp = Packet {
-                                channel: ch_id as u8,
-                                flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                                final_length: None,
-                                payload: payload,
-                            };
-                            tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+                        //Send first frame
+                        let mut payload=wait_screen_first_frame.to_vec();
+                        payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) >> 8) as u8);
+                        payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) & 0xff) as u8);
+                        payload.insert(2, 0);//timestamp 0.0
+                        payload.insert(3, 0);
+                        payload.insert(4, 0);
+                        payload.insert(5, 0);
+                        payload.insert(6, 0);
+                        payload.insert(7, 0);
+                        payload.insert(8, 0);
+                        payload.insert(9, 0);
+                        let pkt_rsp = Packet {
+                            channel: ch_id as u8,
+                            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                            final_length: None,
+                            payload: payload,
+                        };
+                        tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
 
-                            info!( "{} Send custom CMD_START_VIDEO_RECORDING for ch {}",get_name(), ch_id);
-                            
-                            let struc = CmdStartMediaRec { max_unack:max_unack};
-                            let bytes: Vec<u8> = postcard::to_stdvec(&struc)?;
-                            let mut payload = Vec::new();
-                            payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
-                            payload.extend_from_slice(&(CustomCommand::CMD_START_DEVICE_RECORDING as u16).to_be_bytes());
-                            payload.extend_from_slice(&bytes);
-                            
-                            let pkt_rsp = Packet {
-                                channel: ch_id as u8,
-                                flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                                final_length: None,
-                                payload: payload.clone(),
-                            };
-                            scrcpy_cmd.send(pkt_rsp).unwrap();
-                        }
-                        else
-                        {
-                            error!( "{}: Unsupported video resolution detected", get_name());
-                        }
+                        info!( "{} Send custom CMD_START_VIDEO_RECORDING for ch {}",get_name(), ch_id);
+
+                        let struc = CmdStartMediaRec { max_unack:max_unack};
+                        let bytes: Vec<u8> = postcard::to_stdvec(&struc)?;
+                        let mut payload = Vec::new();
+                        payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+                        payload.extend_from_slice(&(CustomCommand::CMD_START_DEVICE_RECORDING as u16).to_be_bytes());
+                        payload.extend_from_slice(&bytes);
+
+                        let pkt_rsp = Packet {
+                            channel: ch_id as u8,
+                            flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                            final_length: None,
+                            payload: payload.clone(),
+                        };
+                        scrcpy_cmd.send(pkt_rsp).unwrap();
                     }
                 }
                 else

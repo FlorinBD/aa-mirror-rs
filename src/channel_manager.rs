@@ -820,9 +820,9 @@ pub async fn ch_proxy(
                     let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                     srv_senders.push(tx);
                     let vcr=match proto_srv.media_sink_service.video_configs[0].codec_resolution() {
-                        VideoCodecResolutionType::VIDEO_800x480=>{video_codec_params.res_w=800; video_codec_params.res_h=480; Video_800x480},
-                        VideoCodecResolutionType::VIDEO_720x1280=>Video_720x1280,
-                        VideoCodecResolutionType::VIDEO_1080x1920=>Video_1080x1920,
+                        VideoCodecResolutionType::VIDEO_800x480=>{video_codec_params.bitrate=8000000; video_codec_params.res_w=800; video_codec_params.res_h=480; Video_800x480},
+                        VideoCodecResolutionType::VIDEO_720x1280=>{video_codec_params.bitrate=16000000; video_codec_params.res_w=1280; video_codec_params.res_h=720; Video_720x1280},
+                        VideoCodecResolutionType::VIDEO_1080x1920=>{video_codec_params.bitrate=32000000; video_codec_params.res_w=1920; video_codec_params.res_h=1080; Video_1080x1920},
                         _=>Video_800x480,
                     };
 
@@ -833,18 +833,12 @@ pub async fn ch_proxy(
                         _=>VIDEO_H264_BP,
                     };
                     let vfps=match proto_srv.media_sink_service.video_configs[0].frame_rate() {
-                        VideoFrameRateType::VIDEO_FPS_60=>FPS_60,
-                        VideoFrameRateType::VIDEO_FPS_30=>FPS_30,
+                        VideoFrameRateType::VIDEO_FPS_60=>{video_codec_params.fps=60; FPS_60},
+                        VideoFrameRateType::VIDEO_FPS_30=>{video_codec_params.fps=30; FPS_30},
                         _=>FPS_30,
                     };
-                    let video_cfg=VideoConfig
-                    {
-                        resolution:vcr,
-                        codec:vcd,
-                        fps:vfps,
-                    };
-
-                    srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_video(ch_id,true, tx_srv.clone(), rx, video_cmd.clone(), video_cfg)));
+                    video_codec_params.dpi=proto_srv.media_sink_service.video_configs[0].density() as i32;
+                    srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_video(ch_id,true, tx_srv.clone(), rx, video_cmd.clone())));
                 }
                 else {
                     error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
@@ -908,8 +902,8 @@ pub async fn ch_proxy(
         };
 
         //Start SCRCPY streaming
-        let struc = CmdStartStreaming { bitrate:8000000, res_w:800, res_h:480, fps:60, dpi:160};//FIXME take them from SDR
-        let bytes: Vec<u8> = postcard::to_stdvec(&struc)?;
+        //let struc = CmdStartStreaming { bitrate:8000000, res_w:800, res_h:480, fps:60, dpi:160};//FIXME take them from SDR
+        let bytes: Vec<u8> = postcard::to_stdvec(&video_codec_params)?;
         let mut payload = Vec::new();
         payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
         payload.extend_from_slice(&(CustomCommand::CMD_START_DEVICE_RECORDING as u16).to_be_bytes());
