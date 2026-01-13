@@ -328,10 +328,7 @@ async fn tsk_scrcpy_video(
     info!("SCRCPY Video metadata decoded: id={}, res_w={}, res_h={}", codec_id, video_res_w, video_res_h);
     if (codec_id != "h264".to_string()) || (video_res_w != 800) || (video_res_h != 480) {
         error!("SCRCPY Invalid Video codec configuration");
-        return Err(Box::new(io::Error::new(
-            io::ErrorKind::Other,
-            "SCRCPY Invalid Video codec configuration",
-        )));
+        return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY Invalid Video codec configuration")));
     }
     let timestamp: u64 = 0;//is not used by HU
     loop {
@@ -458,6 +455,10 @@ async fn tsk_scrcpy_audio(
         .filter(|c| c.is_ascii_graphic() || *c == ' ')
         .collect();
     info!("SCRCPY Audio codec id: {}", codec_id);
+    if codec_id != "aac".to_string() {
+        error!("SCRCPY Invalid audio codec configuration");
+        return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY Invalid audio codec configuration")));
+    }
     let mut buf = vec![0u8; 0xffff];
     let mut i=0;
     let timestamp: u64 = 0;//is not used by HU
