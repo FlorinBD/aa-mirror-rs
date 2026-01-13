@@ -758,6 +758,13 @@ pub async fn ch_proxy(
     let mut srv_tsk_handles;
     let mut channel_status;
     let data = &pkt.payload[2..]; // start of message data, without message_id
+    let mut video_codec_params = CmdStartStreaming {
+        bitrate: 0,
+        res_w: 0,
+        res_h: 0,
+        fps: 0,
+        dpi: 0,
+    };
     if  let Ok(msg) = ServiceDiscoveryResponse::parse_from_bytes(&data){
         info!( "{} ServiceDiscoveryResponse parsed ok",get_name());
         //let srv_count=msg.services.len();
@@ -813,7 +820,7 @@ pub async fn ch_proxy(
                     let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                     srv_senders.push(tx);
                     let vcr=match proto_srv.media_sink_service.video_configs[0].codec_resolution() {
-                        VideoCodecResolutionType::VIDEO_800x480=>Video_800x480,
+                        VideoCodecResolutionType::VIDEO_800x480=>{video_codec_params.res_w=800; video_codec_params.res_h=480; Video_800x480},
                         VideoCodecResolutionType::VIDEO_720x1280=>Video_720x1280,
                         VideoCodecResolutionType::VIDEO_1080x1920=>Video_1080x1920,
                         _=>Video_800x480,
@@ -915,7 +922,7 @@ pub async fn ch_proxy(
             payload: payload.clone(),
         };
         scrcpy_cmd.send(pkt_rsp).unwrap();
-        
+
     }
     else {
         error!( "{} ServiceDiscoveryResponse couldn't be parsed",get_name());
