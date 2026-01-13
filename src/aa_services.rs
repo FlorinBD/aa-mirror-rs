@@ -1073,11 +1073,16 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
 
                             let struc = CmdStartVideoRec { max_unack:max_unack, res_h:480, res_w:800, dpi:160, fps:60, bitrate:8000000};
                             let bytes: Vec<u8> = postcard::to_stdvec(&struc)?;
-                            let mut payload: Vec<u8> = cmd_req.write_to_bytes()?;
-                            payload.insert(0, ((MESSAGE_CUSTOM_CMD as u16) >> 8) as u8);
-                            payload.insert(1, ((MESSAGE_CUSTOM_CMD as u16) & 0xff) as u8);
+                            //let mut payload: Vec<u8> = cmd_req.write_to_bytes()?;
+                            let mut payload = Vec::new();
+                            payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+                            payload.extend_from_slice(&cmd_req.write_to_bytes()?);
+                            payload.extend_from_slice(&bytes);
+
+                            //payload.insert(0, ((MESSAGE_CUSTOM_CMD as u16) >> 8) as u8);
+                            //payload.insert(1, ((MESSAGE_CUSTOM_CMD as u16) & 0xff) as u8);
                             //payload.push(&max_unack.to_be_bytes());
-                            payload.extend(&bytes);
+                            //payload.extend(&bytes);
                             let pkt_rsp = Packet {
                                 channel: ch_id as u8,
                                 flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,

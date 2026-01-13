@@ -330,6 +330,7 @@ async fn tsk_scrcpy_video(
         error!("SCRCPY Invalid Video codec configuration");
         return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY Invalid Video codec configuration")));
     }
+    info!("SCRCPY Video entering main loop");
     let timestamp: u64 = 0;//is not used by HU
     loop {
         //TODO read packet size, not all available
@@ -393,7 +394,9 @@ async fn tsk_scrcpy_video(
                         {
                             streaming_on=true;
                             info!("tsk_scrcpy_video Video streaming started");
-                            if let Ok(cmd) = postcard::from_bytes::<CmdStartVideoRec>(&data[2..]) {
+                            // Advance by the ACTUAL protobuf length
+                            let cmd_len = msg.compute_size() as usize;
+                            if let Ok(cmd) = postcard::from_bytes::<CmdStartVideoRec>(&data[cmd_len..]) {
                                 ch_id=pkt.channel;
                             }
                             else
