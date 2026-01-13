@@ -914,9 +914,8 @@ pub async fn ch_proxy(
             final_length: None,
             payload: payload.clone(),
         };
-
         scrcpy_cmd.send(pkt_rsp).unwrap();
-
+        
     }
     else {
         error!( "{} ServiceDiscoveryResponse couldn't be parsed",get_name());
