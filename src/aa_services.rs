@@ -1071,7 +1071,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                             //cmd_req.set_cmd(CustomCommand::CMD_START_VIDEO_RECORDING);
 
 
-                            let struc = CmdStartVideoRec { max_unack:max_unack, res_h:480, res_w:800, dpi:160, fps:60, bitrate:8000000};
+                            let struc = CmdStartVideoRec { max_unack:max_unack, bitrate:8000000, res_w:800, res_h:480, fps:60, dpi:160,};
                             let bytes: Vec<u8> = postcard::to_stdvec(&struc)?;
                             //let mut payload: Vec<u8> = cmd_req.write_to_bytes()?;
                             let mut payload = Vec::new();

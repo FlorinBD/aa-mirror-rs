@@ -394,10 +394,15 @@ async fn tsk_scrcpy_video(
                         {
                             streaming_on = true;
                             info!("tsk_scrcpy_video Video streaming started");
-                            if let Ok(cmd) = postcard::take_from_bytes::<CmdStartVideoRec>(&data) {
-                                ch_id = pkt.channel;
-                            } else {
-                                error!("tsk_scrcpy_video parsing error for CmdStartVideoRec");
+                            match postcard::take_from_bytes::<CmdStartVideoRec>(data) {
+                                Ok((cmd, rest)) => {
+                                    ch_id = pkt.channel;
+                                    info!("Parsed CmdStartVideoRec: {:?}", cmd);
+                                    info!("Remaining bytes: {}", rest.len());
+                                }
+                                Err(e) => {
+                                    error!("postcard parsing error: {:?}", e);
+                                }
                             }
                         }
                         else if cmd_id == CustomCommand::CMD_STOP_VIDEO_RECORDING as i32
