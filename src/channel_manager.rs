@@ -817,7 +817,7 @@ pub async fn ch_proxy(
                         VideoCodecResolutionType::VIDEO_800x480=>{video_codec_params.bitrate=8_000_000; video_codec_params.res_w=800; video_codec_params.res_h=480; Video_800x480},
                         VideoCodecResolutionType::VIDEO_720x1280=>{video_codec_params.bitrate=16_000_000; video_codec_params.res_w=1280; video_codec_params.res_h=720; Video_720x1280},
                         VideoCodecResolutionType::VIDEO_1080x1920=>{video_codec_params.bitrate=32_000_000; video_codec_params.res_w=1920; video_codec_params.res_h=1080; Video_1080x1920},
-                        _=>Video_800x480,
+                        _=>{video_codec_params.bitrate=8_000_000; video_codec_params.res_w=800; video_codec_params.res_h=480; Video_800x480},
                     };
 
                     let vcd=match proto_srv.media_sink_service.video_configs[0].video_codec_type() {
@@ -829,7 +829,7 @@ pub async fn ch_proxy(
                     let vfps=match proto_srv.media_sink_service.video_configs[0].frame_rate() {
                         VideoFrameRateType::VIDEO_FPS_60=>{video_codec_params.fps=60; FPS_60},
                         VideoFrameRateType::VIDEO_FPS_30=>{video_codec_params.fps=30; FPS_30},
-                        _=>FPS_30,
+                        _=>{video_codec_params.fps=30; FPS_30},
                     };
                     video_codec_params.dpi=proto_srv.media_sink_service.video_configs[0].density() as i32;
                     srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_video(ch_id,true, tx_srv.clone(), rx, video_cmd.clone())));
