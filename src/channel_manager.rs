@@ -29,7 +29,7 @@ use protobuf::text_format::print_to_string_pretty;
 use protobuf::{Enum, Message, MessageDyn};
 use tokio::sync::{broadcast, mpsc};
 use protos::ControlMessageType::{self, *};
-use crate::aa_services::{VideoCodecResolution::*, VideoFPS::*, AudioStream::*, VideoConfig, AudioConfig, AudioChConfiguration, MediaCodec, MediaCodec::*, AudioStream, ServiceType, CommandState, ServiceStatus, th_bluetooth};
+use crate::aa_services::{VideoCodecResolution::*, VideoFPS::*, AudioStream::*, VideoConfig, AudioConfig, AudioChConfiguration, MediaCodec, MediaCodec::*, AudioStream, ServiceType, CommandState, ServiceStatus, th_bluetooth, CmdStartVideoRec, CmdStartStreaming};
 use crate::aa_services::{th_input_source, th_media_sink_audio_guidance, th_media_sink_audio_streaming, th_media_sink_video, th_media_source, th_sensor_source, th_vendor_extension};
 use crate::config;
 use crate::config::HU_CONFIG_DELAY_MS;
@@ -667,6 +667,7 @@ pub async fn ch_proxy(
     mut tx_srv: Sender<Packet>,
     video_cmd: broadcast::Sender<Packet>,
     audio_cmd: broadcast::Sender<Packet>,
+    scrcpy_cmd: broadcast::Sender<Packet>,
 ) -> Result<()> {
     info!( "{} Entering channel manager",get_name());
    // waiting for initial version frame (HU is starting transmission)
@@ -897,6 +898,25 @@ pub async fn ch_proxy(
         };
         if let Err(_) = tx_srv.send(pkt_rsp).await{
             error!( "{} tls proxy send error",get_name());
+        };
+
+        //Start SCRCPY streaming
+        let struc = CmdStartStreaming { bitrate:8000000, res_w:800, res_h:480, fps:60, dpi:160};//FIXME take them from SDR
+        let bytes: Vec<u8> = postcard::to_stdvec(&struc)?;
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+        payload.extend_from_slice(&(CustomCommand::CMD_START_DEVICE_RECORDING as u16).to_be_bytes());
+        payload.extend_from_slice(&bytes);
+
+        let pkt_rsp = Packet {
+            channel: 0,
+            flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+            final_length: None,
+            payload: payload.clone(),
+        };
+
+        if let Err(_) = scrcpy_cmd.send(pkt_rsp).await{
+            error!( "{} tls proxy send custom cmd error",get_name());
         };
 
     }

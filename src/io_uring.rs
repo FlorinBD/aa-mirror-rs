@@ -37,7 +37,7 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::broadcast::error::TryRecvError;
 use std::str::FromStr;
 use tokio_util::bytes::BufMut;
-use crate::aa_services::{CmdStartVideoRec};
+use crate::aa_services::{CmdStartStreaming, CmdStartVideoRec};
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use protos::*;
 use protos::ControlMessageType::{self, *};
@@ -513,7 +513,7 @@ async fn tsk_adb_scrcpy(
     srv_cmd_rx_video: broadcast::Receiver<Packet>,
     srv_cmd_rx_audio: broadcast::Receiver<Packet>,
     srv_tx: broadcast::Sender<Packet>,
-    //audio_tx: Sender<Packet>,
+    mut srv_cmd_rx_scrcpy: broadcast::Receiver<Packet>,
     config: AppConfig,
 ) -> Result<()> {
     info!("{}: ADB task started",NAME);
@@ -523,6 +523,57 @@ async fn tsk_adb_scrcpy(
     if !cmd_adb.status.success() {
         error!("ADB server can't start");
     }
+
+    let mut video_codec_params = CmdStartStreaming {
+        bitrate: 0,
+        res_w: 0,
+        res_h: 0,
+        fps: 0,
+        dpi: 0,
+    };
+    //wait for custom CMD to start recording
+    loop {
+        match srv_cmd_rx_scrcpy.recv().await {
+            Ok(pkt) => {
+                // Received a packet
+                info!("tsk_scrcpy_video Received command packet {:02x?}", pkt);
+                let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+                if message_id == MESSAGE_CUSTOM_CMD  as i32
+                {
+                    let cmd_id: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
+                    let data = &pkt.payload[4..]; // start of message data, without message_id
+                    if cmd_id == CustomCommand::CMD_START_DEVICE_RECORDING as i32
+                    {
+                        match postcard::take_from_bytes::<CmdStartVideoRec>(data) {
+                            Ok((cmd, rest)) => {
+                                info!("Parsed CmdStartVideoRec: {:?}", cmd);
+                                info!("Remaining bytes: {}", rest.len());
+                                video_codec_params=cmd;
+                                break;
+                            }
+                            Err(e) => {
+                                error!("postcard parsing error: {:?}", e);
+                            }
+                        }
+                    }
+                    else
+                    {
+                        info!("tsk_scrcpy_video unknown command received");
+                    }
+
+                }
+            }
+            Err(broadcast::error::RecvError::Lagged(count)) => {
+                // You missed some messages, count = number of skipped messages
+                println!("Missed {} messages", count);
+            }
+            Err(broadcast::error::RecvError::Closed) => {
+                // Sender has been dropped, exit loop
+                println!("Sender closed, exiting loop");
+            }
+        }
+    }
+
     loop
     {
         if let Some(device)=adb::get_first_adb_device(config.clone()).await {
@@ -569,11 +620,6 @@ async fn tsk_adb_scrcpy(
                 info!("ADB port forwarding done to {}", SCRCPY_PORT);
             }
             tokio::time::sleep(Duration::from_secs(1)).await;//give some time to forward port, it is needed?
-            let video_bitrate=8000000;
-            let video_res_w=800;
-            let video_res_h=480;
-            let video_fps=60;
-            let screen_dpi=160;
             let audio_bitrate:i32=48000;
 
             tokio::time::sleep(Duration::from_secs(1)).await;//give some time to map adb sockets
@@ -597,12 +643,12 @@ async fn tsk_adb_scrcpy(
             cmd_shell.push("cleanup=true".to_string());
             cmd_shell.push("audio_codec=aac".to_string());
             cmd_shell.push(format!("audio_bit_rate={}", audio_bitrate));
-            cmd_shell.push(format!("max_size={}", video_res_w));
+            cmd_shell.push(format!("max_size={}", video_codec_params.res_w));
             cmd_shell.push("video_codec=h264".to_string());
             cmd_shell.push("video_codec_options=profile:int=1".to_string());//AVC base profile, no B frames
-            cmd_shell.push(format!("video_bit_rate={}", video_bitrate));
-            cmd_shell.push(format!("new_display={}x{}/{}", video_res_w, video_res_h, screen_dpi));
-            cmd_shell.push(format!("max_fps={}", video_fps));
+            cmd_shell.push(format!("video_bit_rate={}", video_codec_params.bitrate));
+            cmd_shell.push(format!("new_display={}x{}/{}", video_codec_params.res_w, video_codec_params.res_h, video_codec_params.dpi));
+            cmd_shell.push(format!("max_fps={}", video_codec_params.fps));
             let (mut shell, mut sh_reader,line)=adb::shell_cmd(cmd_shell).await?;
             info!("ADB video shell response: {:?}", line);
             if line.contains("[server] INFO: Device:") && shell.id().is_some()
@@ -718,12 +764,14 @@ pub async fn io_loop(
     let (tx_cmd_audio, rx_cmd_audio)=broadcast::channel::<Packet>(5);
     let (tx_cmd_video, rx_cmd_video)=broadcast::channel::<Packet>(5);
     let (tx_scrcpy, rx_scrcpy)=broadcast::channel::<Packet>(30);
+    let (tx_scrcpy_cmd, rx_scrcpy_cmd)=broadcast::channel::<Packet>(5);
 
     let mut tsk_adb;
     tsk_adb = tokio_uring::spawn(tsk_adb_scrcpy(
         rx_cmd_video,
         rx_cmd_audio,
         tx_scrcpy,
+        rx_scrcpy_cmd,
         cfg,
     ));
     loop {
@@ -833,7 +881,8 @@ pub async fn io_loop(
             rx_srv,
             txr_srv,
             tx_cmd_video.clone(),
-            tx_cmd_audio.clone()
+            tx_cmd_audio.clone(),
+            tx_scrcpy_cmd.clone()
         ));
         
         // Thread for monitoring transfer
