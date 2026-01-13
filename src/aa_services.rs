@@ -168,9 +168,8 @@ pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, 
             else if message_id == MESSAGE_CUSTOM_CMD  as i32
             {
                 info!("{} Received {} message", ch_id.to_string(), message_id);
-                let data = &pkt.payload[2..]; // start of message data, without message_id
-                if let Ok(msg) = CustomCommandMessage::parse_from_bytes(&data) {
-                    if msg.cmd() == CustomCommand::CMD_OPEN_CH
+                let cmd: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
+                    if cmd == CustomCommand::CMD_OPEN_CH as i32
                     {
                         let mut open_req = ChannelOpenRequest::new();
                         open_req.set_priority(0);
@@ -187,10 +186,6 @@ pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, 
                         };
                         tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
                     }
-                }
-                else {
-                    error!( "{} CustomCommandMessage couldn't be parsed",get_name());
-                }
             }
             else {
                 info!( "{} Unknown message ID: {} received", get_name(), message_id);
@@ -942,9 +937,8 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
             else if message_id == ControlMessageType::MESSAGE_CUSTOM_CMD  as i32
             {
                 info!("{} Received {} message", ch_id.to_string(), message_id);
-                let data = &pkt.payload[2..]; // start of message data, without message_id
-                if let Ok(msg) = CustomCommandMessage::parse_from_bytes(&data) {
-                    if msg.cmd() == CustomCommand::CMD_OPEN_CH
+                let cmd: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
+                    if cmd == CustomCommand::CMD_OPEN_CH as i32
                     {
                         let mut open_req = ChannelOpenRequest::new();
                         open_req.set_priority(0);
@@ -963,7 +957,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                             error!( "{} response send error",get_name());
                         };
                     }
-                    else if (msg.cmd() == CustomCommand::CMD_SETUP_CH) && enabled
+                    else if (cmd == CustomCommand::CMD_SETUP_CH as i32) && enabled
                     {
                         /*let mut cfg_req= Setup::new();
                         cfg_req.set_type(MediaCodecType::MEDIA_CODEC_VIDEO_H264_BP);
@@ -980,10 +974,6 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         };
                         tx_srv.send(pkt_rsp).await.expect("TODO: panic message");*/
                     }
-                }
-                else {
-                    error!( "{} CustomCommandMessage couldn't be parsed",get_name());
-                }
             }
             else if message_id == MediaMessageId::MEDIA_MESSAGE_CONFIG  as i32
             {
@@ -1240,10 +1230,9 @@ pub async fn th_media_sink_audio_guidance(ch_id: i32, enabled:bool, tx_srv: Send
             }
             else if message_id == MESSAGE_CUSTOM_CMD  as i32
             {
+                let cmd: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
                 info!("{} Received {} message", ch_id.to_string(), message_id);
-                let data = &pkt.payload[2..]; // start of message data, without message_id
-                if let Ok(msg) = CustomCommandMessage::parse_from_bytes(&data) {
-                    if msg.cmd() == CustomCommand::CMD_OPEN_CH
+                    if cmd == CustomCommand::CMD_OPEN_CH as i32
                     {
                         let mut open_req = ChannelOpenRequest::new();
                         open_req.set_priority(0);
@@ -1258,11 +1247,11 @@ pub async fn th_media_sink_audio_guidance(ch_id: i32, enabled:bool, tx_srv: Send
                             final_length: None,
                             payload: payload,
                         };
-                        if let Err(_) = tx_srv.send(pkt_rsp).await{
+                        if let Err(_) = tx_srv.send(pkt_rsp).await {
                             error!( "{} response send error",get_name());
                         };
                     }
-                    else if (msg.cmd() == CustomCommand::CMD_SETUP_CH) && enabled
+                    else if (cmd == CustomCommand::CMD_SETUP_CH as i32) && enabled
                     {
                         /*let mut cfg_req= Setup::new();
                         cfg_req.set_type(MediaCodecType::MEDIA_CODEC_AUDIO_PCM);
@@ -1279,10 +1268,6 @@ pub async fn th_media_sink_audio_guidance(ch_id: i32, enabled:bool, tx_srv: Send
                         };
                         tx_srv.send(pkt_rsp).await.expect("TODO: panic message");*/
                     }
-                }
-                else {
-                    error!( "{} CustomCommandMessage couldn't be parsed",get_name());
-                }
             }
             else if message_id == MEDIA_MESSAGE_CONFIG  as i32
             {
@@ -1383,9 +1368,8 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
             else if message_id == MESSAGE_CUSTOM_CMD  as i32
             {
                 info!("{} Received {} message", ch_id.to_string(), message_id);
-                let data = &pkt.payload[2..]; // start of message data, without message_id
-                if let Ok(msg) = CustomCommandMessage::parse_from_bytes(&data) {
-                    if msg.cmd() == CustomCommand::CMD_OPEN_CH
+                let cmd: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
+                    if cmd == CustomCommand::CMD_OPEN_CH as i32
                     {
                         let mut open_req = ChannelOpenRequest::new();
                         open_req.set_priority(0);
@@ -1404,7 +1388,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                             error!( "{} response send error",get_name());
                         };
                     }
-                    else if (msg.cmd() == CustomCommand::CMD_SETUP_CH) && enabled
+                    else if (cmd == CustomCommand::CMD_SETUP_CH as i32) && enabled
                     {
                         /*let mut cfg_req= Setup::new();
                         cfg_req.set_type(MediaCodecType::MEDIA_CODEC_AUDIO_PCM);
@@ -1421,10 +1405,6 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                         };
                         tx_srv.send(pkt_rsp).await.expect("TODO: panic message");*/
                     }
-                }
-                else {
-                    error!( "{} CustomCommandMessage couldn't be parsed",get_name());
-                }
             }
             else if message_id == MEDIA_MESSAGE_CONFIG  as i32
             {
@@ -1441,12 +1421,10 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                         {
                             audio_stream_started =true;
                             info!( "{} Send custom CMD_START_AUDIO_RECORDING for ch {}",get_name(), ch_id);
-                            let mut cmd_req = CustomCommandMessage::new();
-                            cmd_req.set_cmd(CustomCommand::CMD_START_AUDIO_RECORDING);
 
-                            let mut payload: Vec<u8> = cmd_req.write_to_bytes()?;
-                            payload.insert(0, ((MESSAGE_CUSTOM_CMD as u16) >> 8) as u8);
-                            payload.insert(1, ((MESSAGE_CUSTOM_CMD as u16) & 0xff) as u8);
+                            let mut payload = Vec::new();
+                            payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+                            payload.extend_from_slice(&(CustomCommand::CMD_START_AUDIO_RECORDING as u16).to_be_bytes());
                             payload.extend(&max_unack.to_be_bytes());
                             let pkt_rsp = Packet {
                                 channel: ch_id as u8,
@@ -1519,9 +1497,8 @@ pub async fn th_media_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, m
             else if message_id == MESSAGE_CUSTOM_CMD  as i32
             {
                 info!("{} Received {} message", ch_id.to_string(), message_id);
-                let data = &pkt.payload[2..]; // start of message data, without message_id
-                if let Ok(msg) = CustomCommandMessage::parse_from_bytes(&data) {
-                    if msg.cmd() == CustomCommand::CMD_OPEN_CH
+                let cmd: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
+                    if cmd == CustomCommand::CMD_OPEN_CH as i32
                     {
                         let mut open_req = ChannelOpenRequest::new();
                         open_req.set_priority(0);
@@ -1540,10 +1517,6 @@ pub async fn th_media_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, m
                             error!( "{} response send error",get_name());
                         };
                     }
-                }
-                else {
-                    error!( "{} CustomCommandMessage couldn't be parsed",get_name());
-                }
             }
             else {
                 info!( "{} Unknown message ID: {} received", get_name(), message_id);
@@ -1582,9 +1555,8 @@ pub async fn th_input_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, m
             else if message_id == MESSAGE_CUSTOM_CMD  as i32
             {
                 info!("{} Received {} message", ch_id.to_string(), message_id);
-                let data = &pkt.payload[2..]; // start of message data, without message_id
-                if let Ok(msg) = CustomCommandMessage::parse_from_bytes(&data) {
-                    if msg.cmd() == CustomCommand::CMD_OPEN_CH
+                let cmd: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
+                    if cmd == CustomCommand::CMD_OPEN_CH as i32
                     {
                         let mut open_req = ChannelOpenRequest::new();
                         open_req.set_priority(0);
@@ -1603,10 +1575,6 @@ pub async fn th_input_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, m
                             error!( "{} response send error",get_name());
                         };
                     }
-                }
-                else {
-                    error!( "{} CustomCommandMessage couldn't be parsed",get_name());
-                }
             }
             else {
                 info!( "{} Unknown message ID: {} received", get_name(), message_id);
@@ -1644,9 +1612,8 @@ pub async fn th_vendor_extension(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
             else if message_id == MESSAGE_CUSTOM_CMD  as i32
             {
                 info!("{} Received {} message", ch_id.to_string(), message_id);
-                let data = &pkt.payload[2..]; // start of message data, without message_id
-                if let Ok(msg) = CustomCommandMessage::parse_from_bytes(&data) {
-                    if msg.cmd() == CustomCommand::CMD_OPEN_CH
+                let cmd: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
+                    if cmd == CustomCommand::CMD_OPEN_CH as i32
                     {
                         let mut open_req = ChannelOpenRequest::new();
                         open_req.set_priority(0);
@@ -1665,10 +1632,6 @@ pub async fn th_vendor_extension(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                             error!( "{} response send error",get_name());
                         };
                     }
-                }
-                else {
-                    error!( "{} CustomCommandMessage couldn't be parsed",get_name());
-                }
             }
             else {
                 info!( "{} Unknown message ID: {} received", get_name(), message_id);
@@ -1706,9 +1669,8 @@ pub async fn th_bluetooth(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut 
             else if message_id == MESSAGE_CUSTOM_CMD  as i32
             {
                 info!("{} Received {} message", ch_id.to_string(), message_id);
-                let data = &pkt.payload[2..]; // start of message data, without message_id
-                if let Ok(msg) = CustomCommandMessage::parse_from_bytes(&data) {
-                    if msg.cmd() == CustomCommand::CMD_OPEN_CH
+                let cmd: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
+                    if cmd == CustomCommand::CMD_OPEN_CH as i32
                     {
                         let mut open_req = ChannelOpenRequest::new();
                         open_req.set_priority(0);
@@ -1727,10 +1689,6 @@ pub async fn th_bluetooth(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut 
                             error!( "{} response send error",get_name());
                         };
                     }
-                }
-                else {
-                    error!( "{} CustomCommandMessage couldn't be parsed",get_name());
-                }
             }
             else {
                 info!( "{} Unknown message ID: {} received", get_name(), message_id);

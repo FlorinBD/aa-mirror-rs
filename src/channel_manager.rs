@@ -957,12 +957,10 @@ pub async fn ch_proxy(
                             for (idx, _) in srv_senders.iter().enumerate()
                             {
                                 info!( "{} Send custom CMD_OPEN_CH for ch {}",get_name(), channel_status[idx].ch_id);
-                                let mut cmd_req = CustomCommandMessage::new();
-                                cmd_req.set_cmd(CustomCommand::CMD_OPEN_CH);
-
-                                let mut payload: Vec<u8> = cmd_req.write_to_bytes()?;
-                                payload.insert(0, ((MESSAGE_CUSTOM_CMD as u16) >> 8) as u8);
-                                payload.insert(1, ((MESSAGE_CUSTOM_CMD as u16) & 0xff) as u8);
+                                
+                                let mut payload= Vec::new();
+                                payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+                                payload.extend_from_slice(&(CustomCommand::CMD_OPEN_CH as u16).to_be_bytes());
                                 let pkt_rsp = Packet {
                                     channel: (channel_status[idx].ch_id) as u8,
                                     flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
