@@ -290,7 +290,7 @@ async fn tcp_wait_for_md_connection(listener: &mut TcpListener) -> Result<TcpStr
 
 async fn tsk_scrcpy_video(
     mut stream: TcpStream,
-    mut cmd_rx: broadcast::Receiver<Packet>,
+    mut cmd_rx: flume::Receiver<Packet>,
     video_tx: broadcast::Sender<Packet>,
 ) -> Result<()> {
     info!("Starting video server!");
@@ -445,7 +445,7 @@ async fn tsk_scrcpy_video(
 
 async fn tsk_scrcpy_audio(
     mut stream: TcpStream,
-    mut cmd_rx: broadcast::Receiver<Packet>,
+    mut cmd_rx: flume::Receiver<Packet>,
     audio_tx: broadcast::Sender<Packet>,
 ) -> Result<()> {
 
@@ -580,8 +580,8 @@ async fn tsk_scrcpy_audio(
     Ok(())
 }
 async fn tsk_adb_scrcpy(
-    srv_cmd_rx_video: broadcast::Receiver<Packet>,
-    srv_cmd_rx_audio: broadcast::Receiver<Packet>,
+    srv_cmd_rx_video: flume::Receiver<Packet>,
+    srv_cmd_rx_audio: flume::Receiver<Packet>,
     srv_tx: broadcast::Sender<Packet>,
     mut srv_cmd_rx_scrcpy: broadcast::Receiver<Packet>,
     config: AppConfig,
@@ -737,16 +737,15 @@ async fn tsk_adb_scrcpy(
                 hnd_scrcpy_video = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_video(
                         video_stream,
-                        srv_cmd_rx_video.resubscribe(),
-                        video_tx,
-                                                    ).await;
+                        srv_cmd_rx_video.clone(),
+                        video_tx).await;
                     let _ = done_th_tx_video.send(res);
 
                 });
                 hnd_scrcpy_audio = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_audio(
                         audio_stream,
-                        srv_cmd_rx_audio.resubscribe(),
+                        srv_cmd_rx_audio.clone(),
                         audio_tx,
                                                     ).await;
                     let _ = done_th_tx_audio.send(res);
@@ -825,8 +824,8 @@ pub async fn io_loop(
     let hex_requested = cfg.hexdump_level;
 
     //mpsc for scrcpy
-    let (tx_cmd_audio, rx_cmd_audio)=broadcast::channel::<Packet>(5);
-    let (tx_cmd_video, rx_cmd_video)=broadcast::channel::<Packet>(5);
+    let (tx_cmd_audio, rx_cmd_audio)=flume::unbounded::<Packet>();
+    let (tx_cmd_video, rx_cmd_video)=flume::unbounded::<Packet>();
     let (tx_scrcpy, rx_scrcpy)=broadcast::channel::<Packet>(30);
     let (tx_scrcpy_cmd, rx_scrcpy_cmd)=broadcast::channel::<Packet>(5);
 

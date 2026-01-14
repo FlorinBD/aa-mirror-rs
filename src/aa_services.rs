@@ -1085,7 +1085,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                             final_length: None,
                             payload: payload.clone(),
                         };
-                        scrcpy_cmd.send(pkt_rsp).unwrap();
+                        scrcpy_cmd.send(pkt_rsp)?;
                     }
                 }
                 else
@@ -1431,7 +1431,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
             else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK  as i32
             {
                 info!("{} Received {} message, proxy to SCRCPY", ch_id.to_string(), message_id);
-                scrcpy_cmd.send(pkt).unwrap();
+                scrcpy_cmd.send(pkt)?;
             }
             else
             {
