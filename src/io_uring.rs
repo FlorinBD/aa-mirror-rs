@@ -294,7 +294,7 @@ async fn tsk_scrcpy_video(
     video_tx: broadcast::Sender<Packet>,
 ) -> Result<()> {
     info!("Starting video server!");
-    let mut streaming_on=true;
+    let mut streaming_on=false;
     let mut buf = vec![0u8; 0xffff];
     let codec_buf = vec![0u8; 12];
     let mut i=0;
@@ -430,7 +430,7 @@ async fn tsk_scrcpy_audio(
 ) -> Result<()> {
 
     info!("Starting audio server!");
-    let mut streaming_on=true;
+    let mut streaming_on=false;
     let mut ch_id:u8=0;
     //discard codec metadata
     let codec_buf = vec![0u8; 4];

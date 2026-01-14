@@ -1076,7 +1076,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         let bytes: Vec<u8> = postcard::to_stdvec(&struc)?;
                         let mut payload = Vec::new();
                         payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
-                        payload.extend_from_slice(&(CustomCommand::CMD_START_DEVICE_RECORDING as u16).to_be_bytes());
+                        payload.extend_from_slice(&(CustomCommand::CMD_START_VIDEO_RECORDING as u16).to_be_bytes());
                         payload.extend_from_slice(&bytes);
 
                         let pkt_rsp = Packet {
@@ -1422,10 +1422,13 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                             audio_stream_started =true;
                             info!( "{} Send custom CMD_START_AUDIO_RECORDING for ch {}",get_name(), ch_id);
 
+                            let struc = CmdStartMediaRec { max_unack:max_unack};
+                            let bytes: Vec<u8> = postcard::to_stdvec(&struc)?;
                             let mut payload = Vec::new();
                             payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
                             payload.extend_from_slice(&(CustomCommand::CMD_START_AUDIO_RECORDING as u16).to_be_bytes());
-                            payload.extend(&max_unack.to_be_bytes());
+                            payload.extend_from_slice(&bytes);
+
                             let pkt_rsp = Packet {
                                 channel: ch_id as u8,
                                 flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
