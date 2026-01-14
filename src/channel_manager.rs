@@ -909,7 +909,7 @@ pub async fn ch_proxy(
             final_length: None,
             payload: payload.clone(),
         };
-        scrcpy_cmd.send(pkt_rsp).unwrap();
+        scrcpy_cmd.send_async(pkt_rsp).await?;
 
     }
     else {
