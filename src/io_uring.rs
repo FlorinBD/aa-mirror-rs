@@ -582,8 +582,8 @@ async fn tsk_scrcpy_audio(
 async fn tsk_adb_scrcpy(
     srv_cmd_rx_video: flume::Receiver<Packet>,
     srv_cmd_rx_audio: flume::Receiver<Packet>,
-    srv_tx: broadcast::Sender<Packet>,
-    mut srv_cmd_rx_scrcpy: broadcast::Receiver<Packet>,
+    srv_tx: flume::Sender<Packet>,
+    mut srv_cmd_rx_scrcpy: flume::Receiver<Packet>,
     config: AppConfig,
 ) -> Result<()> {
     info!("{}: ADB task started",NAME);
@@ -826,8 +826,8 @@ pub async fn io_loop(
     //mpsc for scrcpy
     let (tx_cmd_audio, rx_cmd_audio)=flume::unbounded::<Packet>();
     let (tx_cmd_video, rx_cmd_video)=flume::unbounded::<Packet>();
-    let (tx_scrcpy, rx_scrcpy)=broadcast::channel::<Packet>(30);
-    let (tx_scrcpy_cmd, rx_scrcpy_cmd)=broadcast::channel::<Packet>(5);
+    let (tx_scrcpy, rx_scrcpy)=flume::unbounded::<Packet>();
+    let (tx_scrcpy_cmd, rx_scrcpy_cmd)=flume::unbounded::<Packet>();
 
     let mut tsk_adb;
     tsk_adb = tokio_uring::spawn(tsk_adb_scrcpy(
@@ -934,7 +934,7 @@ pub async fn io_loop(
         }
 
         //service packet proxy
-        tsk_packet_proxy = tokio_uring::spawn(packet_tls_proxy(hu_w, rxr_hu, rxr_srv, tx_srv, rx_scrcpy.resubscribe(), stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested));
+        tsk_packet_proxy = tokio_uring::spawn(packet_tls_proxy(hu_w, rxr_hu, rxr_srv, tx_srv, rx_scrcpy.clone(), stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested));
 
         // dedicated reading threads:
         tsk_hu_read = tokio_uring::spawn(endpoint_reader(hu_r, txr_hu));

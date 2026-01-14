@@ -363,7 +363,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
     mut hu_rx: Receiver<Packet>,
     mut srv_rx: Receiver<Packet>,
     srv_tx: Sender<Packet>,
-    mut scrcpy_rx: broadcast::Receiver<Packet>,
+    mut scrcpy_rx: flume::Receiver<Packet>,
     r_statistics: Arc<AtomicUsize>,
     w_statistics: Arc<AtomicUsize>,
     dmp_level:HexdumpLevel,
@@ -665,9 +665,9 @@ fn get_service_index(arr:&Vec<ServiceStatus>, ch:i32)->usize
 pub async fn ch_proxy(
     mut rx_srv: Receiver<Packet>,
     mut tx_srv: Sender<Packet>,
-    video_cmd: broadcast::Sender<Packet>,
-    audio_cmd: broadcast::Sender<Packet>,
-    scrcpy_cmd: broadcast::Sender<Packet>,
+    video_cmd: flume::Sender<Packet>,
+    audio_cmd: flume::Sender<Packet>,
+    scrcpy_cmd: flume::Sender<Packet>,
 ) -> Result<()> {
     info!( "{} Entering channel manager",get_name());
    // waiting for initial version frame (HU is starting transmission)
