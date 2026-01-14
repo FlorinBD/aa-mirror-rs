@@ -633,7 +633,15 @@ async fn tsk_adb_scrcpy(
             }
         }
     }
-
+    let cmd_disconnect = Command::new("adb")
+        .arg("disconnect")
+        .output().await?;
+    let lines=adb::parse_response_lines(cmd_disconnect.stdout).expect("TODO: panic message");
+    if lines.len() > 0 {
+        for line in lines {
+            info!("ADB disconnect response: {:?}", line);
+        }
+    }
     loop
     {
         if let Some(device)=adb::get_first_adb_device(config.clone()).await {

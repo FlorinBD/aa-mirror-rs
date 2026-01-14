@@ -72,9 +72,6 @@ pub(crate) async fn get_first_adb_device(config: AppConfig) ->Option<String>
         {
             info!("{:?} found port {} open, trying to connect to ADB demon", outcome.target_ip, dev_port);
             let cmd_connect = Command::new("adb")
-                .arg("disconnect")
-                .output().await.unwrap();
-            let cmd_connect = Command::new("adb")
                 .arg("connect")
                 .arg(dev_socket.to_string())
                 .output().await.unwrap();
