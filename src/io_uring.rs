@@ -452,6 +452,8 @@ async fn tsk_scrcpy_audio(
     info!("Starting audio server!");
     let mut streaming_on=false;
     let mut ch_id:u8=0;
+    let mut max_unack=0;
+    let mut act_unack=0;
     //discard codec metadata
     let codec_buf = vec![0u8; 4];
     let (res, buf_out) = stream.read(codec_buf).await;
@@ -499,7 +501,7 @@ async fn tsk_scrcpy_audio(
             info!("Audio task Read {} bytes: {:02x?}", n, &buf_out[..dbg_len]);
             i=i+1;
         }
-        if streaming_on
+        if streaming_on && (act_unack<max_unack)
         {
             let mut payload: Vec<u8>=Vec::new();
             payload.extend_from_slice(&timestamp.to_be_bytes());
@@ -523,6 +525,54 @@ async fn tsk_scrcpy_audio(
         match cmd_rx.try_recv() {
             Ok(pkt) => {
                 info!("tsk_scrcpy_audio Received command packet {:02x?}", pkt);
+                let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+                if message_id == MESSAGE_CUSTOM_CMD  as i32
+                {
+                    let cmd_id: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
+                    let data = &pkt.payload[4..]; // start of message data, without message_id
+                    if cmd_id == CustomCommand::CMD_START_AUDIO_RECORDING as i32
+                    {
+                        //streaming_on = true;
+                        info!("tsk_scrcpy_audio Audio streaming started");
+                        match postcard::take_from_bytes::<CmdStartMediaRec>(data) {
+                            Ok((cmd, rest)) => {
+                                ch_id = pkt.channel;
+                                info!("Parsed CmdStartMediaRec: {:?}", cmd);
+                                info!("Remaining bytes: {}", rest.len());
+                                max_unack=cmd.max_unack;
+                            }
+                            Err(e) => {
+                                error!("postcard parsing error: {:?}", e);
+                            }
+                        }
+                    }
+                    else if cmd_id == CustomCommand::CMD_STOP_AUDIO_RECORDING as i32
+                    {
+                        act_unack=max_unack;
+                        streaming_on = false;
+                        info!("tsk_scrcpy_audio Video streaming stopped");
+                    }
+
+                }
+                else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK  as i32
+                {
+                    info!("{} Received {} message", ch_id.to_string(), message_id);
+                    let data = &pkt.payload[2..]; // start of message data, without message_id
+                    if  let Ok(rsp) = Ack::parse_from_bytes(&data)
+                    {
+                        //info!( "{}, channel {:?}: ACK, timestamp_ns: {:?}", get_name(), pkt.channel, rsp.receive_timestamp_ns[0]);
+                        info!( "tsk_scrcpy_audio: media ACK received, sending next frame");
+                        act_unack=0;
+                    }
+                    else
+                    {
+                        error!( "tsk_scrcpy_audio Unable to parse MEDIA ACK message");
+                    }
+                }
+                else
+                {
+                    error!("tsk_scrcpy_video unknown message id: {}", message_id);
+                }
             }
             _ => {}
         }
