@@ -295,6 +295,8 @@ async fn tsk_scrcpy_video(
 ) -> Result<()> {
     info!("Starting video server!");
     let mut streaming_on=false;
+    let mut max_unack=0;
+    let mut act_unack=0;
     let mut buf = vec![0u8; 0xffff];
     let codec_buf = vec![0u8; 12];
     let mut i=0;
@@ -349,7 +351,7 @@ async fn tsk_scrcpy_video(
             info!("Video task Read {} bytes: {:02x?}", n, &buf_out[..dbg_len]);
             i=i+1;
         }
-        if streaming_on
+        if streaming_on && (act_unack<max_unack)
         {
             let pts = u64::from_be_bytes(buf_out[0..8].try_into().unwrap());
             let rec_ts=pts & 0x3FFF_FFFF_FFFF_FFFFu64;
@@ -378,6 +380,7 @@ async fn tsk_scrcpy_video(
             if let Err(_) = video_tx.send(pkt_rsp){
                 error!( "SCRCPY video frame send error");
             };
+            act_unack=act_unack+1;
         }
         // Reuse buffer
         buf = buf_out;
@@ -399,6 +402,7 @@ async fn tsk_scrcpy_video(
                                     ch_id = pkt.channel;
                                     info!("Parsed CmdStartVideoRec: {:?}", cmd);
                                     info!("Remaining bytes: {}", rest.len());
+                                    max_unack=cmd.max_unack;
                                 }
                                 Err(e) => {
                                     error!("postcard parsing error: {:?}", e);
@@ -407,10 +411,26 @@ async fn tsk_scrcpy_video(
                         }
                         else if cmd_id == CustomCommand::CMD_STOP_VIDEO_RECORDING as i32
                         {
+                            act_unack=max_unack;
                             streaming_on = false;
                             info!("tsk_scrcpy_video Video streaming stopped");
                         }
 
+                }
+                else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK  as i32
+                {
+                    info!("{} Received {} message", ch_id.to_string(), message_id);
+                    let data = &pkt.payload[2..]; // start of message data, without message_id
+                    if  let Ok(rsp) = Ack::parse_from_bytes(&data)
+                    {
+                        //info!( "{}, channel {:?}: ACK, timestamp_ns: {:?}", get_name(), pkt.channel, rsp.receive_timestamp_ns[0]);
+                        info!( "tsk_scrcpy_video: video ACK received, sending next frame");
+                        act_unack=0;
+                    }
+                    else
+                    {
+                        error!( "tsk_scrcpy_video Unable to parse received message");
+                    }
                 }
                 else
                 {

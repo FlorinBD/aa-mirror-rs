@@ -1095,18 +1095,8 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
             }
             else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK  as i32
             {
-                info!("{} Received {} message", ch_id.to_string(), message_id);
-                let data = &pkt.payload[2..]; // start of message data, without message_id
-                if  let Ok(rsp) = Ack::parse_from_bytes(&data)
-                {
-                    //info!( "{}, channel {:?}: ACK, timestamp_ns: {:?}", get_name(), pkt.channel, rsp.receive_timestamp_ns[0]);
-                    info!( "{}, channel {:?}: video ACK received, sending next frame", get_name(), pkt.channel);
-                    //FIXME send next frames
-                }
-                else
-                {
-                    error!( "{}, channel {:?}: Unable to parse received message", get_name(), pkt.channel);
-                }
+                info!( "{}, channel {:?}: video ACK received, proxy to SCRCPY", get_name(), pkt.channel);
+                scrcpy_cmd.send(pkt).unwrap();
             }
             else
             {
@@ -1297,16 +1287,6 @@ pub async fn th_media_sink_audio_guidance(ch_id: i32, enabled:bool, tx_srv: Send
             else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK  as i32
             {
                 info!("{} Received {} message", ch_id.to_string(), message_id);
-                let data = &pkt.payload[2..]; // start of message data, without message_id
-                if  let Ok(rsp) = Ack::parse_from_bytes(&data)
-                {
-                    info!( "{}, channel {:?}: ACK, timestamp_ns: {:?}", get_name(), pkt.channel, rsp.receive_timestamp_ns[0]);
-                    //FIXME send next frames
-                }
-                else
-                {
-                    error!( "{}, channel {:?}: Unable to parse received message", get_name(), pkt.channel);
-                }
             }
             else
             {
@@ -1450,17 +1430,8 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
             }
             else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK  as i32
             {
-                info!("{} Received {} message", ch_id.to_string(), message_id);
-                let data = &pkt.payload[2..]; // start of message data, without message_id
-                if  let Ok(rsp) = Ack::parse_from_bytes(&data)
-                {
-                    info!( "{}, channel {:?}: ACK, timestamp_ns: {:?}", get_name(), pkt.channel, rsp.receive_timestamp_ns[0]);
-                    //FIXME send next frames
-                }
-                else
-                {
-                    error!( "{}, channel {:?}: Unable to parse received message", get_name(), pkt.channel);
-                }
+                info!("{} Received {} message, proxy to SCRCPY", ch_id.to_string(), message_id);
+                scrcpy_cmd.send(pkt).unwrap();
             }
             else
             {
