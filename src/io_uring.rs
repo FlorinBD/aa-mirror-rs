@@ -13,7 +13,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::broadcast::Sender as BroadcastSender;
 use tokio::sync::mpsc::{Receiver, Sender};
-use tokio::sync::{broadcast, mpsc, oneshot, Mutex, Notify};
+use tokio::sync::{mpsc, oneshot, Mutex, Notify};
 use tokio::task::JoinHandle;
 use tokio::time::{sleep, timeout};
 use tokio_uring::buf::BoundedBuf;
@@ -291,7 +291,7 @@ async fn tcp_wait_for_md_connection(listener: &mut TcpListener) -> Result<TcpStr
 async fn tsk_scrcpy_video(
     mut stream: TcpStream,
     mut cmd_rx: flume::Receiver<Packet>,
-    video_tx: broadcast::Sender<Packet>,
+    video_tx: flume::Sender<Packet>,
 ) -> Result<()> {
     info!("Starting video server!");
     let mut streaming_on=false;
@@ -446,7 +446,7 @@ async fn tsk_scrcpy_video(
 async fn tsk_scrcpy_audio(
     mut stream: TcpStream,
     mut cmd_rx: flume::Receiver<Packet>,
-    audio_tx: broadcast::Sender<Packet>,
+    audio_tx: flume::Sender<Packet>,
 ) -> Result<()> {
 
     info!("Starting audio server!");
@@ -597,7 +597,7 @@ async fn tsk_adb_scrcpy(
     let mut video_codec_params = CmdStartStreaming::default();
     //wait for custom CMD to start recording
     loop {
-        match srv_cmd_rx_scrcpy.recv().await {
+        match srv_cmd_rx_scrcpy.recv_async().await {
             Ok(pkt) => {
                 // Received a packet
                 info!("tsk_scrcpy_video Received command packet {:02x?}", pkt);
@@ -627,11 +627,7 @@ async fn tsk_adb_scrcpy(
 
                 }
             }
-            Err(broadcast::error::RecvError::Lagged(count)) => {
-                // You missed some messages, count = number of skipped messages
-                println!("Missed {} messages", count);
-            }
-            Err(broadcast::error::RecvError::Closed) => {
+            Err(flume::RecvError::Disconnected) => {
                 // Sender has been dropped, exit loop
                 println!("Sender closed, exiting loop");
             }
