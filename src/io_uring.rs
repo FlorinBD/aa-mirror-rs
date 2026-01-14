@@ -344,11 +344,11 @@ async fn tsk_scrcpy_video(
             )));
         }
         let dbg_len=min(n,16);
-        /*if i<5
+        if i<5
         {
             info!("Video task Read {} bytes: {:02x?}", n, &buf_out[..dbg_len]);
             i=i+1;
-        }*/
+        }
         if streaming_on
         {
             let pts = u64::from_be_bytes(buf_out[0..8].try_into().unwrap());
