@@ -295,7 +295,7 @@ async fn tsk_scrcpy_video(
 ) -> Result<()> {
     info!("Starting video server!");
     let mut streaming_on=false;
-    let mut max_unack=0;
+    let mut max_unack=2;
     let mut act_unack=0;
     let mut buf = vec![0u8; 0xffff];
     let codec_buf = vec![0u8; 12];
