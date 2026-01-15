@@ -351,7 +351,7 @@ async fn tsk_scrcpy_video(
             info!("Video task Read {} bytes: {:02x?}", n, &buf_out[..dbg_len]);
             i=i+1;
         }
-        if streaming_on && (act_unack<max_unack)
+        if act_unack < max_unack
         {
             let pts = u64::from_be_bytes(buf_out[0..8].try_into().unwrap());
             let rec_ts=pts & 0x3FFF_FFFF_FFFF_FFFFu64;
