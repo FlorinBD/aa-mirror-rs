@@ -294,7 +294,7 @@ async fn tsk_scrcpy_video(
     video_tx: flume::Sender<Packet>,
 ) -> Result<()> {
     info!("Starting video server!");
-    let mut streaming_on=false;
+    let mut streaming_on=true;//start streaming immediately
     let mut max_unack=2;
     let mut act_unack=0;
     let mut buf = vec![0u8; 0xffff];
@@ -345,13 +345,13 @@ async fn tsk_scrcpy_video(
                 "Video connection closed by server?",
             )));
         }
-        let dbg_len=min(n,16);
+        let dbg_len=min(n,50);
         if i<5
         {
             info!("Video task Read {} bytes: {:02x?}", n, &buf_out[..dbg_len]);
             i=i+1;
         }
-        if act_unack < max_unack
+        if streaming_on && (act_unack < max_unack)
         {
             let pts = u64::from_be_bytes(buf_out[0..8].try_into().unwrap());
             let rec_ts=pts & 0x3FFF_FFFF_FFFF_FFFFu64;
@@ -713,7 +713,7 @@ async fn tsk_adb_scrcpy(
             cmd_shell.push(format!("audio_bit_rate={}", audio_bitrate));
             cmd_shell.push(format!("max_size={}", video_codec_params.res_w));
             cmd_shell.push("video_codec=h264".to_string());
-            cmd_shell.push("video_codec_options=profile:int=1".to_string());//AVC base profile, no B frames
+            cmd_shell.push("video_codec_options=profile:int=1".to_string());//AVC base profile, no B frames, only I and P frames
             cmd_shell.push(format!("video_bit_rate={}", video_codec_params.bitrate));
             cmd_shell.push(format!("new_display={}x{}/{}", video_codec_params.res_w, video_codec_params.res_h, video_codec_params.dpi));
             cmd_shell.push(format!("max_fps={}", video_codec_params.fps));
