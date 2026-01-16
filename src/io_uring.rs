@@ -403,13 +403,13 @@ async fn tsk_scrcpy_video(
         }
 
         let pts = u64::from_be_bytes(buf_hd[0..8].try_into()?);
-        let frame_size=i32::from_be_bytes(buf_hd[8..12].try_into()?);
+        let frame_size=u32::from_be_bytes(buf_hd[8..12].try_into()?);
 
         let frame_buf = read_exact(&stream, vec![0u8; frame_size as usize]).await?;
-        let dbg_len=min(frame_size,50);
+        let dbg_len=min(frame_size,32);
         if i<5
         {
-            info!("Video task got frame size {}, bytes: {:02x?}", frame_buf.len() , &frame_buf[..dbg_len as usize]);
+            info!("Video task got frame act size: {}, defined size: {}, bytes: {:02x?}", frame_buf.len(), frame_size , &frame_buf[..dbg_len as usize]);
             i=i+1;
         }
         if streaming_on && (act_unack < max_unack)
