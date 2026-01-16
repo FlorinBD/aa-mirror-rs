@@ -297,8 +297,9 @@ async fn tsk_scrcpy_video(
     let mut streaming_on=true;//start streaming immediately
     let mut max_unack=2;
     let mut act_unack=0;
-    let mut buf = vec![0u8; 0xffff];
+    let mut frame_buf = vec![];
     let codec_buf = vec![0u8; 12];
+    let header_buf = vec![0u8; 12];
     let mut i=0;
     let mut ch_id:u8=0;
 
@@ -335,8 +336,8 @@ async fn tsk_scrcpy_video(
     info!("SCRCPY Video entering main loop");
     let timestamp: u64 = 0;//is not used by HU
     loop {
-        //TODO read packet size, not all available
-        let (res, buf_out) = stream.read(buf).await;
+
+        let (res, buf_hd) = stream.read(header_buf).await;
         let n = res?;
         if n == 0 {
             error!("Video connection closed by server?");
@@ -348,25 +349,29 @@ async fn tsk_scrcpy_video(
         let dbg_len=min(n,50);
         if i<5
         {
-            info!("Video task Read {} bytes: {:02x?}", n, &buf_out[..dbg_len]);
+            info!("Video task Read {} bytes: {:02x?}", n, &buf_hd[..dbg_len]);
             i=i+1;
         }
+        let pts = u64::from_be_bytes(buf_hd[0..8].try_into()?);
+        let frame_size=i32::from_be_bytes(buf_hd[8..12].try_into()?);
+        frame_buf=vec![0u8;frame_size as usize];
+        let frame_buf = read_exact(&stream, frame_buf).await?;
         if streaming_on && (act_unack < max_unack)
         {
-            let pts = u64::from_be_bytes(buf_out[0..8].try_into().unwrap());
+
             let rec_ts=pts & 0x3FFF_FFFF_FFFF_FFFFu64;
             let mut payload: Vec<u8>=Vec::new();
             let key_frame=(pts & 0x4000_0000_0000_0000u64) >0;
             let config_frame=(pts & 0x8000_0000_0000_0000u64) >0;
             if config_frame
             {
-                payload.extend_from_slice(&buf_out[12..n]);
+                payload.extend_from_slice(&frame_buf);
                 payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16) >> 8) as u8);
                 payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16) & 0xff) as u8);
             }
             else {
                 payload.extend_from_slice(&timestamp.to_be_bytes());
-                payload.extend_from_slice(&buf_out[12..n]);
+                payload.extend_from_slice(&frame_buf);
                 payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) >> 8) as u8);
                 payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) & 0xff) as u8);
             }
@@ -382,8 +387,7 @@ async fn tsk_scrcpy_video(
             };
             act_unack=act_unack+1;
         }
-        // Reuse buffer
-        buf = buf_out;
+
         //Check custom Service command
         match cmd_rx.try_recv() {
             Ok(pkt) => {
@@ -440,7 +444,28 @@ async fn tsk_scrcpy_video(
             _ => {}
         }
     }
-    Ok(())
+    Ok(());
+    async fn read_exact(
+        stream: &TcpStream,
+        mut buf: Vec<u8>,
+    ) -> std::io::Result<Vec<u8>> {
+        let mut filled = 0;
+
+        while filled < buf.len() {
+            let (res, buf2) = stream.read(buf.split_off(filled)).await;
+            let mut chunk = buf2;
+
+            let n = res?;
+            if n == 0 {
+                return Err(std::io::ErrorKind::UnexpectedEof.into());
+            }
+
+            buf.extend_from_slice(&chunk[..n]);
+            filled += n;
+        }
+
+        Ok(buf)
+    }
 }
 
 async fn tsk_scrcpy_audio(
