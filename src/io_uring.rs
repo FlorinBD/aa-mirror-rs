@@ -336,7 +336,62 @@ async fn tsk_scrcpy_video(
     info!("SCRCPY Video entering main loop");
     let timestamp: u64 = 0;//is not used by HU
     loop {
+        //Check custom Service command
+        match cmd_rx.try_recv() {
+            Ok(pkt) => {
+                info!("tsk_scrcpy_video Received command packet {:02x?}", pkt);
+                let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+                if message_id == MESSAGE_CUSTOM_CMD  as i32
+                {
+                    let cmd_id: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
+                    let data = &pkt.payload[4..]; // start of message data, without message_id
+                    if cmd_id == CustomCommand::CMD_START_VIDEO_RECORDING as i32
+                    {
+                        streaming_on = true;
+                        info!("tsk_scrcpy_video Video streaming started");
+                        match postcard::take_from_bytes::<CmdStartMediaRec>(data) {
+                            Ok((cmd, rest)) => {
+                                ch_id = pkt.channel;
+                                info!("Parsed CmdStartVideoRec: {:?}", cmd);
+                                info!("Remaining bytes: {}", rest.len());
+                                max_unack=cmd.max_unack;
+                            }
+                            Err(e) => {
+                                error!("postcard parsing error: {:?}", e);
+                            }
+                        }
+                    }
+                    else if cmd_id == CustomCommand::CMD_STOP_VIDEO_RECORDING as i32
+                    {
+                        act_unack=max_unack;
+                        streaming_on = false;
+                        info!("tsk_scrcpy_video Video streaming stopped");
+                    }
 
+                }
+                else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK  as i32
+                {
+                    info!("{} Received {} message", ch_id.to_string(), message_id);
+                    let data = &pkt.payload[2..]; // start of message data, without message_id
+                    if  let Ok(rsp) = Ack::parse_from_bytes(&data)
+                    {
+                        //info!( "{}, channel {:?}: ACK, timestamp_ns: {:?}", get_name(), pkt.channel, rsp.receive_timestamp_ns[0]);
+                        info!( "tsk_scrcpy_video: video ACK received, sending next frame");
+                        act_unack=0;
+                    }
+                    else
+                    {
+                        error!( "tsk_scrcpy_video Unable to parse received message");
+                    }
+                }
+                else
+                {
+                    error!("tsk_scrcpy_video unknown message id: {}", message_id);
+                }
+            }
+            _ => {}
+        }
+        //Read encapsulated video frames
         let (res, buf_hd) = stream.read(vec![0u8; 12]).await;
         let n = res?;
         if n == 0 {
@@ -387,62 +442,6 @@ async fn tsk_scrcpy_video(
                 error!( "SCRCPY video frame send error");
             };
             act_unack=act_unack+1;
-        }
-
-        //Check custom Service command
-        match cmd_rx.try_recv() {
-            Ok(pkt) => {
-                info!("tsk_scrcpy_video Received command packet {:02x?}", pkt);
-                let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-                if message_id == MESSAGE_CUSTOM_CMD  as i32
-                {
-                    let cmd_id: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
-                    let data = &pkt.payload[4..]; // start of message data, without message_id
-                        if cmd_id == CustomCommand::CMD_START_VIDEO_RECORDING as i32
-                        {
-                            streaming_on = true;
-                            info!("tsk_scrcpy_video Video streaming started");
-                            match postcard::take_from_bytes::<CmdStartMediaRec>(data) {
-                                Ok((cmd, rest)) => {
-                                    ch_id = pkt.channel;
-                                    info!("Parsed CmdStartVideoRec: {:?}", cmd);
-                                    info!("Remaining bytes: {}", rest.len());
-                                    max_unack=cmd.max_unack;
-                                }
-                                Err(e) => {
-                                    error!("postcard parsing error: {:?}", e);
-                                }
-                            }
-                        }
-                        else if cmd_id == CustomCommand::CMD_STOP_VIDEO_RECORDING as i32
-                        {
-                            act_unack=max_unack;
-                            streaming_on = false;
-                            info!("tsk_scrcpy_video Video streaming stopped");
-                        }
-
-                }
-                else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK  as i32
-                {
-                    info!("{} Received {} message", ch_id.to_string(), message_id);
-                    let data = &pkt.payload[2..]; // start of message data, without message_id
-                    if  let Ok(rsp) = Ack::parse_from_bytes(&data)
-                    {
-                        //info!( "{}, channel {:?}: ACK, timestamp_ns: {:?}", get_name(), pkt.channel, rsp.receive_timestamp_ns[0]);
-                        info!( "tsk_scrcpy_video: video ACK received, sending next frame");
-                        act_unack=0;
-                    }
-                    else
-                    {
-                        error!( "tsk_scrcpy_video Unable to parse received message");
-                    }
-                }
-                else
-                {
-                    error!("tsk_scrcpy_video unknown message id: {}", message_id);
-                }
-            }
-            _ => {}
         }
     }
     return Ok(());
