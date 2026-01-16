@@ -444,7 +444,7 @@ async fn tsk_scrcpy_video(
             _ => {}
         }
     }
-    Ok(());
+    return Ok(());
     async fn read_exact(
         stream: &TcpStream,
         mut buf: Vec<u8>,
