@@ -297,7 +297,7 @@ async fn tsk_scrcpy_video(
     let mut streaming_on=true;//start streaming immediately
     let mut max_unack=2;
     let mut act_unack=0;
-    let mut frame_buf = vec![];
+    //let mut frame_buf = vec![];
     let codec_buf = vec![0u8; 12];
     //let header_buf = vec![0u8; 12];
     let mut i=0;
@@ -349,8 +349,8 @@ async fn tsk_scrcpy_video(
 
         let pts = u64::from_be_bytes(buf_hd[0..8].try_into()?);
         let frame_size=i32::from_be_bytes(buf_hd[8..12].try_into()?);
-        frame_buf=vec![0u8;frame_size as usize];
-        let frame_buf = read_exact(&stream, frame_buf).await?;
+
+        let frame_buf = read_exact(&stream, vec![0u8; frame_size as usize]).await?;
         let dbg_len=min(frame_size,50);
         if i<5
         {
