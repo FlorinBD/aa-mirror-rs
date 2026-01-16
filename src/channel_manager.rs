@@ -814,10 +814,10 @@ pub async fn ch_proxy(
                     let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                     srv_senders.push(tx);
                     let vcr=match proto_srv.media_sink_service.video_configs[0].codec_resolution() {
-                        VideoCodecResolutionType::VIDEO_800x480=>{video_codec_params.bitrate=8_000_000; video_codec_params.res_w=800; video_codec_params.res_h=480; Video_800x480},
-                        VideoCodecResolutionType::VIDEO_720x1280=>{video_codec_params.bitrate=16_000_000; video_codec_params.res_w=1280; video_codec_params.res_h=720; Video_720x1280},
-                        VideoCodecResolutionType::VIDEO_1080x1920=>{video_codec_params.bitrate=32_000_000; video_codec_params.res_w=1920; video_codec_params.res_h=1080; Video_1080x1920},
-                        _=>{video_codec_params.bitrate=8_000_000; video_codec_params.res_w=800; video_codec_params.res_h=480; Video_800x480},
+                        VideoCodecResolutionType::VIDEO_800x480=>{video_codec_params.bitrate=4_000_000; video_codec_params.res_w=800; video_codec_params.res_h=480; Video_800x480},
+                        VideoCodecResolutionType::VIDEO_720x1280=>{video_codec_params.bitrate=8_000_000; video_codec_params.res_w=1280; video_codec_params.res_h=720; Video_720x1280},
+                        VideoCodecResolutionType::VIDEO_1080x1920=>{video_codec_params.bitrate=16_000_000; video_codec_params.res_w=1920; video_codec_params.res_h=1080; Video_1080x1920},
+                        _=>{video_codec_params.bitrate=4_000_000; video_codec_params.res_w=800; video_codec_params.res_h=480; Video_800x480},
                     };
 
                     let vcd=match proto_srv.media_sink_service.video_configs[0].video_codec_type() {
