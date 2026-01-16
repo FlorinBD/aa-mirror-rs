@@ -407,7 +407,7 @@ async fn tsk_scrcpy_video(
         }
 
         let pts = u64::from_be_bytes(buf_hd[0..8].try_into()?);
-        let frame_size=u32::from_be_bytes(buf_hd[8..12].try_into()?);
+        let frame_size=(u32::from_be_bytes(buf_hd[8..12].try_into()?))-8;//packet size include also header (pts) witch must be discarded
         let key_frame=(pts & 0x4000_0000_0000_0000u64) >0;
         let rec_ts=pts & 0x3FFF_FFFF_FFFF_FFFFu64;
         let config_frame=(pts & 0x8000_0000_0000_0000u64) >0;
@@ -416,6 +416,7 @@ async fn tsk_scrcpy_video(
         let dbg_len=min(frame_size,32);
         if i<5
         {
+            info!("Video task got frame header {:?}:",&buf_hd);
             info!("Video task got frame config={:?}, act size: {}, defined size: {}, raw bytes: {:02x?}",config_frame, frame_buf.len(), frame_size , &frame_buf[..dbg_len as usize]);
             i=i+1;
         }
