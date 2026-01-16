@@ -299,7 +299,7 @@ async fn tsk_scrcpy_video(
     let mut act_unack=0;
     let mut frame_buf = vec![];
     let codec_buf = vec![0u8; 12];
-    let header_buf = vec![0u8; 12];
+    //let header_buf = vec![0u8; 12];
     let mut i=0;
     let mut ch_id:u8=0;
 
@@ -337,7 +337,7 @@ async fn tsk_scrcpy_video(
     let timestamp: u64 = 0;//is not used by HU
     loop {
 
-        let (res, buf_hd) = stream.read(header_buf).await;
+        let (res, buf_hd) = stream.read(vec![0u8; 12]).await;
         let n = res?;
         if n == 0 {
             error!("Video connection closed by server?");
@@ -346,16 +346,17 @@ async fn tsk_scrcpy_video(
                 "Video connection closed by server?",
             )));
         }
-        let dbg_len=min(n,50);
-        if i<5
-        {
-            info!("Video task Read {} bytes: {:02x?}", n, &buf_hd[..dbg_len]);
-            i=i+1;
-        }
+
         let pts = u64::from_be_bytes(buf_hd[0..8].try_into()?);
         let frame_size=i32::from_be_bytes(buf_hd[8..12].try_into()?);
         frame_buf=vec![0u8;frame_size as usize];
         let frame_buf = read_exact(&stream, frame_buf).await?;
+        let dbg_len=min(frame_size,50);
+        if i<5
+        {
+            info!("Video task Read {} bytes: {:02x?}",frame_size , &frame_buf[..dbg_len]);
+            i=i+1;
+        }
         if streaming_on && (act_unack < max_unack)
         {
 
@@ -448,19 +449,19 @@ async fn tsk_scrcpy_video(
     async fn read_exact(
         stream: &TcpStream,
         mut buf: Vec<u8>,
-    ) -> std::io::Result<Vec<u8>> {
+    ) -> io::Result<Vec<u8>> {
         let mut filled = 0;
+        let len = buf.len();
 
-        while filled < buf.len() {
-            let (res, buf2) = stream.read(buf.split_off(filled)).await;
-            let mut chunk = buf2;
+        while filled < len {
+            let (res, buf2) = stream.read(buf).await;
+            buf = buf2;
 
             let n = res?;
             if n == 0 {
-                return Err(std::io::ErrorKind::UnexpectedEof.into());
+                return Err(io::ErrorKind::UnexpectedEof.into());
             }
 
-            buf.extend_from_slice(&chunk[..n]);
             filled += n;
         }
 
