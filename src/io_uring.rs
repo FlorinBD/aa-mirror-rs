@@ -409,7 +409,7 @@ async fn tsk_scrcpy_video(
         let dbg_len=min(frame_size,50);
         if i<5
         {
-            info!("Video task got frame size {}, bytes: {:02x?}",frame_buf.len() , &frame_buf[..dbg_len as usize]);
+            info!("Video task got frame size {}, bytes: {:02x?}", frame_buf.len() , &frame_buf[..dbg_len as usize]);
             i=i+1;
         }
         if streaming_on && (act_unack < max_unack)
