@@ -401,6 +401,10 @@ async fn tsk_scrcpy_video(
                 "Video connection closed by server?",
             )));
         }
+        if n> 12
+        {
+            error!("Video stream read past header size, wanted 12 but got {}", n);
+        }
 
         let pts = u64::from_be_bytes(buf_hd[0..8].try_into()?);
         let frame_size=u32::from_be_bytes(buf_hd[8..12].try_into()?);
