@@ -460,6 +460,7 @@ async fn tsk_scrcpy_video(
             let (res, mut returned) = stream.read(temp_buf).await;
             let n = res?;
             if n == 0 {
+                error!("task_scrcpy_video: connection closed by server");
                 return Err(io::ErrorKind::UnexpectedEof.into());
             }
 
