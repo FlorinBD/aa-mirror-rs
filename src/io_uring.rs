@@ -404,7 +404,7 @@ async fn tsk_scrcpy_video(
         frame_buf.resize(frame_size as usize, 0);
         frame_buf=read_exact(&stream, frame_buf).await?;
         let dbg_len=min(frame_size,32);
-        if i<5
+        if i<10
         {
             info!("Video task got frame header {:02x?}:",&header_buf);
             info!("Video task got frame config={:?}, act size: {}, defined size: {}, raw bytes: {:02x?}",config_frame, frame_buf.len(), frame_size , &frame_buf[..dbg_len as usize]);
