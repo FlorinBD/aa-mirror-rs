@@ -395,8 +395,9 @@ async fn tsk_scrcpy_video(
             _ => {}
         }
         //Read encapsulated video frames
-        let (res, buf_hd) = stream.read(&mut header_buf).await;
-        let n = res?;
+        //let (res, buf_hd) = stream.read(&mut header_buf).await;
+        read_exact(&stream, &mut header_buf).await?;
+        /*let n = res?;
         if n == 0 {
             error!("Video connection closed by server?");
             return Err(Box::new(io::Error::new(
@@ -407,10 +408,10 @@ async fn tsk_scrcpy_video(
         if n> 12
         {
             error!("Video stream read past header size, wanted 12 but got {}", n);
-        }
+        }*/
 
-        let pts = u64::from_be_bytes(buf_hd[0..8].try_into()?);
-        let frame_size=(u32::from_be_bytes(buf_hd[8..12].try_into()?))-8;//packet size include also header (pts) witch must be discarded
+        let pts = u64::from_be_bytes(header_buf[0..8].try_into()?);
+        let frame_size=(u32::from_be_bytes(header_buf[8..12].try_into()?))-8;//packet size include also header (pts) witch must be discarded
         let key_frame=(pts & 0x4000_0000_0000_0000u64) >0;
         let rec_ts=pts & 0x3FFF_FFFF_FFFF_FFFFu64;
         let config_frame=(pts & 0x8000_0000_0000_0000u64) >0;
@@ -419,7 +420,7 @@ async fn tsk_scrcpy_video(
         let dbg_len=min(frame_size,32);
         if i<5
         {
-            info!("Video task got frame header {:02x?}:",&buf_hd);
+            info!("Video task got frame header {:02x?}:",&header_buf);
             info!("Video task got frame config={:?}, act size: {}, defined size: {}, raw bytes: {:02x?}",config_frame, frame_buf.len(), frame_size , &frame_buf[..dbg_len as usize]);
             i=i+1;
         }
