@@ -570,6 +570,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
 
             },
         }
+        
     }
 
     /// checking if there was a true fatal SSL error

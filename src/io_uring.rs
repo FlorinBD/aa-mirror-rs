@@ -395,7 +395,7 @@ async fn tsk_scrcpy_video(
             _ => {}
         }
         //Read encapsulated video frames
-        let (res, buf_hd) = stream.read(header_buf).await;
+        let (res, buf_hd) = stream.read(&mut header_buf).await;
         let n = res?;
         if n == 0 {
             error!("Video connection closed by server?");
@@ -433,7 +433,7 @@ async fn tsk_scrcpy_video(
                 payload.extend_from_slice(&frame_buf);
             }
             else {
-                payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
+                payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
                 payload.extend_from_slice(&timestamp.to_be_bytes());
                 payload.extend_from_slice(&frame_buf);
             }
@@ -442,24 +442,28 @@ async fn tsk_scrcpy_video(
                 channel: ch_id,
                 flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                 final_length: None,
-                payload: payload,
+                payload: std::mem::take(&mut payload),
             };
             video_tx.send_async(pkt_rsp).await?;
             act_unack=act_unack+1;
         }
     }
     return Ok(());
-    async fn read_exact(
-        stream: &TcpStream,
-        buf: &mut [u8],
-    ) -> io::Result<()> {
+    async fn read_exact(stream: &TcpStream, buf: &mut Vec<u8>) -> io::Result<()> {
         let mut filled = 0;
+        let len = buf.len();
 
-        while filled < buf.len() {
-            let n = stream.read(&mut buf[filled..]).await?;
+        while filled < len {
+            // take ownership temporarily
+            let temp_buf = buf.split_off(filled); // temp buffer starting at filled
+            let (res, mut returned) = stream.read(temp_buf).await;
+            let n = res?;
             if n == 0 {
                 return Err(io::ErrorKind::UnexpectedEof.into());
             }
+
+            // append back the returned portion into buf
+            buf.splice(filled..filled+n, returned[..n].iter().cloned());
             filled += n;
         }
 
