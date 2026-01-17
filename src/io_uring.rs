@@ -396,7 +396,7 @@ async fn tsk_scrcpy_video(
         }
         //Read encapsulated video frames
         //let (res, buf_hd) = stream.read(&mut header_buf).await;
-        read_exact(&stream, header_buf).await?;
+        header_buf=read_exact(&stream, header_buf).await?;
         /*let n = res?;
         if n == 0 {
             error!("Video connection closed by server?");
@@ -416,7 +416,7 @@ async fn tsk_scrcpy_video(
         let rec_ts=pts & 0x3FFF_FFFF_FFFF_FFFFu64;
         let config_frame=(pts & 0x8000_0000_0000_0000u64) >0;
         frame_buf.resize(frame_size as usize, 0);
-        read_exact(&stream, frame_buf).await?;
+        frame_buf=read_exact(&stream, frame_buf).await?;
         let dbg_len=min(frame_size,32);
         if i<5
         {
