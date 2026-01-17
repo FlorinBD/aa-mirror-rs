@@ -396,7 +396,7 @@ async fn tsk_scrcpy_video(
         }
         //Read encapsulated video frames
         //let (res, buf_hd) = stream.read(&mut header_buf).await;
-        read_exact(&stream, &mut header_buf).await?;
+        read_exact(&stream, header_buf).await?;
         /*let n = res?;
         if n == 0 {
             error!("Video connection closed by server?");
@@ -416,7 +416,7 @@ async fn tsk_scrcpy_video(
         let rec_ts=pts & 0x3FFF_FFFF_FFFF_FFFFu64;
         let config_frame=(pts & 0x8000_0000_0000_0000u64) >0;
         frame_buf.resize(frame_size as usize, 0);
-        read_exact(&stream, &mut frame_buf).await?;
+        read_exact(&stream, frame_buf).await?;
         let dbg_len=min(frame_size,32);
         if i<5
         {
@@ -450,26 +450,26 @@ async fn tsk_scrcpy_video(
         }
     }
     return Ok(());
-    async fn read_exact(stream: &TcpStream, buf: &mut Vec<u8>) -> io::Result<()> {
+    async fn read_exact(
+        stream: &TcpStream,
+        mut buf: Vec<u8>,
+    ) -> io::Result<Vec<u8>> {
         let mut filled = 0;
         let len = buf.len();
 
         while filled < len {
-            // take ownership temporarily
-            let temp_buf = buf.split_off(filled); // temp buffer starting at filled
-            let (res, mut returned) = stream.read(temp_buf).await;
+            let (res, b) = stream.read(buf).await;
+            buf = b;
+
             let n = res?;
             if n == 0 {
-                error!("task_scrcpy_video: connection closed by server");
                 return Err(io::ErrorKind::UnexpectedEof.into());
             }
 
-            // append back the returned portion into buf
-            buf.splice(filled..filled+n, returned[..n].iter().cloned());
             filled += n;
         }
 
-        Ok(())
+        Ok(buf)
     }
 }
 
