@@ -335,6 +335,9 @@ async fn tsk_scrcpy_video(
     }
     info!("SCRCPY Video entering main loop");
     let timestamp: u64 = 0;//is not used by HU
+    let mut payload: Vec<u8>=Vec::new();
+    let mut header_buf = vec![0u8; 12];
+    let mut frame_buf = Vec::new();
     loop {
         //Check custom Service command
         match cmd_rx.try_recv() {
@@ -392,7 +395,7 @@ async fn tsk_scrcpy_video(
             _ => {}
         }
         //Read encapsulated video frames
-        let (res, buf_hd) = stream.read(vec![0u8; 12]).await;
+        let (res, buf_hd) = stream.read(header_buf).await;
         let n = res?;
         if n == 0 {
             error!("Video connection closed by server?");
@@ -411,8 +414,8 @@ async fn tsk_scrcpy_video(
         let key_frame=(pts & 0x4000_0000_0000_0000u64) >0;
         let rec_ts=pts & 0x3FFF_FFFF_FFFF_FFFFu64;
         let config_frame=(pts & 0x8000_0000_0000_0000u64) >0;
-
-        let frame_buf = read_exact(&stream, vec![0u8; frame_size as usize]).await?;
+        frame_buf.resize(frame_size as usize, 0);
+        read_exact(&stream, &mut frame_buf).await?;
         let dbg_len=min(frame_size,32);
         if i<5
         {
@@ -422,19 +425,17 @@ async fn tsk_scrcpy_video(
         }
         if streaming_on && (act_unack < max_unack)
         {
-            let mut payload: Vec<u8>=Vec::new();
 
+            payload.clear();
             if config_frame
             {
+                payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
                 payload.extend_from_slice(&frame_buf);
-                payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16) >> 8) as u8);
-                payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16) & 0xff) as u8);
             }
             else {
+                payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
                 payload.extend_from_slice(&timestamp.to_be_bytes());
                 payload.extend_from_slice(&frame_buf);
-                payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) >> 8) as u8);
-                payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) & 0xff) as u8);
             }
 
             let pkt_rsp = Packet {
@@ -443,33 +444,26 @@ async fn tsk_scrcpy_video(
                 final_length: None,
                 payload: payload,
             };
-            if let Err(_) = video_tx.send(pkt_rsp){
-                error!( "SCRCPY video frame send error");
-            };
+            video_tx.send_async(pkt_rsp).await?;
             act_unack=act_unack+1;
         }
     }
     return Ok(());
     async fn read_exact(
         stream: &TcpStream,
-        mut buf: Vec<u8>,
-    ) -> io::Result<Vec<u8>> {
+        buf: &mut [u8],
+    ) -> io::Result<()> {
         let mut filled = 0;
-        let len = buf.len();
 
-        while filled < len {
-            let (res, buf2) = stream.read(buf).await;
-            buf = buf2;
-
-            let n = res?;
+        while filled < buf.len() {
+            let n = stream.read(&mut buf[filled..]).await?;
             if n == 0 {
                 return Err(io::ErrorKind::UnexpectedEof.into());
             }
-
             filled += n;
         }
 
-        Ok(buf)
+        Ok(())
     }
 }
 
@@ -858,10 +852,10 @@ pub async fn io_loop(
     let hex_requested = cfg.hexdump_level;
 
     //mpsc for scrcpy
-    let (tx_cmd_audio, rx_cmd_audio)=flume::unbounded::<Packet>();
-    let (tx_cmd_video, rx_cmd_video)=flume::unbounded::<Packet>();
-    let (tx_scrcpy, rx_scrcpy)=flume::unbounded::<Packet>();
-    let (tx_scrcpy_cmd, rx_scrcpy_cmd)=flume::unbounded::<Packet>();
+    let (tx_cmd_audio, rx_cmd_audio)=flume::bounded::<Packet>(5);;
+    let (tx_cmd_video, rx_cmd_video)=flume::bounded::<Packet>(5);;
+    let (tx_scrcpy, rx_scrcpy)=flume::bounded::<Packet>(60);;
+    let (tx_scrcpy_cmd, rx_scrcpy_cmd)=flume::bounded::<Packet>(5);;
 
     let mut tsk_adb;
     tsk_adb = tokio_uring::spawn(tsk_adb_scrcpy(
