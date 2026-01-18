@@ -73,11 +73,6 @@ pub struct ServiceStatus {
     pub enabled:bool,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-pub(crate) struct CmdStartMediaRec {
-    pub(crate) max_unack: u32,
-}
-
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct VideoStreamingParams {
     pub(crate) bitrate: i32,
