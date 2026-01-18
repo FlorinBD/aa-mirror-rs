@@ -1058,7 +1058,7 @@ pub async fn ch_proxy(
                     }
                 }
             }
-            _ => {error!("SCRCPY command receive error")}
+            _ => {}
         }
     }
     return Err(Box::new("proxy main loop ended ok")).expect("TODO");
