@@ -1416,7 +1416,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                             error!( "{} response send error",get_name());
                         };
                     }
-                    else if cmd == CustomCommand::MD_CONNECTED {
+                    else if cmd == CustomCommand::MD_CONNECTED as i32 {
                         info!("{} MD connected, send media STOP to HU",get_name());
                         md_connected=true;
                         //Send STOP to HU
