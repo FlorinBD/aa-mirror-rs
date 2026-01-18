@@ -1028,7 +1028,7 @@ pub async fn ch_proxy(
                             payload.extend_from_slice(&(ControlMessageType::MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
                             payload.extend_from_slice(&(CustomCommand::MD_CONNECTED as u16).to_be_bytes());
                             let pkt_rsp = Packet {
-                                channel: 0,
+                                channel: audio_codec_params.sid as u8,
                                 flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                                 final_length: None,
                                 payload: std::mem::take(&mut payload),
@@ -1045,7 +1045,7 @@ pub async fn ch_proxy(
                             payload.extend_from_slice(&(ControlMessageType::MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
                             payload.extend_from_slice(&(CustomCommand::MD_CONNECTED as u16).to_be_bytes());
                             let pkt_rsp = Packet {
-                                channel: 0,
+                                channel: video_codec_params.sid as u8,
                                 flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                                 final_length: None,
                                 payload: std::mem::take(&mut payload),
