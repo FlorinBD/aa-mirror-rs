@@ -1017,25 +1017,43 @@ pub async fn ch_proxy(
                 if message_id == MESSAGE_CUSTOM_CMD  as i32
                 {
                     let cmd_id: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
-                    let data = &pkt.payload[4..]; // start of message data, without message_id
                     if cmd_id == CustomCommand::MD_CONNECTED as i32
                     {
+                        let ch=pkt.channel as i32;
                         info!("{} MD connected, proxy packet to media channels",get_name());
                         let idx=get_service_index(&channel_status, audio_codec_params.sid);
                         if idx !=255
                         {
-                            srv_senders[idx].send(pkt).await.expect("Error sending message to service");
+                            let mut payload: Vec<u8>=Vec::new();
+                            payload.extend_from_slice(&(ControlMessageType::MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+                            payload.extend_from_slice(&(CustomCommand::MD_CONNECTED as u16).to_be_bytes());
+                            let pkt_rsp = Packet {
+                                channel: 0,
+                                flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                                final_length: None,
+                                payload: std::mem::take(&mut payload),
+                            };
+                            srv_senders[idx].send(pkt_rsp).await.expect("Error sending message to service");
                         }
                         else {
-                            error!( "{} Invalid channel {}",get_name(), pkt.channel.clone());
+                            error!( "{} Invalid channel {}",get_name(), ch);
                         }
                         let idx=get_service_index(&channel_status, video_codec_params.sid);
                         if idx !=255
                         {
-                            srv_senders[idx].send(pkt).await.expect("Error sending message to service");
+                            let mut payload: Vec<u8>=Vec::new();
+                            payload.extend_from_slice(&(ControlMessageType::MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+                            payload.extend_from_slice(&(CustomCommand::MD_CONNECTED as u16).to_be_bytes());
+                            let pkt_rsp = Packet {
+                                channel: 0,
+                                flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                                final_length: None,
+                                payload: std::mem::take(&mut payload),
+                            };
+                            srv_senders[idx].send(pkt_rsp).await.expect("Error sending message to service");
                         }
                         else {
-                            error!( "{} Invalid channel {}",get_name(), pkt.channel.clone());
+                            error!( "{} Invalid channel {}",get_name(), ch);
                         }
                     }
                 }
