@@ -292,7 +292,7 @@ async fn tsk_scrcpy_video(
     mut stream: TcpStream,
     mut cmd_rx: flume::Receiver<Packet>,
     video_tx: flume::Sender<Packet>,
-    max_unack:i32,
+    max_unack:u32,
 ) -> Result<()> {
     info!("Starting video server!");
     let mut streaming_on=true;
@@ -448,7 +448,7 @@ async fn tsk_scrcpy_audio(
     mut stream: TcpStream,
     mut cmd_rx: flume::Receiver<Packet>,
     audio_tx: flume::Sender<Packet>,
-    max_unack:i32,
+    max_unack:u32,
 ) -> Result<()> {
 
     info!("Starting audio server!");

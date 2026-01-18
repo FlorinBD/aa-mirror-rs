@@ -934,13 +934,13 @@ pub async fn ch_proxy(
         let mut pkt = rx_srv.recv().await.ok_or("rx_srv channel hung up")?;
         if pkt.channel !=0
         {
-            let idx=get_service_index(&channel_status, pkt.channel as i32);
+            let idx=get_service_index(&channel_status, pkt.channel.clone() as i32);
             if idx !=255
             {
                 srv_senders[idx].send(pkt).await.expect("Error sending message to service");
             }
             else {
-                error!( "{} Invalid channel {}",get_name(), pkt.channel);
+                error!( "{} Invalid channel {}",get_name(), pkt.channel.clone());
             }
         }
         else { //Default channel messages
@@ -1020,7 +1020,7 @@ pub async fn ch_proxy(
                     if cmd_id == CustomCommand::MD_CONNECTED as i32
                     {
                         info!("{} MD connected, proxy packet to media channels",get_name());
-                        let idx=get_service_index(&channel_status, audio_codec_params.sid);
+                        let idx=get_service_index(&channel_status, audio_codec_params.sid.clone());
                         if idx !=255
                         {
                             srv_senders[idx].send(pkt).await.expect("Error sending message to service");
@@ -1028,7 +1028,7 @@ pub async fn ch_proxy(
                         else {
                             error!( "{} Invalid channel {}",get_name(), pkt.channel);
                         }
-                        let idx=get_service_index(&channel_status, video_codec_params.sid);
+                        let idx=get_service_index(&channel_status, video_codec_params.sid.clone());
                         if idx !=255
                         {
                             srv_senders[idx].send(pkt).await.expect("Error sending message to service");

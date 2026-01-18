@@ -86,14 +86,14 @@ pub(crate) struct VideoStreamingParams {
     pub(crate) fps:i32,
     pub(crate) dpi:i32,
     pub(crate) sid:i32,
-    pub(crate) max_unack:i32,
+    pub(crate) max_unack:u32,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub(crate) struct AudioStreamingParams {
     pub(crate) bitrate: i32,
     pub(crate) sid:i32,
-    pub(crate) max_unack:i32,
+    pub(crate) max_unack:u32,
 }
 
 impl Default for VideoStreamingParams {
