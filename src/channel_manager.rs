@@ -1021,8 +1021,7 @@ pub async fn ch_proxy(
                     if cmd_id == CustomCommand::MD_CONNECTED as i32
                     {
                         info!("{} MD connected, proxy packet to media channels",get_name());
-                        let sid = audio_codec_params.sid;
-                        let idx=get_service_index(&channel_status, sid);
+                        let idx=get_service_index(&channel_status, audio_codec_params.sid);
                         if idx !=255
                         {
                             srv_senders[idx].send(pkt).await.expect("Error sending message to service");
@@ -1030,8 +1029,7 @@ pub async fn ch_proxy(
                         else {
                             error!( "{} Invalid channel {}",get_name(), pkt.channel.clone());
                         }
-                        let sid = video_codec_params.sid;
-                        let idx=get_service_index(&channel_status, sid);
+                        let idx=get_service_index(&channel_status, video_codec_params.sid);
                         if idx !=255
                         {
                             srv_senders[idx].send(pkt).await.expect("Error sending message to service");
