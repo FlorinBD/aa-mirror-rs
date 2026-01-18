@@ -37,7 +37,7 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::broadcast::error::TryRecvError;
 use std::str::FromStr;
 use tokio_util::bytes::BufMut;
-use crate::aa_services::{CmdStartStreaming, CmdStartMediaRec};
+use crate::aa_services::{CmdStartMediaRec, VideoStreamingParams, AudioStreamingParams};
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use protos::*;
 use protos::ControlMessageType::{self, *};
@@ -294,7 +294,7 @@ async fn tsk_scrcpy_video(
     video_tx: flume::Sender<Packet>,
 ) -> Result<()> {
     info!("Starting video server!");
-    let mut streaming_on=true;//start streaming immediately
+    let mut streaming_on=true;
     let mut max_unack=2;
     let mut act_unack=0;
     //let mut frame_buf = vec![];
@@ -598,8 +598,9 @@ async fn tsk_scrcpy_audio(
 async fn tsk_adb_scrcpy(
     srv_cmd_rx_video: flume::Receiver<Packet>,
     srv_cmd_rx_audio: flume::Receiver<Packet>,
-    srv_tx: flume::Sender<Packet>,
+    media_tx: flume::Sender<Packet>,
     mut srv_cmd_rx_scrcpy: flume::Receiver<Packet>,
+    srv_cmd_tx: flume::Sender<Packet>,
     config: AppConfig,
 ) -> Result<()> {
     info!("{}: ADB task started",NAME);
@@ -610,45 +611,9 @@ async fn tsk_adb_scrcpy(
         error!("ADB server can't start");
     }
 
-    let mut video_codec_params = CmdStartStreaming::default();
-    //wait for custom CMD to start recording
-    loop {
-        match srv_cmd_rx_scrcpy.recv_async().await {
-            Ok(pkt) => {
-                // Received a packet
-                info!("tsk_scrcpy_video Received command packet {:02x?}", pkt);
-                let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-                if message_id == MESSAGE_CUSTOM_CMD  as i32
-                {
-                    let cmd_id: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
-                    let data = &pkt.payload[4..]; // start of message data, without message_id
-                    if cmd_id == CustomCommand::CMD_START_DEVICE_RECORDING as i32
-                    {
-                        match postcard::take_from_bytes::<CmdStartStreaming>(data) {
-                            Ok((cmd, rest)) => {
-                                info!("Parsed CmdStartVideoRec: {:?}", cmd);
-                                info!("Remaining bytes: {}", rest.len());
-                                video_codec_params=cmd;
-                                break;
-                            }
-                            Err(e) => {
-                                error!("postcard parsing error: {:?}", e);
-                            }
-                        }
-                    }
-                    else
-                    {
-                        info!("tsk_scrcpy_video unknown command received");
-                    }
+    let mut audio_codec_params = AudioStreamingParams::default();
+    let mut video_codec_params = VideoStreamingParams::default();
 
-                }
-            }
-            Err(flume::RecvError::Disconnected) => {
-                // Sender has been dropped, exit loop
-                println!("Sender closed, exiting loop");
-            }
-        }
-    }
     let cmd_disconnect = Command::new("adb")
         .arg("disconnect")
         .output().await?;
@@ -662,26 +627,7 @@ async fn tsk_adb_scrcpy(
     {
         if let Some(device)=adb::get_first_adb_device(config.clone()).await {
             info!("{}: ADB device found: {:?}, trying to get video/audio from it now",NAME, device);
-
-            let mut cmd_push = vec![];
-            cmd_push.push(String::from("/etc/aa-mirror-rs/scrcpy-server"));
-            cmd_push.push(String::from("/data/local/tmp/scrcpy-server-manual.jar"));
-            let lines=adb::push_cmd(cmd_push).await?;
-            let mut push_ok=false;
-            if lines.len() > 0 {
-                for line in lines {
-                    if line.contains("/s (")
-                    {
-                        push_ok=true;
-                    }
-                    info!("ADB push response: {:?}", line);
-                }
-            }
-            if !push_ok {
-                error!("ADB invalid push response received for control task");
-                continue;
-            }
-
+            
             let mut cmd_portfw = vec![];
             cmd_portfw.push(format!("tcp:{}", SCRCPY_PORT));
             cmd_portfw.push("localabstract:scrcpy".to_string());
@@ -703,12 +649,90 @@ async fn tsk_adb_scrcpy(
             else {
                 info!("ADB port forwarding done to {}", SCRCPY_PORT);
             }
-            tokio::time::sleep(Duration::from_secs(1)).await;//give some time to forward port, it is needed?
-            let audio_bitrate:i32=48000;
+            info!("ADB config done, sending MD_READY and wait for start recording");
+            let mut payload: Vec<u8>=Vec::new();
+            payload.extend_from_slice(&(ControlMessageType::MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+            payload.extend_from_slice(&(CustomCommand::MD_CONNECTED as u16).to_be_bytes());
+            let pkt_rsp = Packet {
+                channel: 0,
+                flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                final_length: None,
+                payload: std::mem::take(&mut payload),
+            };
+            srv_cmd_tx.send_async(pkt_rsp).await?;
+            //wait for custom CMD to start recording
+            loop {
+                match srv_cmd_rx_scrcpy.recv_async().await {
+                    Ok(pkt) => {
+                        // Received a packet
+                        info!("tsk_scrcpy_video Received command packet {:02x?}", pkt);
+                        let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+                        if message_id == MESSAGE_CUSTOM_CMD  as i32
+                        {
+                            let cmd_id: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
+                            let data = &pkt.payload[4..]; // start of message data, without message_id
+                            if cmd_id == CustomCommand::CMD_START_VIDEO_RECORDING as i32
+                            {
+                                match postcard::take_from_bytes::<VideoStreamingParams>(data) {
+                                    Ok((cmd, rest)) => {
+                                        info!("Parsed VideoStreamingParams: {:?}", cmd);
+                                        info!("Remaining bytes: {}", rest.len());
+                                        video_codec_params =cmd;
+                                        break;
+                                    }
+                                    Err(e) => {
+                                        error!("postcard parsing error: {:?}", e);
+                                    }
+                                }
+                            }
+                            if cmd_id == CustomCommand::CMD_START_AUDIO_RECORDING as i32
+                            {
+                                match postcard::take_from_bytes::<AudioStreamingParams>(data) {
+                                    Ok((cmd, rest)) => {
+                                        info!("Parsed AudioStreamingParams: {:?}", cmd);
+                                        info!("Remaining bytes: {}", rest.len());
+                                        audio_codec_params =cmd;
+                                        //break; FIXME start recording on audio also
+                                    }
+                                    Err(e) => {
+                                        error!("postcard parsing error: {:?}", e);
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                info!("tsk_scrcpy_video unknown command received");
+                            }
 
-            tokio::time::sleep(Duration::from_secs(1)).await;//give some time to map adb sockets
+                        }
+                    }
+                    Err(flume::RecvError::Disconnected) => {
+                        // Sender has been dropped, exit loop
+                        println!("Sender closed, exiting loop");
+                    }
+                }
+            }
+
+            let mut cmd_push = vec![];
+            cmd_push.push(String::from("/etc/aa-mirror-rs/scrcpy-server"));
+            cmd_push.push(String::from("/data/local/tmp/scrcpy-server-manual.jar"));
+            let lines=adb::push_cmd(cmd_push).await?;
+            let mut push_ok=false;
+            if lines.len() > 0 {
+                for line in lines {
+                    if line.contains("/s (")
+                    {
+                        push_ok=true;
+                    }
+                    info!("ADB push response: {:?}", line);
+                }
+            }
+            if !push_ok {
+                error!("ADB invalid push response received for control task");
+                continue;
+            }
+            
             let mut cmd_shell:Vec<String> = vec![];
-            //cmd_shell.push(format!("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar app_process / com.genymobile.scrcpy.Server {} log_level=info send_frame_meta=true tunnel_forward=true audio=true video=true control=true send_dummy_byte=false cleanup=true raw_stream=true audio_codec=aac audio_bit_rate={} max_size={} video_bit_rate={} video_codec=h264 new_display={}x{}/{} max_fps={}",SCRCPY_VERSION.to_string(),SCID_VIDEO.to_string(),audio_bitrate, video_res_w, video_bitrate, video_res_w, video_res_h, screen_dpi, video_fps));
             cmd_shell.push("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar".to_string());
             cmd_shell.push("app_process".to_string());
             cmd_shell.push("/".to_string());
@@ -726,10 +750,10 @@ async fn tsk_adb_scrcpy(
             cmd_shell.push("control=true".to_string());
             cmd_shell.push("cleanup=true".to_string());
             cmd_shell.push("audio_codec=aac".to_string());
-            cmd_shell.push(format!("audio_bit_rate={}", audio_bitrate));
+            cmd_shell.push(format!("audio_bit_rate={}", audio_codec_params.bitrate));
             cmd_shell.push(format!("max_size={}", video_codec_params.res_w));
             cmd_shell.push("video_codec=h264".to_string());
-            cmd_shell.push(format!("video_codec_options=profile:int=1,level:int=512,i-frame-interval:integer={},repeat-previous-frame-after:long=0",video_codec_params.fps));//AVC base profile, no B frames, only I and P frames
+            cmd_shell.push(format!("video_codec_options=profile:int=1,level:int=512,i-frame-interval:integer={},repeat-previous-frame-after:long=0", video_codec_params.fps));//AVC base profile, no B frames, only I and P frames
             cmd_shell.push(format!("video_bit_rate={}", video_codec_params.bitrate));
             cmd_shell.push(format!("new_display={}x{}/{}", video_codec_params.res_w, video_codec_params.res_h, video_codec_params.dpi));
             cmd_shell.push(format!("max_fps={}", video_codec_params.fps));
@@ -750,8 +774,8 @@ async fn tsk_adb_scrcpy(
                 info!("SCRCPY connected to all 3 sockets");
                 let hnd_scrcpy_video;
                 let hnd_scrcpy_audio;
-                let video_tx = srv_tx.clone();
-                let audio_tx = srv_tx.clone();
+                let video_tx = media_tx.clone();
+                let audio_tx = media_tx.clone();
                 let (done_th_tx_video, mut done_th_rx_video) = oneshot::channel();
                 let (done_th_tx_audio, mut done_th_rx_audio) = oneshot::channel();
                 hnd_scrcpy_video = tokio_uring::spawn(async move {
@@ -767,7 +791,7 @@ async fn tsk_adb_scrcpy(
                         audio_stream,
                         srv_cmd_rx_audio.clone(),
                         audio_tx,
-                                                    ).await;
+                    ).await;
                     let _ = done_th_tx_audio.send(res);
                 });
 
@@ -812,7 +836,6 @@ async fn tsk_adb_scrcpy(
                 error!("Invalid response for ADB shell");
                 continue;
             }
-            //FIXME add a cancellation token
         }
         else {
             error!("{}: No device with ADB connection found, trying again...", NAME)
@@ -843,11 +866,13 @@ pub async fn io_loop(
     let cfg = shared_config.read().await.clone();
     let hex_requested = cfg.hexdump_level;
 
-    //mpsc for scrcpy
-    let (tx_cmd_audio, rx_cmd_audio)=flume::bounded::<Packet>(5);;
-    let (tx_cmd_video, rx_cmd_video)=flume::bounded::<Packet>(5);;
-    let (tx_scrcpy, rx_scrcpy)=flume::bounded::<Packet>(60);;
-    let (tx_scrcpy_cmd, rx_scrcpy_cmd)=flume::bounded::<Packet>(5);;
+    //io channels for scrcpy
+    let (tx_cmd_audio, rx_cmd_audio)=flume::bounded::<Packet>(5);
+    let (tx_cmd_video, rx_cmd_video)=flume::bounded::<Packet>(5);
+    let (tx_scrcpy, rx_scrcpy)=flume::bounded::<Packet>(60);
+    let (tx_scrcpy_cmd, rx_scrcpy_cmd)=flume::bounded::<Packet>(5);
+    //delete this? we need video and audio cmd only
+    let (tx_scrcpy_srv_cmd, rx_scrcpy_srv_cmd)=flume::bounded::<Packet>(5);
 
     let mut tsk_adb;
     tsk_adb = tokio_uring::spawn(tsk_adb_scrcpy(
@@ -855,6 +880,7 @@ pub async fn io_loop(
         rx_cmd_audio,
         tx_scrcpy,
         rx_scrcpy_cmd,
+        tx_scrcpy_srv_cmd,
         cfg,
     ));
     loop {
@@ -965,7 +991,8 @@ pub async fn io_loop(
             txr_srv,
             tx_cmd_video.clone(),
             tx_cmd_audio.clone(),
-            tx_scrcpy_cmd.clone()
+            tx_scrcpy_cmd.clone(),
+            rx_scrcpy_srv_cmd.clone()
         ));
         
         // Thread for monitoring transfer

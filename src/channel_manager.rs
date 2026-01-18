@@ -11,6 +11,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
+use flume::TryRecvError;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -29,7 +30,7 @@ use protobuf::text_format::print_to_string_pretty;
 use protobuf::{Enum, Message, MessageDyn};
 use tokio::sync::{mpsc};
 use protos::ControlMessageType::{self, *};
-use crate::aa_services::{VideoCodecResolution::*, VideoFPS::*, AudioStream::*, VideoConfig, AudioConfig, AudioChConfiguration, MediaCodec, MediaCodec::*, AudioStream, ServiceType, CommandState, ServiceStatus, th_bluetooth, CmdStartMediaRec, CmdStartStreaming};
+use crate::aa_services::{VideoCodecResolution::*, VideoFPS::*, AudioStream::*, VideoConfig, AudioConfig, AudioChConfiguration, MediaCodec, MediaCodec::*, AudioStream, ServiceType, CommandState, ServiceStatus, th_bluetooth, CmdStartMediaRec, VideoStreamingParams, AudioStreamingParams};
 use crate::aa_services::{th_input_source, th_media_sink_audio_guidance, th_media_sink_audio_streaming, th_media_sink_video, th_media_source, th_sensor_source, th_vendor_extension};
 use crate::config;
 use crate::config::HU_CONFIG_DELAY_MS;
@@ -570,7 +571,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
 
             },
         }
-        
+
     }
 
     /// checking if there was a true fatal SSL error
@@ -668,7 +669,8 @@ pub async fn ch_proxy(
     mut tx_srv: Sender<Packet>,
     video_cmd: flume::Sender<Packet>,
     audio_cmd: flume::Sender<Packet>,
-    scrcpy_cmd: flume::Sender<Packet>,
+    scrcpy_cmd_tx: flume::Sender<Packet>,
+    scrcpy_cmd_rx: flume::Receiver<Packet>,
 ) -> Result<()> {
     info!( "{} Entering channel manager",get_name());
    // waiting for initial version frame (HU is starting transmission)
@@ -759,7 +761,8 @@ pub async fn ch_proxy(
     let mut srv_tsk_handles;
     let mut channel_status;
     let data = &pkt.payload[2..]; // start of message data, without message_id
-    let mut video_codec_params = CmdStartStreaming::default();
+    let mut video_codec_params = VideoStreamingParams::default();
+    let mut audio_codec_params = AudioStreamingParams::default();
     if  let Ok(msg) = ServiceDiscoveryResponse::parse_from_bytes(&data){
         info!( "{} ServiceDiscoveryResponse parsed ok",get_name());
         //let srv_count=msg.services.len();
@@ -790,6 +793,9 @@ pub async fn ch_proxy(
                         {
                             codec:acd,
                             stream_type: AudioStream::GUIDANCE,
+                            bitrate:proto_srv.media_sink_service.audio_configs[0].number_of_bits(),
+                            channels:proto_srv.media_sink_service.audio_configs[0].number_of_channels(),
+                            bitdepth:proto_srv.media_sink_service.audio_configs[0].number_of_bits(),
                         };
                         let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                         srv_senders.push(tx);
@@ -801,10 +807,15 @@ pub async fn ch_proxy(
                         {
                             codec:acd,
                             stream_type: AudioStream::MEDIA,
+                            bitrate:proto_srv.media_sink_service.audio_configs[0].number_of_bits(),
+                            channels:proto_srv.media_sink_service.audio_configs[0].number_of_channels(),
+                            bitdepth:proto_srv.media_sink_service.audio_configs[0].number_of_bits(),
                         };
+                        audio_codec_params.bitrate=audio_cfg.bitrate as i32;
+                        audio_codec_params.sid=ch_id;
                         let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                         srv_senders.push(tx);
-                        srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_audio_streaming(ch_id,true, tx_srv.clone(), rx, audio_cmd.clone(), audio_cfg)));
+                        srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_audio_streaming(ch_id,true, tx_srv.clone(), rx, audio_cmd.clone(), audio_cfg, audio_codec_params)));
                     }
                     else {
                         error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
@@ -815,10 +826,10 @@ pub async fn ch_proxy(
                     let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                     srv_senders.push(tx);
                     let vcr=match proto_srv.media_sink_service.video_configs[0].codec_resolution() {
-                        VideoCodecResolutionType::VIDEO_800x480=>{video_codec_params.bitrate=4_000_000; video_codec_params.res_w=800; video_codec_params.res_h=480; Video_800x480},
-                        VideoCodecResolutionType::VIDEO_720x1280=>{video_codec_params.bitrate=8_000_000; video_codec_params.res_w=1280; video_codec_params.res_h=720; Video_720x1280},
-                        VideoCodecResolutionType::VIDEO_1080x1920=>{video_codec_params.bitrate=16_000_000; video_codec_params.res_w=1920; video_codec_params.res_h=1080; Video_1080x1920},
-                        _=>{video_codec_params.bitrate=4_000_000; video_codec_params.res_w=800; video_codec_params.res_h=480; Video_800x480},
+                        VideoCodecResolutionType::VIDEO_800x480=>{ video_codec_params.bitrate =4_000_000; video_codec_params.res_w=800; video_codec_params.res_h=480; Video_800x480},
+                        VideoCodecResolutionType::VIDEO_720x1280=>{ video_codec_params.bitrate =8_000_000; video_codec_params.res_w=1280; video_codec_params.res_h=720; Video_720x1280},
+                        VideoCodecResolutionType::VIDEO_1080x1920=>{ video_codec_params.bitrate =16_000_000; video_codec_params.res_w=1920; video_codec_params.res_h=1080; Video_1080x1920},
+                        _=>{ video_codec_params.bitrate =4_000_000; video_codec_params.res_w=800; video_codec_params.res_h=480; Video_800x480},
                     };
 
                     let vcd=match proto_srv.media_sink_service.video_configs[0].video_codec_type() {
@@ -828,12 +839,13 @@ pub async fn ch_proxy(
                         _=>VIDEO_H264_BP,
                     };
                     let vfps=match proto_srv.media_sink_service.video_configs[0].frame_rate() {
-                        VideoFrameRateType::VIDEO_FPS_60=>{video_codec_params.fps=60; FPS_60},
-                        VideoFrameRateType::VIDEO_FPS_30=>{video_codec_params.fps=30; FPS_30},
-                        _=>{video_codec_params.fps=30; FPS_30},
+                        VideoFrameRateType::VIDEO_FPS_60=>{ video_codec_params.fps=60; FPS_60},
+                        VideoFrameRateType::VIDEO_FPS_30=>{ video_codec_params.fps=30; FPS_30},
+                        _=>{ video_codec_params.fps=30; FPS_30},
                     };
                     video_codec_params.dpi=proto_srv.media_sink_service.video_configs[0].density() as i32;
-                    srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_video(ch_id,true, tx_srv.clone(), rx, video_cmd.clone())));
+                    video_codec_params.sid=ch_id;
+                    srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_video(ch_id,true, tx_srv.clone(), rx, video_cmd.clone(), video_codec_params)));
                 }
                 else {
                     error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
@@ -910,7 +922,7 @@ pub async fn ch_proxy(
             final_length: None,
             payload: payload.clone(),
         };
-        scrcpy_cmd.send_async(pkt_rsp).await?;
+        scrcpy_cmd_tx.send_async(pkt_rsp).await?;
 
     }
     else {
@@ -995,6 +1007,39 @@ pub async fn ch_proxy(
                 }
                 _ =>{ info!( "{} Unknown message ID: {} received for default channel",get_name(), message_id);}
             };
+        }
+
+        //check for MD connected
+        match scrcpy_cmd_rx.try_recv() {
+            Ok(mut pkt) => {
+                let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+                if message_id == MESSAGE_CUSTOM_CMD  as i32
+                {
+                    let cmd_id: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
+                    let data = &pkt.payload[4..]; // start of message data, without message_id
+                    if cmd_id == CustomCommand::MD_CONNECTED as i32
+                    {
+                        info!("{} MD connected, proxy packet to media channels",get_name());
+                        let idx=get_service_index(&channel_status, audio_codec_params.sid);
+                        if idx !=255
+                        {
+                            srv_senders[idx].send(pkt).await.expect("Error sending message to service");
+                        }
+                        else {
+                            error!( "{} Invalid channel {}",get_name(), pkt.channel);
+                        }
+                        let idx=get_service_index(&channel_status, video_codec_params.sid);
+                        if idx !=255
+                        {
+                            srv_senders[idx].send(pkt).await.expect("Error sending message to service");
+                        }
+                        else {
+                            error!( "{} Invalid channel {}",get_name(), pkt.channel);
+                        }
+                    }
+                }
+            }
+            _ => {error!("SCRCPY command receive error")}
         }
     }
     return Err(Box::new("proxy main loop ended ok")).expect("TODO");

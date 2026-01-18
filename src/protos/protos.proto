@@ -1223,6 +1223,7 @@ enum CustomCommand{
     CMD_STOP_VIDEO_RECORDING=6;
     CMD_START_DEVICE_RECORDING=7;
     CMD_STOP_DEVICE_RECORDING=8;
+    MD_CONNECTED=9;
 }
 
 enum ControlMessageType {
