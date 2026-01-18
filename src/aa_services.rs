@@ -237,7 +237,7 @@ pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, 
         format!("<i><bright-black> aa-mirror/{}: </>", dev)
     }
 }
-pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, scrcpy_cmd: flume::Sender<Packet>, mut video_params:&VideoStreamingParams) -> Result<()>{
+pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, scrcpy_cmd: flume::Sender<Packet>, video_params:&mut VideoStreamingParams) -> Result<()>{
     //pre-rendered frames using openh264 lib from a C# app (1 frame out of static 800x480 bmp)
     let wait_screen_config_frame: Vec<u8> = vec![0x00, 0x00, 0x00, 0x01, 0x67, 0x42, 0xC0, 0x1E, 0x8C, 0x8D, 0x40, 0x64, 0x1E, 0x90, 0x0F, 0x08, 0x84, 0x6A, 0x00, 0x00, 0x00, 0x01, 0x68, 0xCE, 0x3C, 0x80];
     let wait_screen_first_frame: Vec<u8> = vec![0x00, 0x00, 0x00, 0x01, 0x65, 0xB8, 0x00, 0x04, 0x00, 0x00, 0x78, 0x8C, 0x50, 0x00, 0x27, 0x1C,
@@ -1117,7 +1117,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
 
                             info!( "{} Send custom CMD_START_VIDEO_RECORDING for ch {}",get_name(), ch_id);
                         }
-                        else 
+                        else
                         {
                             let bytes: Vec<u8> = postcard::to_stdvec(&video_params)?;
                             let mut payload = Vec::new();
@@ -1133,7 +1133,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                             };
                             scrcpy_cmd.send_async(pkt_rsp).await?;
                         }
-                        
+
                     }
                 }
                 else
@@ -1348,7 +1348,7 @@ pub async fn th_media_sink_audio_guidance(ch_id: i32, enabled:bool, tx_srv: Send
         format!("<i><bright-black> aa-mirror/{}: </>", dev)
     }
 }
-pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, scrcpy_cmd: flume::Sender<Packet>, acfg:AudioConfig, mut audio_params:&AudioStreamingParams) -> Result<()>{
+pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, scrcpy_cmd: flume::Sender<Packet>, acfg:AudioConfig, audio_params:&mut AudioStreamingParams) -> Result<()>{
     info!( "{}: Starting...", get_name());
     let mut audio_stream_started:bool=false;
     let mut md_connected=false;
@@ -1452,7 +1452,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                             audio_stream_started =true;
                             info!( "{} Send custom CMD_START_AUDIO_RECORDING for ch {}",get_name(), ch_id);
 
-                            
+
                             let bytes: Vec<u8> = postcard::to_stdvec(&audio_params)?;
                             let mut payload = Vec::new();
                             payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
