@@ -292,10 +292,10 @@ async fn tsk_scrcpy_video(
     mut stream: TcpStream,
     mut cmd_rx: flume::Receiver<Packet>,
     video_tx: flume::Sender<Packet>,
+    max_unack:i32,
 ) -> Result<()> {
     info!("Starting video server!");
     let mut streaming_on=true;
-    let mut max_unack=2;
     let mut act_unack=0;
     //let mut frame_buf = vec![];
     let codec_buf = vec![0u8; 12];
@@ -348,27 +348,12 @@ async fn tsk_scrcpy_video(
                 {
                     let cmd_id: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
                     let data = &pkt.payload[4..]; // start of message data, without message_id
-                    if cmd_id == CustomCommand::CMD_START_VIDEO_RECORDING as i32
-                    {
-                        streaming_on = true;
-                        info!("tsk_scrcpy_video Video streaming started");
-                        match postcard::take_from_bytes::<CmdStartMediaRec>(data) {
-                            Ok((cmd, rest)) => {
-                                ch_id = pkt.channel;
-                                info!("Parsed CmdStartVideoRec: {:?}", cmd);
-                                info!("Remaining bytes: {}", rest.len());
-                                max_unack=cmd.max_unack;
-                            }
-                            Err(e) => {
-                                error!("postcard parsing error: {:?}", e);
-                            }
-                        }
-                    }
-                    else if cmd_id == CustomCommand::CMD_STOP_VIDEO_RECORDING as i32
+                    if cmd_id == CustomCommand::CMD_STOP_VIDEO_RECORDING as i32
                     {
                         act_unack=max_unack;
                         streaming_on = false;
                         info!("tsk_scrcpy_video Video streaming stopped");
+                        break;
                     }
 
                 }
@@ -463,12 +448,12 @@ async fn tsk_scrcpy_audio(
     mut stream: TcpStream,
     mut cmd_rx: flume::Receiver<Packet>,
     audio_tx: flume::Sender<Packet>,
+    max_unack:i32,
 ) -> Result<()> {
 
     info!("Starting audio server!");
     let mut streaming_on=false;
     let mut ch_id:u8=0;
-    let mut max_unack=0;
     let mut act_unack=0;
     //discard codec metadata
     let codec_buf = vec![0u8; 4];
@@ -627,7 +612,7 @@ async fn tsk_adb_scrcpy(
     {
         if let Some(device)=adb::get_first_adb_device(config.clone()).await {
             info!("{}: ADB device found: {:?}, trying to get video/audio from it now",NAME, device);
-            
+
             let mut cmd_portfw = vec![];
             cmd_portfw.push(format!("tcp:{}", SCRCPY_PORT));
             cmd_portfw.push("localabstract:scrcpy".to_string());
@@ -731,7 +716,7 @@ async fn tsk_adb_scrcpy(
                 error!("ADB invalid push response received for control task");
                 continue;
             }
-            
+
             let mut cmd_shell:Vec<String> = vec![];
             cmd_shell.push("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar".to_string());
             cmd_shell.push("app_process".to_string());
@@ -782,7 +767,8 @@ async fn tsk_adb_scrcpy(
                     let res = tsk_scrcpy_video(
                         video_stream,
                         srv_cmd_rx_video.clone(),
-                        video_tx).await;
+                        video_tx,
+                    video_codec_params.max_unack).await;
                     let _ = done_th_tx_video.send(res);
 
                 });
@@ -791,6 +777,7 @@ async fn tsk_adb_scrcpy(
                         audio_stream,
                         srv_cmd_rx_audio.clone(),
                         audio_tx,
+                        audio_codec_params.max_unack,
                     ).await;
                     let _ = done_th_tx_audio.send(res);
                 });
