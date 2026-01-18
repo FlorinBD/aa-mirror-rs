@@ -531,23 +531,7 @@ async fn tsk_scrcpy_audio(
                 {
                     let cmd_id: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
                     let data = &pkt.payload[4..]; // start of message data, without message_id
-                    if cmd_id == CustomCommand::CMD_START_AUDIO_RECORDING as i32
-                    {
-                        //streaming_on = true;
-                        info!("tsk_scrcpy_audio Audio streaming started");
-                        match postcard::take_from_bytes::<CmdStartMediaRec>(data) {
-                            Ok((cmd, rest)) => {
-                                ch_id = pkt.channel;
-                                info!("Parsed CmdStartMediaRec: {:?}", cmd);
-                                info!("Remaining bytes: {}", rest.len());
-                                max_unack=cmd.max_unack;
-                            }
-                            Err(e) => {
-                                error!("postcard parsing error: {:?}", e);
-                            }
-                        }
-                    }
-                    else if cmd_id == CustomCommand::CMD_STOP_AUDIO_RECORDING as i32
+                    if cmd_id == CustomCommand::CMD_STOP_AUDIO_RECORDING as i32
                     {
                         act_unack=max_unack;
                         streaming_on = false;
