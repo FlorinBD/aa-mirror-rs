@@ -654,7 +654,7 @@ async fn tsk_adb_scrcpy(
                                     }
                                 }
                             }
-                            if cmd_id == CustomCommand::CMD_START_AUDIO_RECORDING as i32
+                            else if cmd_id == CustomCommand::CMD_START_AUDIO_RECORDING as i32
                             {
                                 match postcard::take_from_bytes::<AudioStreamingParams>(data) {
                                     Ok((cmd, rest)) => {
