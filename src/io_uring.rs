@@ -845,7 +845,7 @@ pub async fn io_loop(
     let hex_requested = cfg.hexdump_level;
 
     //io channels for scrcpy
-    //media frames channel
+    //media frames channel, scrcpy>HU
     let (tx_scrcpy, rx_scrcpy)=flume::bounded::<Packet>(60);
     //cmd srv>scrcpy channel
     let (tx_scrcpy_cmd, rx_scrcpy_cmd)=flume::bounded::<Packet>(5);
