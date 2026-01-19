@@ -359,17 +359,20 @@ async fn tsk_scrcpy_video(
                 }
                 else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK  as i32
                 {
-                    info!("{} Received {} message", ch_id.to_string(), message_id);
-                    let data = &pkt.payload[2..]; // start of message data, without message_id
-                    if  let Ok(rsp) = Ack::parse_from_bytes(&data)
+                    if pkt.channel ==  ch_id
                     {
-                        //info!( "{}, channel {:?}: ACK, timestamp_ns: {:?}", get_name(), pkt.channel, rsp.receive_timestamp_ns[0]);
-                        info!( "tsk_scrcpy_video: video ACK received, sending next frame");
-                        act_unack=0;
-                    }
-                    else
-                    {
-                        error!( "tsk_scrcpy_video Unable to parse received message");
+                        info!("{} Received {} message", ch_id.to_string(), message_id);
+                        let data = &pkt.payload[2..]; // start of message data, without message_id
+                        if  let Ok(rsp) = Ack::parse_from_bytes(&data)
+                        {
+                            //info!( "{}, channel {:?}: ACK, timestamp_ns: {:?}", get_name(), pkt.channel, rsp.receive_timestamp_ns[0]);
+                            info!( "tsk_scrcpy_video: video ACK received, sending next frame");
+                            act_unack=0;
+                        }
+                        else
+                        {
+                            error!( "tsk_scrcpy_video Unable to parse received message");
+                        }
                     }
                 }
                 else
@@ -541,17 +544,20 @@ async fn tsk_scrcpy_audio(
                 }
                 else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK  as i32
                 {
-                    info!("{} Received {} message", ch_id.to_string(), message_id);
-                    let data = &pkt.payload[2..]; // start of message data, without message_id
-                    if  let Ok(rsp) = Ack::parse_from_bytes(&data)
+                    if pkt.channel == ch_id
                     {
-                        //info!( "{}, channel {:?}: ACK, timestamp_ns: {:?}", get_name(), pkt.channel, rsp.receive_timestamp_ns[0]);
-                        info!( "tsk_scrcpy_audio: media ACK received, sending next frame");
-                        act_unack=0;
-                    }
-                    else
-                    {
-                        error!( "tsk_scrcpy_audio Unable to parse MEDIA ACK message");
+                        info!("{} Received {} message", ch_id.to_string(), message_id);
+                        let data = &pkt.payload[2..]; // start of message data, without message_id
+                        if  let Ok(rsp) = Ack::parse_from_bytes(&data)
+                        {
+                            //info!( "{}, channel {:?}: ACK, timestamp_ns: {:?}", get_name(), pkt.channel, rsp.receive_timestamp_ns[0]);
+                            info!( "tsk_scrcpy_audio: media ACK received, sending next frame");
+                            act_unack=0;
+                        }
+                        else
+                        {
+                            error!( "tsk_scrcpy_audio Unable to parse MEDIA ACK message");
+                        }
                     }
                 }
                 else
