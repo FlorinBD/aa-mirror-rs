@@ -801,7 +801,7 @@ async fn tsk_adb_scrcpy(
                     //CMD proxy to audio/video threads
                     match srv_cmd_rx_scrcpy.try_recv(){
                         Ok(pkt)=>{
-                            tx_cmd.send(pkt.clone())?;
+                            tx_cmd.send(pkt)?;
                         }
                         _ => {}
                     }
