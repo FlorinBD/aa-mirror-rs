@@ -13,7 +13,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::broadcast::Sender as BroadcastSender;
 use tokio::sync::mpsc::{Receiver, Sender};
-use tokio::sync::{mpsc, oneshot, Mutex, Notify};
+use tokio::sync::{broadcast, mpsc, oneshot, Mutex, Notify};
 use tokio::task::JoinHandle;
 use tokio::time::{sleep, timeout};
 use tokio_uring::buf::BoundedBuf;
@@ -290,7 +290,7 @@ async fn tcp_wait_for_md_connection(listener: &mut TcpListener) -> Result<TcpStr
 
 async fn tsk_scrcpy_video(
     mut stream: TcpStream,
-    mut cmd_rx: flume::Receiver<Packet>,
+    mut cmd_rx: broadcast::Receiver<Packet>,
     video_tx: flume::Sender<Packet>,
     max_unack:u32,
 ) -> Result<()> {
@@ -446,7 +446,7 @@ async fn tsk_scrcpy_video(
 
 async fn tsk_scrcpy_audio(
     mut stream: TcpStream,
-    mut cmd_rx: flume::Receiver<Packet>,
+    mut cmd_rx: broadcast::Receiver<Packet>,
     audio_tx: flume::Sender<Packet>,
     max_unack:u32,
 ) -> Result<()> {
@@ -745,12 +745,12 @@ async fn tsk_adb_scrcpy(
                 let audio_tx = media_tx.clone();
                 let (done_th_tx_video, mut done_th_rx_video) = oneshot::channel();
                 let (done_th_tx_audio, mut done_th_rx_audio) = oneshot::channel();
-                let (tx_cmd_audio, rx_cmd_audio)=flume::bounded::<Packet>(5);
-                let (tx_cmd_video, rx_cmd_video)=flume::bounded::<Packet>(5);
+                let (tx_cmd, rx_cmd)=broadcast::channel::<Packet>(5);
+
                 hnd_scrcpy_video = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_video(
                         video_stream,
-                        rx_cmd_audio,
+                        rx_cmd.resubscribe(),
                         video_tx,
                     video_codec_params.max_unack).await;
                     let _ = done_th_tx_video.send(res);
@@ -759,7 +759,7 @@ async fn tsk_adb_scrcpy(
                 hnd_scrcpy_audio = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_audio(
                         audio_stream,
-                        rx_cmd_video,
+                        rx_cmd.resubscribe(),
                         audio_tx,
                         audio_codec_params.max_unack,
                     ).await;
@@ -801,8 +801,7 @@ async fn tsk_adb_scrcpy(
                     //CMD proxy to audio/video threads
                     match srv_cmd_rx_scrcpy.try_recv(){
                         Ok(pkt)=>{
-                            tx_cmd_audio.send(pkt.clone()).await?;
-                            tx_cmd_video.send(pkt).await?;
+                            tx_cmd.send(pkt.clone())?;
                         }
                         _ => {}
                     }
