@@ -1074,8 +1074,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                     info!( "{}, channel {:?}: Message status: {:?}", get_name(), pkt.channel, rsp.focus());
                     if rsp.focus() == VideoFocusMode::VIDEO_FOCUS_PROJECTED
                     {
-                        info!( "{}, channel {:?}: Starting video capture", get_name(), pkt.channel);
-                        video_stream_started=true;
+                        info!( "{}, channel {:?}: VIDEO_FOCUS_PROJECTED received", get_name(), pkt.channel);
                         //Send config frame
                         let mut payload=wait_screen_config_frame.to_vec();
                         payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16) >> 8) as u8);
@@ -1090,6 +1089,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
                         if !md_connected
                         {
+                            info!( "{}, channel {:?}: MD not connected yet, showing startup screen", get_name(), pkt.channel);
                             //Send first frame
                             let mut payload=wait_screen_first_frame.to_vec();
                             payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) >> 8) as u8);
@@ -1114,6 +1114,8 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         }
                         else
                         {
+                            info!( "{}, channel {:?}: MD connected, starting video streaming", get_name(), pkt.channel);
+                            video_stream_started=true;
                             let bytes: Vec<u8> = postcard::to_stdvec(&video_params)?;
                             let mut payload = Vec::new();
                             payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
@@ -1138,8 +1140,11 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
             }
             else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK  as i32
             {
-                info!( "{}, channel {:?}: video ACK received, proxy to SCRCPY", get_name(), pkt.channel);
-                scrcpy_cmd.send_async(pkt).await?;
+                if video_stream_started
+                {
+                    info!( "{}, channel {:?}: video ACK received, proxy to SCRCPY", get_name(), pkt.channel);
+                    scrcpy_cmd.send_async(pkt).await?;
+                }
             }
             else
             {
@@ -1444,23 +1449,26 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                         info!( "{}, channel {:?}: Starting audio capture", get_name(), pkt.channel);
                         if acfg.codec == MediaCodec::AUDIO_PCM
                         {
-                            audio_stream_started =true;
-                            info!( "{} Send custom CMD_START_AUDIO_RECORDING for ch {}",get_name(), ch_id);
 
+                            if md_connected
+                            {
+                                audio_stream_started =true;
+                                info!( "{} Send custom CMD_START_AUDIO_RECORDING for ch {}",get_name(), ch_id);
+                                let bytes: Vec<u8> = postcard::to_stdvec(&audio_params)?;
+                                let mut payload = Vec::new();
+                                payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+                                payload.extend_from_slice(&(CustomCommand::CMD_START_AUDIO_RECORDING as u16).to_be_bytes());
+                                payload.extend_from_slice(&bytes);
 
-                            let bytes: Vec<u8> = postcard::to_stdvec(&audio_params)?;
-                            let mut payload = Vec::new();
-                            payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
-                            payload.extend_from_slice(&(CustomCommand::CMD_START_AUDIO_RECORDING as u16).to_be_bytes());
-                            payload.extend_from_slice(&bytes);
+                                let pkt_rsp = Packet {
+                                    channel: ch_id as u8,
+                                    flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                                    final_length: None,
+                                    payload: payload.clone(),
+                                };
+                                scrcpy_cmd.send_async(pkt_rsp).await?;
+                            }
 
-                            let pkt_rsp = Packet {
-                                channel: ch_id as u8,
-                                flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                                final_length: None,
-                                payload: payload.clone(),
-                            };
-                            scrcpy_cmd.send_async(pkt_rsp).await?;
                         }
                         else
                         {
@@ -1475,8 +1483,11 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
             }
             else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK  as i32
             {
-                info!("{} Received {} message, proxy to SCRCPY", ch_id.to_string(), message_id);
-                scrcpy_cmd.send_async(pkt).await?;
+                if audio_stream_started
+                {
+                    info!("{} Received {} message, proxy to SCRCPY", ch_id.to_string(), message_id);
+                    scrcpy_cmd.send_async(pkt).await?;
+                }
             }
             else
             {

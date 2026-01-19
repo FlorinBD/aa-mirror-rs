@@ -535,7 +535,7 @@ async fn tsk_scrcpy_audio(
                     {
                         act_unack=max_unack;
                         streaming_on = false;
-                        info!("tsk_scrcpy_audio Video streaming stopped");
+                        info!("tsk_scrcpy_audio Audio streaming stopped");
                     }
 
                 }
@@ -632,7 +632,7 @@ async fn tsk_adb_scrcpy(
                 match srv_cmd_rx_scrcpy.recv_async().await {
                     Ok(pkt) => {
                         // Received a packet
-                        info!("tsk_scrcpy_video Received command packet {:02x?}", pkt);
+                        info!("tsk_adb_scrcpy Received command packet {:02x?}", pkt);
                         let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
                         if message_id == MESSAGE_CUSTOM_CMD  as i32
                         {
@@ -668,9 +668,12 @@ async fn tsk_adb_scrcpy(
                             }
                             else
                             {
-                                info!("tsk_scrcpy_video unknown command received");
+                                info!("tsk_adb_scrcpy unknown command received");
                             }
 
+                        }
+                        else {
+                            error!("tsk_adb_scrcpy unknown message received: {:?}", message_id);
                         }
                     }
                     Err(flume::RecvError::Disconnected) => {
