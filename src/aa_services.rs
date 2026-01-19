@@ -998,8 +998,8 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         //Send STOP to HU
                         let mut media_stop= Stop::new();
                         let mut payload: Vec<u8>=Vec::new();
-                        payload.extend_from_slice(&(ControlMessageType::MEDIA_MESSAGE_STOP as u16).to_be_bytes());
-                        payload.extend_from_slice(&(media_stop.write_to_bytes()));
+                        payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_STOP as u16).to_be_bytes());
+                        payload.extend_from_slice(&(media_stop.write_to_bytes()?));
                         let pkt_rsp = Packet {
                             channel: ch_id as u8,
                             flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
