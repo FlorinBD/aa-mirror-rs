@@ -112,7 +112,7 @@ impl SslMemBuf {
         self.client_stream.lock().unwrap().write(buf)
     }
 }
-#[derive(Debug, Clone)]
+#[derive(Clone,Debug, Clone)]
 pub struct Packet {
     pub channel: u8,
     pub flags: u8,
