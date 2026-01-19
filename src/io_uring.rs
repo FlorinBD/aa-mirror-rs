@@ -565,8 +565,6 @@ async fn tsk_scrcpy_audio(
     Ok(())
 }
 async fn tsk_adb_scrcpy(
-    srv_cmd_rx_video: flume::Receiver<Packet>,
-    srv_cmd_rx_audio: flume::Receiver<Packet>,
     media_tx: flume::Sender<Packet>,
     mut srv_cmd_rx_scrcpy: flume::Receiver<Packet>,
     srv_cmd_tx: flume::Sender<Packet>,
@@ -747,10 +745,12 @@ async fn tsk_adb_scrcpy(
                 let audio_tx = media_tx.clone();
                 let (done_th_tx_video, mut done_th_rx_video) = oneshot::channel();
                 let (done_th_tx_audio, mut done_th_rx_audio) = oneshot::channel();
+                let (tx_cmd_audio, rx_cmd_audio)=flume::bounded::<Packet>(5);
+                let (tx_cmd_video, rx_cmd_video)=flume::bounded::<Packet>(5);
                 hnd_scrcpy_video = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_video(
                         video_stream,
-                        srv_cmd_rx_video.clone(),
+                        rx_cmd_audio,
                         video_tx,
                     video_codec_params.max_unack).await;
                     let _ = done_th_tx_video.send(res);
@@ -759,7 +759,7 @@ async fn tsk_adb_scrcpy(
                 hnd_scrcpy_audio = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_audio(
                         audio_stream,
-                        srv_cmd_rx_audio.clone(),
+                        rx_cmd_video,
                         audio_tx,
                         audio_codec_params.max_unack,
                     ).await;
@@ -797,6 +797,14 @@ async fn tsk_adb_scrcpy(
                         Err(_) => {
                             // no data yet (non-blocking behavior)
                         }
+                    }
+                    //CMD proxy to audio/video threads
+                    match srv_cmd_rx_scrcpy.try_recv(){
+                        Ok(pkt)=>{
+                            tx_cmd_audio.send(pkt.clone()).await?;
+                            tx_cmd_video.send(pkt).await?;
+                        }
+                        _ => {}
                     }
                     //TODO check audio/video task if they finished to restart connection
                 }
@@ -838,17 +846,12 @@ pub async fn io_loop(
     let hex_requested = cfg.hexdump_level;
 
     //io channels for scrcpy
-    let (tx_cmd_audio, rx_cmd_audio)=flume::bounded::<Packet>(5);
-    let (tx_cmd_video, rx_cmd_video)=flume::bounded::<Packet>(5);
     let (tx_scrcpy, rx_scrcpy)=flume::bounded::<Packet>(60);
     let (tx_scrcpy_cmd, rx_scrcpy_cmd)=flume::bounded::<Packet>(5);
-    //delete this? we need video and audio cmd only
     let (tx_scrcpy_srv_cmd, rx_scrcpy_srv_cmd)=flume::bounded::<Packet>(5);
 
     let mut tsk_adb;
     tsk_adb = tokio_uring::spawn(tsk_adb_scrcpy(
-        rx_cmd_video,
-        rx_cmd_audio,
         tx_scrcpy,
         rx_scrcpy_cmd,
         tx_scrcpy_srv_cmd,
@@ -960,8 +963,6 @@ pub async fn io_loop(
         tsk_ch_manager = tokio_uring::spawn(ch_proxy(
             rx_srv,
             txr_srv,
-            tx_cmd_video.clone(),
-            tx_cmd_audio.clone(),
             tx_scrcpy_cmd.clone(),
             rx_scrcpy_srv_cmd.clone()
         ));

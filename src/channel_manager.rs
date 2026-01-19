@@ -667,8 +667,6 @@ fn get_service_index(arr:&Vec<ServiceStatus>, ch:i32)->usize
 pub async fn ch_proxy(
     mut rx_srv: Receiver<Packet>,
     mut tx_srv: Sender<Packet>,
-    video_cmd: flume::Sender<Packet>,
-    audio_cmd: flume::Sender<Packet>,
     scrcpy_cmd_tx: flume::Sender<Packet>,
     scrcpy_cmd_rx: flume::Receiver<Packet>,
 ) -> Result<()> {
@@ -815,7 +813,7 @@ pub async fn ch_proxy(
                         audio_codec_params.sid=ch_id;
                         let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                         srv_senders.push(tx);
-                        srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_audio_streaming(ch_id,true, tx_srv.clone(), rx, audio_cmd.clone(), audio_cfg, audio_codec_params.clone())));
+                        srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_audio_streaming(ch_id,true, tx_srv.clone(), rx, scrcpy_cmd_tx.clone(), audio_cfg, audio_codec_params.clone())));
                     }
                     else {
                         error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
@@ -845,7 +843,7 @@ pub async fn ch_proxy(
                     };
                     video_codec_params.dpi=proto_srv.media_sink_service.video_configs[0].density() as i32;
                     video_codec_params.sid=ch_id;
-                    srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_video(ch_id,true, tx_srv.clone(), rx, video_cmd.clone(), video_codec_params.clone())));
+                    srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_video(ch_id,true, tx_srv.clone(), rx, scrcpy_cmd_tx.clone(), video_codec_params.clone())));
                 }
                 else {
                     error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
