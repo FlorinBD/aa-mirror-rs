@@ -1010,7 +1010,8 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                             error!( "{} send error",get_name());
                         };
                         video_stream_started=false;
-                        info!( "{}, channel {:?}: Sending START command", get_name(), pkt.channel);
+                        //wait for Stop feedback from HU
+                        /*info!( "{}, channel {:?}: Sending START command", get_name(), pkt.channel);
                         session_id +=1;
                         let mut start_req = Start::new();
                         start_req.set_session_id(session_id);
@@ -1027,7 +1028,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         };
                         if let Err(_) = tx_srv.send(pkt_rsp).await{
                             error!( "{} response send error",get_name());
-                        };
+                        };*/
                     }
             }
             else if message_id == MediaMessageId::MEDIA_MESSAGE_CONFIG  as i32
