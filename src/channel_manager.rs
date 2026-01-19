@@ -905,23 +905,6 @@ pub async fn ch_proxy(
         if let Err(_) = tx_srv.send(pkt_rsp).await{
             error!( "{} tls proxy send error",get_name());
         };
-
-        //Start SCRCPY streaming
-        //let struc = CmdStartStreaming { bitrate:8000000, res_w:800, res_h:480, fps:60, dpi:160};//FIXME take them from SDR
-        /*let bytes: Vec<u8> = postcard::to_stdvec(&video_codec_params)?;
-        let mut payload = Vec::new();
-        payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
-        payload.extend_from_slice(&(CustomCommand::CMD_START_DEVICE_RECORDING as u16).to_be_bytes());
-        payload.extend_from_slice(&bytes);
-
-        let pkt_rsp = Packet {
-            channel: 0,
-            flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-            final_length: None,
-            payload: payload.clone(),
-        };
-        scrcpy_cmd_tx.send_async(pkt_rsp).await?;*/
-
     }
     else {
         error!( "{} ServiceDiscoveryResponse couldn't be parsed",get_name());
