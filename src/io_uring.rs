@@ -622,7 +622,7 @@ async fn tsk_adb_scrcpy(
             else {
                 info!("ADB port forwarding done to {}", SCRCPY_PORT);
             }
-            info!("ADB config done, sending MD_READY and wait for start recording");
+            info!("ADB config done, sending MD_CONNECTED and wait for start recording");
             let mut payload: Vec<u8>=Vec::new();
             payload.extend_from_slice(&(ControlMessageType::MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
             payload.extend_from_slice(&(CustomCommand::MD_CONNECTED as u16).to_be_bytes());
