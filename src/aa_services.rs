@@ -1011,8 +1011,8 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                             error!( "{} send error",get_name());
                         };
                         video_stream_started=false;
-                        //wait for Stop feedback from HU
-                        /*info!( "{}, channel {:?}: Sending START command", get_name(), pkt.channel);
+                        tokio::time::sleep(Duration::from_millis(500)).await;
+                        info!( "{}, channel {:?}: Sending START command", get_name(), pkt.channel);
                         session_id +=1;
                         let mut start_req = Start::new();
                         start_req.set_session_id(session_id);
@@ -1029,7 +1029,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         };
                         if let Err(_) = tx_srv.send(pkt_rsp).await{
                             error!( "{} response send error",get_name());
-                        };*/
+                        };
                     }
             }
             else if message_id == MediaMessageId::MEDIA_MESSAGE_CONFIG  as i32
@@ -1422,7 +1422,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                         info!("{} MD connected, send media STOP to HU",get_name());
                         md_connected=true;
                         //Send STOP to HU
-                        let mut media_stop= Stop::new();
+                        /*let mut media_stop= Stop::new();
                         let mut payload: Vec<u8>=media_stop.write_to_bytes()?;
                         payload.insert(0,((MEDIA_MESSAGE_STOP as u16) >> 8) as u8);
                         payload.insert( 1,((MEDIA_MESSAGE_STOP as u16) & 0xff) as u8);
@@ -1434,7 +1434,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                         };
                         if let Err(_) = tx_srv.send(pkt_rsp).await{
                             error!( "{} send error",get_name());
-                        };
+                        };*/
                         audio_stream_started=false;
                     }
             }
