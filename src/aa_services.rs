@@ -1069,9 +1069,13 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         if let Err(_) = tx_srv.send(pkt_rsp).await{
                             error!( "{} response send error",get_name());
                         };*/
-                        session_id +=1;
-                        video_stream_started=false;
-                        stop_start_media(&tx_srv, ch_id as u8, session_id).await?;
+                        if md_connected
+                        {
+                            session_id +=1;
+                            video_stream_started=false;
+                            stop_start_media(&tx_srv, ch_id as u8, session_id).await?;
+                        }
+
                     }
             }
             else if message_id == MediaMessageId::MEDIA_MESSAGE_CONFIG  as i32
