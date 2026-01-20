@@ -1,4 +1,6 @@
 //! This crate provides service implementation for  [Android Open Accessory Protocol 1.0](https://source.android.com/devices/accessories/aoa)
+
+use std::error::Error;
 use simplelog::*;
 use std::fmt;
 use std::io::{Read, Write};
@@ -1302,6 +1304,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
         if let Err(_) = tx.send(pkt_rsp).await{
             error!( "{} response send error",get_name());
         };
+        Ok(())
     }
 }
 pub async fn th_media_sink_audio_guidance(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, acfg:AudioConfig)-> Result<()>{
