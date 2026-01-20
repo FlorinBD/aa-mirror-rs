@@ -998,7 +998,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         info!("{} MD connected, send media STOP to HU",get_name());
                         md_connected=true;
                         //Send STOP to HU
-                        let mut media_stop= Stop::new();
+                        /*let mut media_stop= Stop::new();
                         let mut payload: Vec<u8>=Vec::new();
                         payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_STOP as u16).to_be_bytes());
                         payload.extend_from_slice(&(media_stop.write_to_bytes()?));
@@ -1031,7 +1031,10 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         };
                         if let Err(_) = tx_srv.send(pkt_rsp).await{
                             error!( "{} response send error",get_name());
-                        };
+                        };*/
+                        session_id +=1;
+                        video_stream_started=false;
+                        stop_start_media(&tx_srv, ch_id as u8, session_id).await?;
                     }
                     else if cmd == CustomCommand::MD_DISCONNECTED as i32 {
                         info!("{} MD disconnected, send media STOP to HU",get_name());
