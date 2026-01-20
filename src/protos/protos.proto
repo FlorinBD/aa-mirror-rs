@@ -1222,6 +1222,7 @@ enum CustomCommand{
     CMD_STOP_AUDIO_RECORDING=5;
     CMD_STOP_VIDEO_RECORDING=6;
     MD_CONNECTED=7;
+    MD_DISCONNECTED=8;
 }
 
 enum ControlMessageType {

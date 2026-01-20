@@ -705,6 +705,17 @@ async fn tsk_adb_scrcpy(
             }
             if !push_ok {
                 error!("ADB invalid push response received for control task");
+                info!("tsk_adb_scrcpy Sending MD_DISCONNECT");
+                let mut payload: Vec<u8>=Vec::new();
+                payload.extend_from_slice(&(ControlMessageType::MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+                payload.extend_from_slice(&(CustomCommand::MD_DISCONNECTED as u16).to_be_bytes());
+                let pkt_rsp = Packet {
+                    channel: 0,
+                    flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                    final_length: None,
+                    payload: std::mem::take(&mut payload),
+                };
+                srv_cmd_tx.send_async(pkt_rsp).await?;
                 continue;
             }
 
@@ -823,6 +834,17 @@ async fn tsk_adb_scrcpy(
             }
             else {
                 error!("Invalid response for ADB shell");
+                info!("tsk_adb_scrcpy Sending MD_DISCONNECT");
+                let mut payload: Vec<u8>=Vec::new();
+                payload.extend_from_slice(&(ControlMessageType::MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+                payload.extend_from_slice(&(CustomCommand::MD_DISCONNECTED as u16).to_be_bytes());
+                let pkt_rsp = Packet {
+                    channel: 0,
+                    flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                    final_length: None,
+                    payload: std::mem::take(&mut payload),
+                };
+                srv_cmd_tx.send_async(pkt_rsp).await?;
                 continue;
             }
         }

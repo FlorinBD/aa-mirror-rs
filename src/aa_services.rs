@@ -1011,7 +1011,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                             error!( "{} send error",get_name());
                         };
                         video_stream_started=false;
-                        tokio::time::sleep(Duration::from_millis(500)).await;
+                        tokio::time::sleep(Duration::from_millis(100)).await;
                         info!( "{}, channel {:?}: Sending START command", get_name(), pkt.channel);
                         session_id +=1;
                         let mut start_req = Start::new();
@@ -1030,6 +1030,46 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         if let Err(_) = tx_srv.send(pkt_rsp).await{
                             error!( "{} response send error",get_name());
                         };
+                    }
+                    else if cmd == CustomCommand::MD_DISCONNECTED as i32 {
+                        info!("{} MD disconnected, send media STOP to HU",get_name());
+                        md_connected=false;
+                        //Send STOP to HU
+                        let mut media_stop= Stop::new();
+                        let mut payload: Vec<u8>=Vec::new();
+                        payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_STOP as u16).to_be_bytes());
+                        payload.extend_from_slice(&(media_stop.write_to_bytes()?));
+                        let pkt_rsp = Packet {
+                            channel: ch_id as u8,
+                            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                            final_length: None,
+                            payload: payload,
+                        };
+
+                        if let Err(_) = tx_srv.send(pkt_rsp).await{
+                            error!( "{} send error",get_name());
+                        };
+                        video_stream_started=false;
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                        info!( "{}, channel {:?}: Sending START command", get_name(), pkt.channel);
+                        session_id +=1;
+                        let mut start_req = Start::new();
+                        start_req.set_session_id(session_id);
+                        start_req.set_configuration_index(0);
+                        let mut payload: Vec<u8> = start_req.write_to_bytes().expect("serialization failed");
+                        payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_START as u16) >> 8) as u8);
+                        payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_START as u16) & 0xff) as u8);
+
+                        let pkt_rsp = Packet {
+                            channel: ch_id as u8,
+                            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                            final_length: None,
+                            payload: payload,
+                        };
+                        if let Err(_) = tx_srv.send(pkt_rsp).await{
+                            error!( "{} response send error",get_name());
+                        };
+                        StopStartMedia(tx_srv,ch_id, session_id).await;
                     }
             }
             else if message_id == MediaMessageId::MEDIA_MESSAGE_CONFIG  as i32
@@ -1222,6 +1262,41 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
         println!("Listener thread exiting");
     }
 
+    async fn StopStartMedia(tx: Sender<Packet>, ch_id: u8, session_id:i32){
+        info!( "{}, channel {:?}: Sending STOP command", get_name(), ch_id);
+        let mut media_stop= Stop::new();
+        let mut payload: Vec<u8>=Vec::new();
+        payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_STOP as u16).to_be_bytes());
+        payload.extend_from_slice(&(media_stop.write_to_bytes()?));
+        let pkt_rsp = Packet {
+            channel: ch_id,
+            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+            final_length: None,
+            payload: payload,
+        };
+
+        if let Err(_) = tx.send(pkt_rsp).await{
+            error!( "{} send error",get_name());
+        };
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        info!( "{}, channel {:?}: Sending START command", get_name(), ch_id);
+        let mut start_req = Start::new();
+        start_req.set_session_id(session_id);
+        start_req.set_configuration_index(0);
+        let mut payload: Vec<u8> = start_req.write_to_bytes().expect("serialization failed");
+        payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_START as u16) >> 8) as u8);
+        payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_START as u16) & 0xff) as u8);
+
+        let pkt_rsp = Packet {
+            channel: ch_id,
+            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+            final_length: None,
+            payload: payload,
+        };
+        if let Err(_) = tx.send(pkt_rsp).await{
+            error!( "{} response send error",get_name());
+        };
+    }
 }
 pub async fn th_media_sink_audio_guidance(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, acfg:AudioConfig)-> Result<()>{
     info!( "{}: Starting...", get_name());
