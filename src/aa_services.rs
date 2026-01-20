@@ -1069,7 +1069,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         if let Err(_) = tx_srv.send(pkt_rsp).await{
                             error!( "{} response send error",get_name());
                         };
-                        StopStartMedia(tx_srv,ch_id, session_id).await;
+                        stop_start_media(tx_srv, ch_id as u8, session_id).await;
                     }
             }
             else if message_id == MediaMessageId::MEDIA_MESSAGE_CONFIG  as i32
@@ -1262,12 +1262,12 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
         println!("Listener thread exiting");
     }
 
-    async fn StopStartMedia(tx: Sender<Packet>, ch_id: u8, session_id:i32){
+    async fn stop_start_media(tx: Sender<Packet>, ch_id: u8, session_id:i32){
         info!( "{}, channel {:?}: Sending STOP command", get_name(), ch_id);
         let mut media_stop= Stop::new();
         let mut payload: Vec<u8>=Vec::new();
         payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_STOP as u16).to_be_bytes());
-        payload.extend_from_slice(&(media_stop.write_to_bytes()?));
+        payload.extend_from_slice(&(media_stop.write_to_bytes()));
         let pkt_rsp = Packet {
             channel: ch_id,
             flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
