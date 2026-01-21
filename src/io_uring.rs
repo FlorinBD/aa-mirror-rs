@@ -389,7 +389,8 @@ async fn tsk_scrcpy_video(
         //Read encapsulated video frames
         header_buf=read_exact(&stream, header_buf).await?;
         let pts = u64::from_be_bytes(header_buf[0..8].try_into()?);
-        let frame_size=(u32::from_be_bytes(header_buf[8..12].try_into()?))-8;//packet size include also header (pts) witch must be discarded
+        //let frame_size=(u32::from_be_bytes(header_buf[8..12].try_into()?))-8;//packet size include also header (pts) witch must be discarded?
+        let frame_size=u32::from_be_bytes(header_buf[8..12].try_into()?);
         let key_frame=(pts & 0x4000_0000_0000_0000u64) >0;
         let rec_ts=pts & 0x3FFF_FFFF_FFFF_FFFFu64;
         let config_frame=(pts & 0x8000_0000_0000_0000u64) >0;
@@ -406,7 +407,7 @@ async fn tsk_scrcpy_video(
             if frame_buf.len()>dbg_len as usize
             {
                 let end_offset=frame_buf.len() - dbg_len as usize;
-                info!("Video task got frame config={:?}, act size: {}, defined size: {}, raw bytes: {:02x?}...{:02x?}",config_frame, frame_buf.len(), frame_size , &frame_buf[..dbg_len as usize], &frame_buf[end_offset..]);
+                info!("Video task got frame config={:?}, act size: {}, defined size: {}, raw slice: {:02x?}...{:02x?}",config_frame, frame_buf.len(), frame_size , &frame_buf[..dbg_len as usize], &frame_buf[end_offset..]);
             }
             else {
                 info!("Video task got frame config={:?}, act size: {}, defined size: {}, raw bytes: {:02x?}",config_frame, frame_buf.len(), frame_size , &frame_buf[..dbg_len as usize]);
