@@ -43,6 +43,7 @@ use protos::*;
 use protos::ControlMessageType::{self, *};
 use protobuf::{Message};
 use std::cmp::min;
+use crate::h264_reader::NalReassembler;
 
 // module name for logging engine
 const NAME: &str = "<i><bright-black> io_uring: </>";
@@ -339,6 +340,7 @@ async fn tsk_scrcpy_video(
     let mut payload: Vec<u8>=Vec::new();
     let mut header_buf = vec![0u8; 12];
     let mut frame_buf = Vec::new();
+    let mut reassembler = NalReassembler::new();
     loop {
         //Check custom Service command
         match cmd_rx.try_recv() {
@@ -387,7 +389,7 @@ async fn tsk_scrcpy_video(
             _ => {}
         }
         //Read encapsulated video frames
-        header_buf=read_exact(&stream, header_buf).await?;
+        /*header_buf=read_exact(&stream, header_buf).await?;
         let pts = u64::from_be_bytes(header_buf[0..8].try_into()?);
         //let frame_size=(u32::from_be_bytes(header_buf[8..12].try_into()?))-8;//packet size include also header (pts) witch must be discarded?
         let frame_size=u32::from_be_bytes(header_buf[8..12].try_into()?);
@@ -414,34 +416,57 @@ async fn tsk_scrcpy_video(
             }
 
             i=i+1;
-        }
-        if streaming_on && (act_unack < max_unack)
-        {
-
-            payload.clear();
-            if config_frame
+        }*/
+        let (pts,  h264_data) = read_scrcpy_packet(&mut stream).await?;
+        let nals = reassembler.feed(&h264_data);
+        let key_frame=(pts & 0x4000_0000_0000_0000u64) >0;
+        let rec_ts=pts & 0x3FFF_FFFF_FFFF_FFFFu64;
+        let config_frame=(pts & 0x8000_0000_0000_0000u64) >0;
+        for nal_frame_buffer in nals {
+            let dbg_len=min(nal_frame_buffer.len(), 16);
+            if i<10
             {
-                payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
-                payload.extend_from_slice(&frame_buf);
-            }
-            else {
-                payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
-                payload.extend_from_slice(&timestamp.to_be_bytes());
-                payload.extend_from_slice(&frame_buf);
+                if nal_frame_buffer.len()>dbg_len as usize
+                {
+                    let end_offset= nal_frame_buffer.len() - dbg_len as usize;
+                    info!("Video task got frame config={:?}, act size: {}, raw slice: {:02x?}...{:02x?}",config_frame, nal_frame_buffer.len(), &nal_frame_buffer[..dbg_len], &nal_frame_buffer[end_offset..]);
+                }
+                else {
+                    info!("Video task got frame config={:?}, act size: {}, raw bytes: {:02x?}",config_frame, nal_frame_buffer.len(), &nal_frame_buffer[..dbg_len]);
+                }
+
+                i=i+1;
             }
 
-            let pkt_rsp = Packet {
-                channel: sid,
-                flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                final_length: None,
-                payload: std::mem::take(&mut payload),
-            };
-            video_tx.send_async(pkt_rsp).await?;
-            act_unack=act_unack+1;
+            if streaming_on && (act_unack < max_unack)
+            {
+
+                payload.clear();
+                if config_frame
+                {
+                    payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
+                    payload.extend_from_slice(&nal_frame_buffer);
+                }
+                else {
+                    payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
+                    payload.extend_from_slice(&timestamp.to_be_bytes());
+                    payload.extend_from_slice(&nal_frame_buffer);
+                }
+
+                let pkt_rsp = Packet {
+                    channel: sid,
+                    flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                    final_length: None,
+                    payload: std::mem::take(&mut payload),
+                };
+                video_tx.send_async(pkt_rsp).await?;
+                act_unack=act_unack+1;
+            }
         }
+
     }
     return Ok(());
-    async fn read_exact(
+    async fn read_exact_old(
         stream: &TcpStream,
         mut buf: Vec<u8>,
     ) -> io::Result<Vec<u8>> {
@@ -462,6 +487,43 @@ async fn tsk_scrcpy_video(
 
         Ok(buf)
     }
+
+    /// Read exactly `buf.len()` bytes asynchronously from a mutable TcpStream
+    async fn read_exact(stream: &TcpStream, mut buf: &mut [u8]) -> std::io::Result<()> {
+        while !buf.is_empty() {
+            // read returns (Result<usize>, usize)
+            let (result, n) = stream.read(buf).await;
+
+            // Check the read result
+            let rd = result?; // propagate error if any
+
+            // Check actual number of bytes read
+            if rd == 0 {
+                return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "EOF"));
+            }
+
+            // advance the buffer slice
+            buf = &mut buf[n..];
+        }
+        Ok(())
+    }
+    /// Read one scrcpy packet (with metadata)
+    async fn read_scrcpy_packet(stream: &mut TcpStream) -> io::Result<(u64, Vec<u8>)> {
+        // First 12 bytes = packet metadata
+        let mut metadata_buf = [0u8; 12];
+        read_exact(stream, &mut metadata_buf).await?;
+        let packet_size = u32::from_be_bytes(metadata_buf[8..].try_into().unwrap()) as usize;
+        let pts = u64::from_be_bytes(metadata_buf[0..8].try_into().unwrap());
+        // Read full packet
+        let mut payload = vec![0u8; packet_size];
+        read_exact(stream, &mut payload).await?;
+
+        let h264_data = payload.to_vec();
+        Ok((pts, h264_data))
+    }
+
+
+
 }
 
 async fn tsk_scrcpy_audio(
