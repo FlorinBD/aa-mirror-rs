@@ -293,6 +293,7 @@ async fn tsk_scrcpy_video(
     mut cmd_rx: broadcast::Receiver<Packet>,
     video_tx: flume::Sender<Packet>,
     max_unack:u32,
+    sid:u8,
 ) -> Result<()> {
     info!("Starting video server!");
     let mut streaming_on=true;
@@ -301,7 +302,7 @@ async fn tsk_scrcpy_video(
     let codec_buf = vec![0u8; 12];
     //let header_buf = vec![0u8; 12];
     let mut i=0;
-    let mut ch_id:u8=0;
+    //let mut ch_id:u8=0;
 
     //discard codec metadata
     let (res, buf_out) = stream.read(codec_buf).await;
@@ -359,9 +360,9 @@ async fn tsk_scrcpy_video(
                 }
                 else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK  as i32
                 {
-                    if pkt.channel ==  ch_id
+                    if pkt.channel ==  sid
                     {
-                        info!("{} Received {} message", ch_id.to_string(), message_id);
+                        info!("{} Received {} message", sid.to_string(), message_id);
                         let data = &pkt.payload[2..]; // start of message data, without message_id
                         if  let Ok(rsp) = Ack::parse_from_bytes(&data)
                         {
@@ -414,7 +415,7 @@ async fn tsk_scrcpy_video(
             }
 
             let pkt_rsp = Packet {
-                channel: ch_id,
+                channel: sid,
                 flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                 final_length: None,
                 payload: std::mem::take(&mut payload),
@@ -452,11 +453,12 @@ async fn tsk_scrcpy_audio(
     mut cmd_rx: broadcast::Receiver<Packet>,
     audio_tx: flume::Sender<Packet>,
     max_unack:u32,
+    sid:u8
 ) -> Result<()> {
 
     info!("Starting audio server!");
     let mut streaming_on=false;
-    let mut ch_id:u8=0;
+    //let mut ch_id:u8=0;
     let mut act_unack=0;
     //discard codec metadata
     let codec_buf = vec![0u8; 4];
@@ -514,7 +516,7 @@ async fn tsk_scrcpy_audio(
             payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) & 0xff) as u8);
 
             let pkt_rsp = Packet {
-                channel: ch_id,
+                channel: sid,
                 flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                 final_length: None,
                 payload: payload,
@@ -533,7 +535,7 @@ async fn tsk_scrcpy_audio(
                 if message_id == MESSAGE_CUSTOM_CMD  as i32
                 {
                     let cmd_id: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
-                    let data = &pkt.payload[4..]; // start of message data, without message_id
+                    //let data = &pkt.payload[4..]; // start of message data, without message_id
                     if cmd_id == CustomCommand::CMD_STOP_AUDIO_RECORDING as i32
                     {
                         act_unack=max_unack;
@@ -544,9 +546,9 @@ async fn tsk_scrcpy_audio(
                 }
                 else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK  as i32
                 {
-                    if pkt.channel == ch_id
+                    if pkt.channel == sid
                     {
-                        info!("{} Received {} message", ch_id.to_string(), message_id);
+                        info!("{} Received {} message", sid.to_string(), message_id);
                         let data = &pkt.payload[2..]; // start of message data, without message_id
                         if  let Ok(rsp) = Ack::parse_from_bytes(&data)
                         {
@@ -774,7 +776,8 @@ async fn tsk_adb_scrcpy(
                         video_stream,
                         tx_cmd_video.subscribe(),
                         video_tx,
-                    video_codec_params.max_unack).await;
+                        video_codec_params.max_unack,
+                        video_codec_params.sid).await;
                     let _ = done_th_tx_video.send(res);
 
                 });
@@ -784,6 +787,7 @@ async fn tsk_adb_scrcpy(
                         tx_cmd_audio.subscribe(),
                         audio_tx,
                         audio_codec_params.max_unack,
+                        audio_codec_params.sid,
                     ).await;
                     let _ = done_th_tx_audio.send(res);
                 });

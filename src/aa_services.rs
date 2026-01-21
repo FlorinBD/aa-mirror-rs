@@ -82,14 +82,14 @@ pub(crate) struct VideoStreamingParams {
     pub(crate) res_h:i32,
     pub(crate) fps:i32,
     pub(crate) dpi:i32,
-    pub(crate) sid:i32,
+    pub(crate) sid:u8,
     pub(crate) max_unack:u32,
 }
 
 #[derive(Serialize, Deserialize, Clone,Debug)]
 pub(crate) struct AudioStreamingParams {
     pub(crate) bitrate: i32,
-    pub(crate) sid:i32,
+    pub(crate) sid:u8,
     pub(crate) max_unack:u32,
 }
 
