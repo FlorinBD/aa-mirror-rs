@@ -397,7 +397,7 @@ async fn tsk_scrcpy_video(
         frame_buf=read_exact(&stream, frame_buf).await?;
         if frame_buf.len() != frame_size as usize
         {
-            error!("Video task frame error, wanted {} but got {}",frame_size, frame_buf.len());
+            error!("Video task frame error, wanted {} but got {} bytes",frame_size, frame_buf.len());
         }
         let dbg_len=min(frame_size,32);
         if i<10
