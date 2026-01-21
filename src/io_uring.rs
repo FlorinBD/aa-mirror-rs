@@ -339,7 +339,7 @@ async fn tsk_scrcpy_video(
     let timestamp: u64 = 0;//is not used by HU
     let mut payload: Vec<u8>=Vec::new();
     let mut header_buf = vec![0u8; 12];
-    let mut frame_buf = Vec::new();
+    //let mut frame_buf = Vec::new();
     let mut reassembler = NalReassembler::new();
     loop {
         //Check custom Service command
@@ -489,35 +489,37 @@ async fn tsk_scrcpy_video(
         Ok(buf)
     }
 
-    /// Read exactly `buf.len()` bytes asynchronously from a mutable TcpStream
-    async fn read_exact(stream: &TcpStream, mut buf: &mut [u8]) -> std::io::Result<()> {
-        while !buf.is_empty() {
-            // read returns (Result<usize>, usize)
-            let (result, n) = stream.read(buf).await;
+    async fn read_exact(
+        stream: &mut TcpStream,
+        size: usize,
+    ) -> io::Result<Vec<u8>> {
+        let mut buf = Vec::with_capacity(size);
 
-            // Check the read result
-            let rd = result?; // propagate error if any
+        while buf.len() < size {
+            let to_read = size - buf.len();
+            let chunk = vec![0u8; to_read];
 
-            // Check actual number of bytes read
+            let (res, chunk) = stream.read(chunk).await;
+            let rd=res?;
+
             if rd == 0 {
-                return Err(std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "EOF"));
+                return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "EOF"));
             }
 
-            // advance the buffer slice
-            buf = &mut buf[n..];
+            buf.extend_from_slice(&chunk[..rd]);
         }
-        Ok(())
+
+        Ok(buf)
     }
     /// Read one scrcpy packet (with metadata)
     async fn read_scrcpy_packet(stream: &mut TcpStream) -> io::Result<(u64, Vec<u8>)> {
         // First 12 bytes = packet metadata
-        let mut metadata_buf = [0u8; 12];
-        read_exact(stream, &mut metadata_buf).await?;
-        let packet_size = u32::from_be_bytes(metadata_buf[8..].try_into().unwrap()) as usize;
-        let pts = u64::from_be_bytes(metadata_buf[0..8].try_into().unwrap());
+        let metadata=read_exact(stream, 12).await?;
+        let packet_size = u32::from_be_bytes(metadata[8..].try_into().unwrap()) as usize;
+        let pts = u64::from_be_bytes(metadata[0..8].try_into().unwrap());
         // Read full packet
-        let mut payload = vec![0u8; packet_size];
-        read_exact(stream, &mut payload).await?;
+        //let mut payload = vec![0u8; packet_size];
+        let payload=read_exact(stream, packet_size).await?;
 
         let h264_data = payload.to_vec();
         Ok((pts, h264_data))
