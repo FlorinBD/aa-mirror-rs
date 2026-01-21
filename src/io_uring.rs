@@ -399,11 +399,19 @@ async fn tsk_scrcpy_video(
         {
             error!("Video task frame error, wanted {} but got {} bytes",frame_size, frame_buf.len());
         }
-        let dbg_len=min(frame_size,32);
+        let dbg_len=min(frame_size,16);
         if i<10
         {
             info!("Video task got frame header {:02x?}:",&header_buf);
-            info!("Video task got frame config={:?}, act size: {}, defined size: {}, raw bytes: {:02x?}",config_frame, frame_buf.len(), frame_size , &frame_buf[..dbg_len as usize]);
+            if frame_buf.len()>dbg_len as usize
+            {
+                let end_offset=frame_buf.len() - dbg_len as usize;
+                info!("Video task got frame config={:?}, act size: {}, defined size: {}, raw bytes: {:02x?}...{:02x?}",config_frame, frame_buf.len(), frame_size , &frame_buf[..dbg_len as usize], &frame_buf[end_offset..]);
+            }
+            else {
+                info!("Video task got frame config={:?}, act size: {}, defined size: {}, raw bytes: {:02x?}",config_frame, frame_buf.len(), frame_size , &frame_buf[..dbg_len as usize]);
+            }
+
             i=i+1;
         }
         if streaming_on && (act_unack < max_unack)
