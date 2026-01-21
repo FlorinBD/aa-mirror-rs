@@ -465,6 +465,7 @@ async fn tsk_scrcpy_video(
         }
 
     }
+    reassembler.flush();
     return Ok(());
     async fn read_exact_old(
         stream: &TcpStream,

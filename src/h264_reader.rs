@@ -35,7 +35,7 @@ impl NalReassembler {
     }
 
     /// Flush remaining partial NAL
-    fn flush(&mut self) -> Option<Vec<u8>> {
+    pub(crate) fn flush(&mut self) -> Option<Vec<u8>> {
         if !self.buffer.is_empty() {
             Some(self.buffer.split_off(0))
         } else {
