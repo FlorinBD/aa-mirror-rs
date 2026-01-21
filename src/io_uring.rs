@@ -395,6 +395,10 @@ async fn tsk_scrcpy_video(
         let config_frame=(pts & 0x8000_0000_0000_0000u64) >0;
         frame_buf.resize(frame_size as usize, 0);
         frame_buf=read_exact(&stream, frame_buf).await?;
+        if frame_buf.len() != frame_size as usize
+        {
+            error!("Video task frame error, wanted {} but got {}",frame_size, frame_buf.len());
+        }
         let dbg_len=min(frame_size,32);
         if i<10
         {
