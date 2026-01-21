@@ -375,6 +375,9 @@ async fn tsk_scrcpy_video(
                             error!( "tsk_scrcpy_video Unable to parse received message");
                         }
                     }
+                    else {
+                        info!( "tsk_scrcpy_video: media ACK received but not for VIDEO, discarded");
+                    }
                 }
                 else
                 {
@@ -560,6 +563,9 @@ async fn tsk_scrcpy_audio(
                         {
                             error!( "tsk_scrcpy_audio Unable to parse MEDIA ACK message");
                         }
+                    }
+                    else {
+                        info!( "tsk_scrcpy_audio: media ACK received but not for AUDIO, discarded");
                     }
                 }
                 else

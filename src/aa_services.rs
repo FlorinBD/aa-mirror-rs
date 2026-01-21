@@ -1167,21 +1167,27 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         }
                         else
                         {
-                            info!( "{}, channel {:?}: MD connected, starting video streaming", get_name(), pkt.channel);
-                            video_stream_started=true;
-                            let bytes: Vec<u8> = postcard::to_stdvec(&video_params)?;
-                            let mut payload = Vec::new();
-                            payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
-                            payload.extend_from_slice(&(CustomCommand::CMD_START_VIDEO_RECORDING as u16).to_be_bytes());
-                            payload.extend_from_slice(&bytes);
+                            if !video_stream_started
+                            {
+                                info!( "{}, channel {:?}: MD connected, starting video streaming", get_name(), pkt.channel);
+                                video_stream_started=true;
+                                let bytes: Vec<u8> = postcard::to_stdvec(&video_params)?;
+                                let mut payload = Vec::new();
+                                payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+                                payload.extend_from_slice(&(CustomCommand::CMD_START_VIDEO_RECORDING as u16).to_be_bytes());
+                                payload.extend_from_slice(&bytes);
 
-                            let pkt_rsp = Packet {
-                                channel: ch_id as u8,
-                                flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                                final_length: None,
-                                payload: payload.clone(),
-                            };
-                            scrcpy_cmd.send_async(pkt_rsp).await?;
+                                let pkt_rsp = Packet {
+                                    channel: ch_id as u8,
+                                    flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                                    final_length: None,
+                                    payload: payload.clone(),
+                                };
+                                scrcpy_cmd.send_async(pkt_rsp).await?;
+                            }
+                            else {
+                                info!("{}, channel {:?}: video streaming already started, ignoring packet", get_name(), pkt.channel);
+                            }
                         }
 
                     }
