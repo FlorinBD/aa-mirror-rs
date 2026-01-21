@@ -1125,7 +1125,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                 if  let Ok(rsp) = VideoFocusNotification::parse_from_bytes(&data)
                 {
                     info!( "{}, channel {:?}: Message status: {:?}", get_name(), pkt.channel, rsp.focus());
-                    if rsp.focus() == VideoFocusMode::VIDEO_FOCUS_PROJECTED
+                    if (rsp.focus() == VideoFocusMode::VIDEO_FOCUS_PROJECTED) || (rsp.focus()==VideoFocusMode::VIDEO_FOCUS_PROJECTED_NO_INPUT_FOCUS)
                     {
                         info!( "{}, channel {:?}: VIDEO_FOCUS_PROJECTED received", get_name(), pkt.channel);
                         //Send config frame
