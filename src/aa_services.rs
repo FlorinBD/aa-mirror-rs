@@ -1543,8 +1543,10 @@ pub async fn th_input_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, m
                     }
                     else {
                         //FIXME send BindingRequest
-                        /*let binding_req = KeyBindingRequest::new();
-                        binding_req.set_keycodes(keys);
+
+                        let binding_req = KeyBindingRequest::new();
+                        //binding_req.set_keycodes(keys);
+                        binding_req.keycodes.as_mut().unwrap().push(keys);
 
                         let payload: Vec<u8> = [
                             &(InputMessageId::INPUT_MESSAGE_KEY_BINDING_REQUEST as u16).to_be_bytes()[..],
@@ -1558,7 +1560,7 @@ pub async fn th_input_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, m
                         };
                         if let Err(_) = tx_srv.send(pkt_rsp).await{
                             error!( "{} response send error",get_name());
-                        };*/
+                        };
                     }
                 }
                 else {
