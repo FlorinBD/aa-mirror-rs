@@ -36,6 +36,7 @@ use protos::*;
 use protos::ControlMessageType::{self, *};
 use crate::channel_manager::{Packet, ENCRYPTED, FRAME_TYPE_CONTROL, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
 use crate::config::{SCRCPY_PORT};
+use crate::io_uring::ScrcpyControlMessageType;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -1610,8 +1611,21 @@ pub async fn th_input_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, m
                     {
                         error!( "{}, channel {:?}: Wrong message status received", get_name(), pkt.channel);
                     }
-                    else { 
-                        //TODO send KeyBinding request
+                    else {
+                        let binding_req = KeyBindingRequest{keys};
+
+                        let mut payload: Vec<u8> = Vec::new();
+                        payload.extend_from_slice(&(InputMessageId::INPUT_MESSAGE_KEY_BINDING_REQUEST as u16).to_be_bytes());
+                        payload.extend_from_slice(&binding_req.write_to_bytes());
+                        let pkt_rsp = Packet {
+                            channel: ch_id as u8,
+                            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                            final_length: None,
+                            payload: payload,
+                        };
+                        if let Err(_) = tx_srv.send(pkt_rsp).await{
+                            error!( "{} response send error",get_name());
+                        };
                     }
                 }
                 else {
