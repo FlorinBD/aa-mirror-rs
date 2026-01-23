@@ -1542,10 +1542,9 @@ pub async fn th_input_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, m
                         error!( "{}, channel {:?}: Wrong message status received", get_name(), pkt.channel);
                     }
                     else {
-                        let binding_req = KeyBindingRequest::new();
-                        for &k in &keys {
-                            binding_req.keycodes_push(k); // push each i32 keycode
-                        }
+                        //FIXME send BindingRequest
+                        /*let binding_req = KeyBindingRequest::new();
+                        binding_req.set_keycodes(keys);
 
                         let payload: Vec<u8> = [
                             &(InputMessageId::INPUT_MESSAGE_KEY_BINDING_REQUEST as u16).to_be_bytes()[..],
@@ -1559,7 +1558,7 @@ pub async fn th_input_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, m
                         };
                         if let Err(_) = tx_srv.send(pkt_rsp).await{
                             error!( "{} response send error",get_name());
-                        };
+                        };*/
                     }
                 }
                 else {
