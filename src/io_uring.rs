@@ -736,7 +736,7 @@ async fn tsk_scrcpy_control(
                                 let mut payload: Vec<u8>=Vec::new();
                                 payload.extend_from_slice(&(ScrcpyControlMessageType::InjectTouchEvent as u8).to_be_bytes());
                                 payload.extend_from_slice(&ev_bytes);
-                                stream.write_all(&payload).await;
+                                stream.write_all(payload).await;
                             }
 
                         }
