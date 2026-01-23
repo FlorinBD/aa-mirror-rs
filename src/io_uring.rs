@@ -404,7 +404,7 @@ async fn tsk_scrcpy_video(
         //Check custom Service command
         match cmd_rx.try_recv() {
             Ok(pkt) => {
-                info!("tsk_scrcpy_video Received command packet {:02x?}", pkt);
+                //info!("tsk_scrcpy_video Received command packet {:02x?}", pkt);
                 let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
                 if message_id == MESSAGE_CUSTOM_CMD  as i32
                 {
@@ -647,7 +647,7 @@ async fn tsk_scrcpy_audio(
         //Check custom Service command
         match cmd_rx.try_recv() {
             Ok(pkt) => {
-                info!("tsk_scrcpy_audio Received command packet {:02x?}", pkt);
+                //info!("tsk_scrcpy_audio Received command packet {:02x?}", pkt);
                 let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
                 if message_id == MESSAGE_CUSTOM_CMD  as i32
                 {
@@ -670,7 +670,7 @@ async fn tsk_scrcpy_audio(
                         if  let Ok(rsp) = Ack::parse_from_bytes(&data)
                         {
                             //info!( "{}, channel {:?}: ACK, timestamp_ns: {:?}", get_name(), pkt.channel, rsp.receive_timestamp_ns[0]);
-                            info!( "tsk_scrcpy_audio: media ACK received, sending next frame");
+                            //info!( "tsk_scrcpy_audio: media ACK received, sending next frame");
                             act_unack=0;
                         }
                         else
@@ -679,7 +679,7 @@ async fn tsk_scrcpy_audio(
                         }
                     }
                     else {
-                        info!( "tsk_scrcpy_audio: media ACK received but not for AUDIO, discarded");
+                        //info!( "tsk_scrcpy_audio: media ACK received but not for AUDIO, discarded");
                     }
                 }
                 else
