@@ -869,7 +869,8 @@ pub async fn ch_proxy(
                 channel_status.push(ServiceStatus{service_type:ServiceType::InputSource,ch_id,enabled:false, open_ch_cmd: CommandState::NotDone});
                 let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                 srv_senders.push(tx);
-                srv_tsk_handles.push(tokio_uring::spawn(th_input_source(ch_id,false, tx_srv.clone(), rx, scrcpy_ctrl_tx.clone())));
+                let keys: Vec<i32>=proto_srv.input_source_service.keycodes_supported.iter().collect();
+                srv_tsk_handles.push(tokio_uring::spawn(th_input_source(ch_id,false, tx_srv.clone(), rx, scrcpy_ctrl_tx.clone(), keys)));
             }
             else if proto_srv.vendor_extension_service.is_some()
             {

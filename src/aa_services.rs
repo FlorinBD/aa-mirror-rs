@@ -1592,7 +1592,7 @@ pub async fn th_media_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, m
         format!("<i><bright-black> aa-mirror/{}: </>", dev)
     }
 }
-pub async fn th_input_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, scrcpy_cmd: flume::Sender<Packet>)-> Result<()>{
+pub async fn th_input_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, scrcpy_cmd: flume::Sender<Packet>, keys:Vec<i32>)-> Result<()>{
     info!( "{}: Starting...", get_name());
     loop {
         let pkt = rx_srv.recv().await.ok_or("service reader channel hung up")?;
@@ -1609,6 +1609,9 @@ pub async fn th_input_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, m
                     if rsp.status() != STATUS_SUCCESS
                     {
                         error!( "{}, channel {:?}: Wrong message status received", get_name(), pkt.channel);
+                    }
+                    else { 
+                        //TODO send KeyBinding request
                     }
                 }
                 else {
