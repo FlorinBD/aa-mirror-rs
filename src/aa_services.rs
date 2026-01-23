@@ -1642,7 +1642,7 @@ pub async fn th_input_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, m
             else if message_id == InputMessageId::INPUT_MESSAGE_INPUT_REPORT  as i32
             {
                 info!("{} Received {} message, proxy to SCRCPY control channel", ch_id.to_string(), message_id);
-                if let Err(_) = scrcpy_cmd.send(pkt).await{
+                if let Err(_) = scrcpy_cmd.send_async(pkt).await{
                     error!( "{} scrcpy_cmd send error",get_name());
                 };
 

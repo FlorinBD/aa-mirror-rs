@@ -43,6 +43,7 @@ use protos::*;
 use protos::ControlMessageType::{self, *};
 use protobuf::{Message};
 use std::cmp::min;
+use serde::{Deserialize, Serialize};
 use crate::h264_reader::NalReassembler;
 
 // module name for logging engine
@@ -103,7 +104,7 @@ pub enum IoDevice<A: Endpoint<A>> {
     EndpointIo(Rc<A>),
     TcpStreamIo(Rc<TcpStream>),
 }
-#[derive(Copy, Clone, Debug)]
+#[derive(Serialize, Deserialize, Copy, Clone, Debug)]
 pub enum AndroidTouchEvent
 {
     Down=0,
@@ -112,13 +113,13 @@ pub enum AndroidTouchEvent
     Scroll=8,
     BackOrScreenOn,
 }
-#[derive(Copy, Clone, Debug)]
+#[derive(Serialize, Deserialize, Copy, Clone, Debug)]
 pub enum AndroidKeyEvent
 {
     Down=0,
     Up=1,
 }
-#[derive(Copy, Clone, Debug)]
+#[derive(Serialize, Deserialize, Copy, Clone, Debug)]
 pub enum ScrcpyControlMessageType
 {
     InjectKeycode,
@@ -127,7 +128,7 @@ pub enum ScrcpyControlMessageType
     BackOrScreenOn,
 }
 
-#[derive(Copy, Clone, Debug, Default)]
+#[derive(Serialize, Deserialize, Copy, Clone, Debug, Default)]
 pub struct ScrcpyTouchEvent {
     pub action: u8,
     pub pointer_id: u64,
@@ -137,18 +138,18 @@ pub struct ScrcpyTouchEvent {
     pub buttons:i32,
 }
 
-#[derive(Copy, Clone, Debug, Default)]
+#[derive(Serialize, Deserialize, Copy, Clone, Debug, Default)]
 pub struct ScrcpyPosition {
     pub point: ScrcpyPoint,
     pub screen_size: ScrcpySize,
 }
 
-#[derive(Copy, Clone, Debug, Default)]
+#[derive(Serialize, Deserialize, Copy, Clone, Debug, Default)]
 pub struct ScrcpyPoint {
     pub x: i32,
     pub y: i32,
 }
-#[derive(Copy, Clone, Debug, Default)]
+#[derive(Serialize, Deserialize, Copy, Clone, Debug, Default)]
 pub struct ScrcpySize {
     pub width: i32,
     pub height: i32,
@@ -709,8 +710,9 @@ async fn tsk_scrcpy_control(
                             {
                                 let touch_x=rsp.touch_event.pointer_data[0].x();
                                 let touch_y=rsp.touch_event.pointer_data[0].y();
-                                let touch_action=rsp.touch_event.pointer_data[0].action();
                                 let pointer_id=rsp.touch_event.pointer_data[0].pointer_id();
+                                let touch_action=rsp.touch_event.action();
+
                                 let mut _action:u8;
                                 if touch_action == PointerAction::ACTION_DOWN
                                 {
