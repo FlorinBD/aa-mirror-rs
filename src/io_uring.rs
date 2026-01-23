@@ -714,103 +714,85 @@ async fn tsk_scrcpy_control(
                         info!( "tsk_scrcpy_control InputReport received: {:?}", rsp);
                         if rsp.touch_event.is_some()
                         {
-                            if rsp.touch_event.pointer_data.len() > 0
-                            {
-                                let touch_x=rsp.touch_event.pointer_data[0].x();
-                                let touch_y=rsp.touch_event.pointer_data[0].y();
-                                let pointer_id=rsp.touch_event.pointer_data[0].pointer_id();
-                                let touch_action=rsp.touch_event.action();
+                            let touch_action = rsp.touch_event.action();
+                            for (_,touch_ev) in rsp.touch_event.pointer_data.iter().enumerate() {
+                                let touch_x = touch_ev.x();
+                                let touch_y = touch_ev.y();
+                                let pointer_id = touch_ev.pointer_id();
 
-                                let mut _action:u8;
+
+                                let mut _action: u8;
                                 if touch_action == PointerAction::ACTION_DOWN
                                 {
-                                    _action=AndroidTouchEvent::Down as u8;
-                                }
-                                else if touch_action == PointerAction::ACTION_UP
+                                    _action = AndroidTouchEvent::Down as u8;
+                                } else if touch_action == PointerAction::ACTION_UP
                                 {
-                                    _action=AndroidTouchEvent::Up as u8;
-                                }
-                                else if touch_action == PointerAction::ACTION_MOVED
+                                    _action = AndroidTouchEvent::Up as u8;
+                                } else if touch_action == PointerAction::ACTION_MOVED
                                 {
-                                    _action=AndroidTouchEvent::Move as u8;
-                                }
-                                else {
-                                    error!( "tsk_scrcpy_control Received invalid touch action");
-                                    continue;
-                                }
-                                let pt=ScrcpyPoint{ x: touch_x as i32, y: touch_y as i32 };
-                                let sz=ScrcpySize{ width: video_params.res_h, height: video_params.res_h };
-                                let pos=ScrcpyPosition{ point: pt, screen_size: sz };
-                                let ev= ScrcpyTouchEvent{action:_action, pointer_id:pointer_id as u64,position:pos, pressure: 255, action_button: 0, buttons: 0 };
-                                let ev_bytes: Vec<u8> = postcard::to_stdvec(&ev)?;
-                                let mut payload: Vec<u8>=Vec::new();
-                                payload.extend_from_slice(&(ScrcpyControlMessageType::InjectTouchEvent as u8).to_be_bytes());
-                                payload.extend_from_slice(&ev_bytes);
-                                stream.write_all(payload).await;
-                            }
-                            else {
-                                error!( "tsk_scrcpy_control Received invalid pointer_data");
-                            }
-
-                        }
-                        else if rsp.touchpad_event.is_some()
-                        {
-                            if rsp.touchpad_event.pointer_data.len() > 0
-                            {
-                                let touch_x=rsp.touchpad_event.pointer_data[0].x();
-                                let touch_y=rsp.touchpad_event.pointer_data[0].y();
-                                let pointer_id=rsp.touchpad_event.pointer_data[0].pointer_id();
-                                let touch_action=rsp.touchpad_event.action();
-
-                                let mut _action:u8;
-                                if touch_action == PointerAction::ACTION_DOWN
-                                {
-                                    _action=AndroidTouchEvent::Down as u8;
-                                }
-                                else if touch_action == PointerAction::ACTION_UP
-                                {
-                                    _action=AndroidTouchEvent::Up as u8;
-                                }
-                                else if touch_action == PointerAction::ACTION_MOVED
-                                {
-                                    _action=AndroidTouchEvent::Move as u8;
-                                }
-                                else {
+                                    _action = AndroidTouchEvent::Move as u8;
+                                } else {
                                     error!( "tsk_scrcpy_control Received invalid touchpad action");
                                     continue;
                                 }
-                                let pt=ScrcpyPoint{ x: touch_x as i32, y: touch_y as i32 };
-                                let sz=ScrcpySize{ width: video_params.res_h, height: video_params.res_h };
-                                let pos=ScrcpyPosition{ point: pt, screen_size: sz };
-                                let ev= ScrcpyTouchEvent{action:_action, pointer_id:pointer_id as u64,position:pos, pressure: 255, action_button: 0, buttons: 0 };
+                                let pt = ScrcpyPoint { x: touch_x as i32, y: touch_y as i32 };
+                                let sz = ScrcpySize { width: video_params.res_h, height: video_params.res_h };
+                                let pos = ScrcpyPosition { point: pt, screen_size: sz };
+                                let ev = ScrcpyTouchEvent { action: _action, pointer_id: pointer_id as u64, position: pos, pressure: 255, action_button: 0, buttons: 0 };
                                 let ev_bytes: Vec<u8> = postcard::to_stdvec(&ev)?;
-                                let mut payload: Vec<u8>=Vec::new();
+                                let mut payload: Vec<u8> = Vec::new();
                                 payload.extend_from_slice(&(ScrcpyControlMessageType::InjectTouchEvent as u8).to_be_bytes());
                                 payload.extend_from_slice(&ev_bytes);
                                 stream.write_all(payload).await;
                             }
-                            else {
-                                error!( "tsk_scrcpy_control Received invalid pointer_data");
+                        }
+                        else if rsp.touchpad_event.is_some()
+                        {
+                            let touch_action = rsp.touchpad_event.action();
+                            for (_,touch_ev) in rsp.touchpad_event.pointer_data.iter().enumerate() {
+                                let touch_x = touch_ev.x();
+                                let touch_y = touch_ev.y();
+                                let pointer_id = touch_ev.pointer_id();
+                                let mut _action: u8;
+                                if touch_action == PointerAction::ACTION_DOWN
+                                {
+                                    _action = AndroidTouchEvent::Down as u8;
+                                } else if touch_action == PointerAction::ACTION_UP
+                                {
+                                    _action = AndroidTouchEvent::Up as u8;
+                                } else if touch_action == PointerAction::ACTION_MOVED
+                                {
+                                    _action = AndroidTouchEvent::Move as u8;
+                                } else {
+                                    error!( "tsk_scrcpy_control Received invalid touchpad action");
+                                    continue;
+                                }
+                                let pt = ScrcpyPoint { x: touch_x as i32, y: touch_y as i32 };
+                                let sz = ScrcpySize { width: video_params.res_h, height: video_params.res_h };
+                                let pos = ScrcpyPosition { point: pt, screen_size: sz };
+                                let ev = ScrcpyTouchEvent { action: _action, pointer_id: pointer_id as u64, position: pos, pressure: 255, action_button: 0, buttons: 0 };
+                                let ev_bytes: Vec<u8> = postcard::to_stdvec(&ev)?;
+                                let mut payload: Vec<u8> = Vec::new();
+                                payload.extend_from_slice(&(ScrcpyControlMessageType::InjectTouchEvent as u8).to_be_bytes());
+                                payload.extend_from_slice(&ev_bytes);
+                                stream.write_all(payload).await;
                             }
-
                         }
                         else if rsp.key_event.is_some()
                         {
                             for (_,key_ev) in rsp.key_event.keys.iter().enumerate() {
-                                let key_down=key_ev.down();
-                                let mut _action:u8;
+                                let key_down = key_ev.down();
+                                let mut _action: u8;
                                 if key_down
                                 {
-                                    _action=AndroidKeyEvent::Down as u8;
-                                }
-                                else
-                                {
-                                    _action=AndroidKeyEvent::Up as u8;
+                                    _action = AndroidKeyEvent::Down as u8;
+                                } else {
+                                    _action = AndroidKeyEvent::Up as u8;
                                 }
 
-                                let ev= ScrcpyKeyEvent{action:_action, key_code: key_ev.keycode() as i32, repeat: 0, metastate: 0 };
+                                let ev = ScrcpyKeyEvent { action: _action, key_code: key_ev.keycode() as i32, repeat: 0, metastate: 0 };
                                 let ev_bytes: Vec<u8> = postcard::to_stdvec(&ev)?;
-                                let mut payload: Vec<u8>=Vec::new();
+                                let mut payload: Vec<u8> = Vec::new();
                                 payload.extend_from_slice(&(ScrcpyControlMessageType::InjectKeycode as u8).to_be_bytes());
                                 payload.extend_from_slice(&ev_bytes);
                                 stream.write_all(payload).await;
