@@ -399,7 +399,7 @@ async fn tsk_scrcpy_video(
     let mut payload: Vec<u8>=Vec::new();
     let mut header_buf = vec![0u8; 12];
     //let mut frame_buf = Vec::new();
-    let mut reassembler = NalReassembler::new();
+    //let mut reassembler = NalReassembler::new();
     loop {
         //Check custom Service command
         match cmd_rx.try_recv() {
@@ -447,7 +447,7 @@ async fn tsk_scrcpy_video(
             }
             _ => {}
         }
-        //Read encapsulated video frames
+        //Read encapsulated video frames, we don't have to slice NAL units, we can send all together as they come from MediaEncoder
         let (pts,  h264_data) = read_scrcpy_packet(&mut stream).await?;
         //let nals = reassembler.feed(&h264_data);
         let key_frame=(pts & 0x4000_0000_0000_0000u64) >0;
