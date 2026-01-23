@@ -1613,7 +1613,9 @@ pub async fn th_input_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, m
                     }
                     else {
                         let binding_req = KeyBindingRequest::new();
-                        binding_req.keycodes = keys.clone();
+                        for &k in &keys {
+                            binding_req.keycodes_push(k); // push each i32 keycode
+                        }
 
                         let payload: Vec<u8> = [
                             &(InputMessageId::INPUT_MESSAGE_KEY_BINDING_REQUEST as u16).to_be_bytes()[..],
