@@ -1614,7 +1614,6 @@ pub async fn th_input_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, m
                     else {
                         let binding_req = KeyBindingRequest::new();
                         binding_req.set_keycodes(keys);
-
                         let mut payload: Vec<u8> = Vec::new();
                         payload.extend_from_slice(&(InputMessageId::INPUT_MESSAGE_KEY_BINDING_REQUEST as u16).to_be_bytes());
                         payload.extend_from_slice(&binding_req.write_to_bytes().expect("serialization failed"));
