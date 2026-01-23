@@ -720,7 +720,7 @@ async fn tsk_scrcpy_control(
                                 {
                                     _action=AndroidTouchEvent::Up as u8;
                                 }
-                                else if touch_action == PointerAction::ACTION_MOVE
+                                else if touch_action == PointerAction::ACTION_MOVED
                                 {
                                     _action=AndroidTouchEvent::Move as u8;
                                 }
@@ -728,7 +728,7 @@ async fn tsk_scrcpy_control(
                                     error!( "tsk_scrcpy_control Received invalid touch action");
                                     continue;
                                 }
-                                let pt=ScrcpyPoint{ x: touch_x, y: touch_y };
+                                let pt=ScrcpyPoint{ x: touch_x as i32, y: touch_y as i32 };
                                 let sz=ScrcpySize{ width: video_params.res_h, height: video_params.res_h };
                                 let pos=ScrcpyPosition{ point: pt, screen_size: sz };
                                 let ev= ScrcpyTouchEvent{action:_action, pointer_id:pointer_id as u64,position:pos, pressure: 255, action_button: 0, buttons: 0 };
@@ -736,7 +736,7 @@ async fn tsk_scrcpy_control(
                                 let mut payload: Vec<u8>=Vec::new();
                                 payload.extend_from_slice(&(ScrcpyControlMessageType::InjectTouchEvent as u8).to_be_bytes());
                                 payload.extend_from_slice(&ev_bytes);
-                                stream.write_all(&payload).await?;
+                                stream.write_all(&payload).await;
                             }
 
                         }
