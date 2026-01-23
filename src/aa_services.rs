@@ -1592,7 +1592,7 @@ pub async fn th_media_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, m
         format!("<i><bright-black> aa-mirror/{}: </>", dev)
     }
 }
-pub async fn th_input_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>)-> Result<()>{
+pub async fn th_input_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, scrcpy_cmd: flume::Sender<Packet>)-> Result<()>{
     info!( "{}: Starting...", get_name());
     loop {
         let pkt = rx_srv.recv().await.ok_or("service reader channel hung up")?;
@@ -1639,8 +1639,14 @@ pub async fn th_input_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, m
                         };
                     }
             }
+            else if message_id == InputMessageId::INPUT_MESSAGE_INPUT_REPORT  as i32
+            {
+                info!("{} Received {} message, proxy to SCRCPY control channel", ch_id.to_string(), message_id);
+                scrcpy_cmd.send(pkt).await?;
+
+            }
             else {
-                info!( "{} Unknown message ID: {} received", get_name(), message_id);
+                info!( "{} Unmanaged message ID: {} received", get_name(), message_id);
             }
         }
     }

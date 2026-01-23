@@ -37,7 +37,7 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::broadcast::error::TryRecvError;
 use std::str::FromStr;
 use tokio_util::bytes::BufMut;
-use crate::aa_services::{VideoStreamingParams, AudioStreamingParams};
+use crate::aa_services::{VideoStreamingParams, AudioStreamingParams, CommandState, ServiceType};
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use protos::*;
 use protos::ControlMessageType::{self, *};
@@ -102,6 +102,56 @@ pub enum IoDevice<A: Endpoint<A>> {
     UsbWriter(Rc<RefCell<UsbStreamWrite>>, PhantomData<A>),
     EndpointIo(Rc<A>),
     TcpStreamIo(Rc<TcpStream>),
+}
+#[derive(Copy, Clone, Debug)]
+pub enum AndroidTouchEvent
+{
+    Down=0,
+    Up=1,
+    Move=2,
+    Scroll=8,
+    BackOrScreenOn,
+}
+#[derive(Copy, Clone, Debug)]
+pub enum AndroidKeyEvent
+{
+    Down=0,
+    Up=1,
+}
+#[derive(Copy, Clone, Debug)]
+pub enum ScrcpyControlMessageType
+{
+    InjectKeycode,
+    InjectTouchEvent=2,
+    InjectScrollEvent,
+    BackOrScreenOn,
+}
+
+#[derive(Copy, Clone, Debug, Default)]
+pub struct ScrcpyTouchEvent {
+    pub action: u8,
+    pub pointer_id: u64,
+    pub position:ScrcpyPosition,
+    pub pressure:i16,
+    pub action_button:i32,
+    pub buttons:i32,
+}
+
+#[derive(Copy, Clone, Debug, Default)]
+pub struct ScrcpyPosition {
+    pub point: ScrcpyPoint,
+    pub screen_size: ScrcpySize,
+}
+
+#[derive(Copy, Clone, Debug, Default)]
+pub struct ScrcpyPoint {
+    pub x: i32,
+    pub y: i32,
+}
+#[derive(Copy, Clone, Debug, Default)]
+pub struct ScrcpySize {
+    pub width: i32,
+    pub height: i32,
 }
 
 async fn transfer_monitor(
@@ -634,10 +684,84 @@ async fn tsk_scrcpy_audio(
     }
     Ok(())
 }
+
+async fn tsk_scrcpy_control(
+    mut stream: TcpStream,
+    cmd_rx: flume::Receiver<Packet>,
+    video_params:VideoStreamingParams,
+) -> Result<()> {
+    info!("Starting control server!");
+    loop {
+        match cmd_rx.recv_async().await {
+            Ok(pkt) => {
+                // Received a packet
+
+                let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+                info!("tsk_scrcpy_control Received command id {:?}", message_id);
+                if message_id == InputMessageId::INPUT_MESSAGE_INPUT_REPORT  as i32
+                {
+                    let data = &pkt.payload[2..]; // start of message data, without message_id
+                    if  let Ok(rsp) = InputReport::parse_from_bytes(&data) {
+                        info!( "tsk_scrcpy_control InputReport received: {:?}", rsp);
+                        if rsp.touch_event.is_some()
+                        {
+                            if rsp.touch_event.pointer_data.len() > 0
+                            {
+                                let touch_x=rsp.touch_event.pointer_data[0].x();
+                                let touch_y=rsp.touch_event.pointer_data[0].y();
+                                let touch_action=rsp.touch_event.pointer_data[0].action();
+                                let pointer_id=rsp.touch_event.pointer_data[0].pointer_id();
+                                let mut _action:u8;
+                                if touch_action == PointerAction::ACTION_DOWN
+                                {
+                                    _action=AndroidTouchEvent::Down as u8;
+                                }
+                                else if touch_action == PointerAction::ACTION_UP
+                                {
+                                    _action=AndroidTouchEvent::Up as u8;
+                                }
+                                else if touch_action == PointerAction::ACTION_MOVE
+                                {
+                                    _action=AndroidTouchEvent::Move as u8;
+                                }
+                                else {
+                                    error!( "tsk_scrcpy_control Received invalid touch action");
+                                    continue;
+                                }
+                                let pt=ScrcpyPoint{ x: touch_x, y: touch_y };
+                                let sz=ScrcpySize{ width: video_params.res_h, height: video_params.res_h };
+                                let pos=ScrcpyPosition{ point: pt, screen_size: sz };
+                                let ev= ScrcpyTouchEvent{action:_action, pointer_id:pointer_id as u64,position:pos, pressure: 255, action_button: 0, buttons: 0 };
+                                let ev_bytes: Vec<u8> = postcard::to_stdvec(&ev)?;
+                                let mut payload: Vec<u8>=Vec::new();
+                                payload.extend_from_slice(&(ScrcpyControlMessageType::InjectTouchEvent as u8).to_be_bytes());
+                                payload.extend_from_slice(&ev_bytes);
+                                stream.write_all(&payload).await?;
+                            }
+
+                        }
+                    }
+                    else {
+                        error!( "tsk_scrcpy_control: Unable to parse received message");
+                    }
+
+                }
+                else {
+                    error!("tsk_scrcpy_control unknown message received: {:?}", message_id);
+                }
+            }
+            Err(flume::RecvError::Disconnected) => {
+                // Sender has been dropped, exit loop
+                println!("Sender closed, exiting scrcpy control loop");
+            }
+        }
+    }
+}
 async fn tsk_adb_scrcpy(
     media_tx: flume::Sender<Packet>,
     mut srv_cmd_rx_scrcpy: flume::Receiver<Packet>,
     srv_cmd_tx: flume::Sender<Packet>,
+    rx_scrcpy_ctrl: flume::Receiver<Packet>,
     config: AppConfig,
 ) -> Result<()> {
     info!("{}: ADB task started",NAME);
@@ -782,7 +906,7 @@ async fn tsk_adb_scrcpy(
                 srv_cmd_tx.send_async(pkt_rsp).await?;
                 continue;
             }
-            //AVC base profile, no B frames, only I and P frames
+            //AVC base profile, no B frames, only I and P frames, low-latency is MANDATORY
             let video_codec_options=format!("profile:int=1,level:int=512,i-frame-interval:int={},low-latency:int=1,max-bframes:int=0",video_codec_params.fps);
             let mut cmd_shell:Vec<String> = vec![];
             cmd_shell.push("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar".to_string());
@@ -826,10 +950,12 @@ async fn tsk_adb_scrcpy(
                 info!("SCRCPY connected to all 3 sockets");
                 let hnd_scrcpy_video;
                 let hnd_scrcpy_audio;
+                let hnd_scrcpy_ctrl;
                 let video_tx = media_tx.clone();
                 let audio_tx = media_tx.clone();
                 let (done_th_tx_video, mut done_th_rx_video) = oneshot::channel();
                 let (done_th_tx_audio, mut done_th_rx_audio) = oneshot::channel();
+                let (done_th_tx_ctrl, mut done_th_rx_ctrl) = oneshot::channel();
                 let (tx_cmd, _rx_cmd)=broadcast::channel::<Packet>(5);
                 let tx_cmd_video = tx_cmd.clone();
                 let tx_cmd_audio = tx_cmd.clone();
@@ -855,6 +981,15 @@ async fn tsk_adb_scrcpy(
                     let _ = done_th_tx_audio.send(res);
                 });
 
+                hnd_scrcpy_ctrl = tokio_uring::spawn(async move {
+                    let res = tsk_scrcpy_control(
+                        ctrl_stream,
+                        rx_scrcpy_ctrl,
+                        video_codec_params.clone(),
+                    ).await;
+                    let _ = done_th_tx_ctrl.send(res);
+                });
+
 
                 info!("Connected to control server!");
 
@@ -868,11 +1003,14 @@ async fn tsk_adb_scrcpy(
                         info!("SCRCPY Audio Task finished");
                         tokio::time::sleep(Duration::from_secs(1)).await;
                     }
+                    else if done_th_rx_ctrl.try_recv().is_ok() {
+                        info!("SCRCPY Control Task finished");
+                        tokio::time::sleep(Duration::from_secs(1)).await;
+                    }
                     else {
                         tokio::time::sleep(Duration::from_secs(1)).await;
                     }
                     let mut buf = [0u8; 1024];
-
                     match timeout(Duration::from_millis(1000), sh_reader.read(&mut buf)).await {
                         Ok(Ok(n)) if n > 0 => {
                             println!("shell stdout: {}", String::from_utf8_lossy(&buf[..n]));
@@ -951,12 +1089,15 @@ pub async fn io_loop(
     let (tx_scrcpy_cmd, rx_scrcpy_cmd)=flume::bounded::<Packet>(5);
     //cmd scrcpy>srv channel
     let (tx_scrcpy_srv_cmd, rx_scrcpy_srv_cmd)=flume::bounded::<Packet>(5);
+    //scrcpy control channel HU>MD
+    let (tx_scrcpy_control, rx_scrcpy_control)=flume::bounded::<Packet>(5);
 
     let mut tsk_adb;
     tsk_adb = tokio_uring::spawn(tsk_adb_scrcpy(
         tx_scrcpy,
         rx_scrcpy_cmd,
         tx_scrcpy_srv_cmd,
+        rx_scrcpy_control,
         cfg,
     ));
     loop {
@@ -1066,7 +1207,8 @@ pub async fn io_loop(
             rx_srv,
             txr_srv,
             tx_scrcpy_cmd.clone(),
-            rx_scrcpy_srv_cmd.clone()
+            rx_scrcpy_srv_cmd.clone(),
+            tx_scrcpy_control.clone(),
         ));
         
         // Thread for monitoring transfer
