@@ -423,12 +423,12 @@ async fn tsk_scrcpy_video(
                 {
                     if pkt.channel ==  sid
                     {
-                        info!("{} Received {} message", sid.to_string(), message_id);
+                        //info!("{} Received {} message", sid.to_string(), message_id);
                         let data = &pkt.payload[2..]; // start of message data, without message_id
                         if  let Ok(rsp) = Ack::parse_from_bytes(&data)
                         {
                             //info!( "{}, channel {:?}: ACK, timestamp_ns: {:?}", get_name(), pkt.channel, rsp.receive_timestamp_ns[0]);
-                            info!( "tsk_scrcpy_video: video ACK received, sending next frame");
+                            //info!( "tsk_scrcpy_video: video ACK received, sending next frame");
                             act_unack=0;
                         }
                         else
@@ -437,7 +437,7 @@ async fn tsk_scrcpy_video(
                         }
                     }
                     else {
-                        info!( "tsk_scrcpy_video: media ACK received but not for VIDEO, discarded");
+                        //info!( "tsk_scrcpy_video: media ACK received but not for VIDEO, discarded");
                     }
                 }
                 else
@@ -456,7 +456,7 @@ async fn tsk_scrcpy_video(
         let rd_len=h264_data.len();
         let dbg_len=min(rd_len, 16);
 
-        if i<10
+        /*if i<10
         {
             if rd_len>dbg_len
             {
@@ -469,7 +469,7 @@ async fn tsk_scrcpy_video(
             }
 
             i=i+1;
-        }
+        }*/
 
         if streaming_on && (act_unack < max_unack)
         {
@@ -706,12 +706,12 @@ async fn tsk_scrcpy_control(
                 // Received a packet
 
                 let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-                info!("tsk_scrcpy_control Received command id {:?}", message_id);
+                //info!("tsk_scrcpy_control Received command id {:?}", message_id);
                 if message_id == InputMessageId::INPUT_MESSAGE_INPUT_REPORT  as i32
                 {
                     let data = &pkt.payload[2..]; // start of message data, without message_id
                     if  let Ok(rsp) = InputReport::parse_from_bytes(&data) {
-                        info!( "tsk_scrcpy_control InputReport received: {:?}", rsp);
+                        //info!( "tsk_scrcpy_control InputReport received: {:?}", rsp);
                         if rsp.touch_event.is_some()
                         {
                             let touch_action = rsp.touch_event.action();
