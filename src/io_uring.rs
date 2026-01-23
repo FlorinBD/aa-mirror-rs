@@ -742,6 +742,9 @@ async fn tsk_scrcpy_control(
                             }
 
                         }
+                        else {
+                            error!( "tsk_scrcpy_control unmanaged touch action");
+                        }
                     }
                     else {
                         error!( "tsk_scrcpy_control: Unable to parse received message");
