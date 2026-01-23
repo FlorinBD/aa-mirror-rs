@@ -1545,7 +1545,6 @@ pub async fn th_input_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, m
                         //FIXME send BindingRequest
 
                         let mut binding_req = KeyBindingRequest::new();
-                        //binding_req.set_keycodes(keys);
                         binding_req.keycodes.extend_from_slice(&keys);
 
                         let payload: Vec<u8> = [
