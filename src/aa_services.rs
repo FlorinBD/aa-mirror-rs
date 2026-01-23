@@ -1613,7 +1613,7 @@ pub async fn th_input_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, m
                     }
                     else {
                         let binding_req = KeyBindingRequest::new();
-                        binding_req.keycodes.extend(&keys);
+                        binding_req.set_keycodes(Vec::from(keys));
 
                         let payload: Vec<u8> = [
                             &(InputMessageId::INPUT_MESSAGE_KEY_BINDING_REQUEST as u16).to_be_bytes()[..],
