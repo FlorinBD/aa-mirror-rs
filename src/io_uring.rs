@@ -56,7 +56,7 @@ const USB_ACCESSORY_PATH: &str = "/dev/usb_accessory";
 pub const BUFFER_LEN: usize = 16 * 1024;
 pub const TCP_CLIENT_TIMEOUT: Duration = Duration::new(30, 0);
 
-use crate::config::{Action, AppConfig, SharedConfig, ADB_DEVICE_PORT, SCRCPY_VERSION, SCRCPY_PORT};
+use crate::config::{Action, AppConfig, SharedConfig, ADB_DEVICE_PORT, SCRCPY_VERSION, SCRCPY_PORT, SCRCPY_METADATA_HEADER_LEN};
 use crate::config::{TCP_DHU_PORT, TCP_MD_SERVER_PORT};
 use crate::channel_manager::{endpoint_reader, ch_proxy, packet_tls_proxy, ENCRYPTED, FRAME_TYPE_CONTROL, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
 use crate::channel_manager::Packet;
@@ -389,79 +389,52 @@ async fn tsk_scrcpy_video(
             _ => {}
         }
         //Read encapsulated video frames
-        /*header_buf=read_exact(&stream, header_buf).await?;
-        let pts = u64::from_be_bytes(header_buf[0..8].try_into()?);
-        //let frame_size=(u32::from_be_bytes(header_buf[8..12].try_into()?))-8;//packet size include also header (pts) witch must be discarded?
-        let frame_size=u32::from_be_bytes(header_buf[8..12].try_into()?);
+        let (pts,  h264_data) = read_scrcpy_packet(&mut stream).await?;
+        //let nals = reassembler.feed(&h264_data);
         let key_frame=(pts & 0x4000_0000_0000_0000u64) >0;
         let rec_ts=pts & 0x3FFF_FFFF_FFFF_FFFFu64;
         let config_frame=(pts & 0x8000_0000_0000_0000u64) >0;
-        frame_buf.resize(frame_size as usize, 0);
-        frame_buf=read_exact(&stream, frame_buf).await?;
-        if frame_buf.len() != frame_size as usize
-        {
-            error!("Video task frame error, wanted {} but got {} bytes",frame_size, frame_buf.len());
-        }
-        let dbg_len=min(frame_size,16);
+        let rd_len=h264_data.len();
+        let dbg_len=min(rd_len, 16);
+
         if i<10
         {
-            info!("Video task got frame header {:02x?}:",&header_buf);
-            if frame_buf.len()>dbg_len as usize
+            if rd_len>dbg_len
             {
-                let end_offset=frame_buf.len() - dbg_len as usize;
-                info!("Video task got frame config={:?}, act size: {}, defined size: {}, raw slice: {:02x?}...{:02x?}",config_frame, frame_buf.len(), frame_size , &frame_buf[..dbg_len as usize], &frame_buf[end_offset..]);
+                let end_offset= rd_len - dbg_len;
+                info!("Video task got frame config={:?}, act size: {}, raw slice: {:02x?}...{:02x?}",config_frame, rd_len, &h264_data[..dbg_len], &h264_data[end_offset..]);
             }
-            else {
-                info!("Video task got frame config={:?}, act size: {}, defined size: {}, raw bytes: {:02x?}",config_frame, frame_buf.len(), frame_size , &frame_buf[..dbg_len as usize]);
+            else
+            {
+                info!("Video task got frame config={:?}, act size: {}, raw bytes: {:02x?}",config_frame, rd_len, &h264_data[..dbg_len]);
             }
 
             i=i+1;
-        }*/
-        let (pts,  h264_data) = read_scrcpy_packet(&mut stream).await?;
-        let nals = reassembler.feed(&h264_data);
-        let key_frame=(pts & 0x4000_0000_0000_0000u64) >0;
-        let rec_ts=pts & 0x3FFF_FFFF_FFFF_FFFFu64;
-        let config_frame=(pts & 0x8000_0000_0000_0000u64) >0;
-        for nal_frame_buffer in nals {
-            let dbg_len=min(nal_frame_buffer.len(), 16);
-            if i<10
-            {
-                if nal_frame_buffer.len()>dbg_len as usize
-                {
-                    let end_offset= nal_frame_buffer.len() - dbg_len as usize;
-                    info!("Video task got frame config={:?}, act size: {}, raw slice: {:02x?}...{:02x?}",config_frame, nal_frame_buffer.len(), &nal_frame_buffer[..dbg_len], &nal_frame_buffer[end_offset..]);
-                }
-                else {
-                    info!("Video task got frame config={:?}, act size: {}, raw bytes: {:02x?}",config_frame, nal_frame_buffer.len(), &nal_frame_buffer[..dbg_len]);
-                }
+        }
 
-                i=i+1;
+        if streaming_on && (act_unack < max_unack)
+        {
+
+            payload.clear();
+            if config_frame
+            {
+                payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
+                payload.extend_from_slice(&nal_frame_buffer);
+            }
+            else {
+                payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
+                payload.extend_from_slice(&timestamp.to_be_bytes());
+                payload.extend_from_slice(&nal_frame_buffer);
             }
 
-            if streaming_on && (act_unack < max_unack)
-            {
-
-                payload.clear();
-                if config_frame
-                {
-                    payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
-                    payload.extend_from_slice(&nal_frame_buffer);
-                }
-                else {
-                    payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
-                    payload.extend_from_slice(&timestamp.to_be_bytes());
-                    payload.extend_from_slice(&nal_frame_buffer);
-                }
-
-                let pkt_rsp = Packet {
-                    channel: sid,
-                    flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                    final_length: None,
-                    payload: std::mem::take(&mut payload),
-                };
-                video_tx.send_async(pkt_rsp).await?;
-                act_unack=act_unack+1;
-            }
+            let pkt_rsp = Packet {
+                channel: sid,
+                flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                final_length: None,
+                payload: std::mem::take(&mut payload),
+            };
+            video_tx.send_async(pkt_rsp).await?;
+            act_unack=act_unack+1;
         }
 
     }
@@ -514,14 +487,19 @@ async fn tsk_scrcpy_video(
     /// Read one scrcpy packet (with metadata)
     async fn read_scrcpy_packet(stream: &mut TcpStream) -> io::Result<(u64, Vec<u8>)> {
         // First 12 bytes = packet metadata
-        let metadata=read_exact(stream, 12).await?;
+        let metadata=read_exact(stream, SCRCPY_METADATA_HEADER_LEN).await?;
+        if metadata.len() != SCRCPY_METADATA_HEADER_LEN {
+            error!("read_scrcpy_packet video data len error, wanted {} but got {} bytes", SCRCPY_METADATA_HEADER_LEN, metadata.len());
+        }
         let packet_size = u32::from_be_bytes(metadata[8..].try_into().unwrap()) as usize;
         let pts = u64::from_be_bytes(metadata[0..8].try_into().unwrap());
         // Read full packet
-        //let mut payload = vec![0u8; packet_size];
         let payload=read_exact(stream, packet_size).await?;
 
         let h264_data = payload.to_vec();
+        if h264_data.len() != packet_size {
+            error!("read_scrcpy_packet video data len error, wanted {} but got {} bytes", packet_size, h264_data.len());
+        }
         Ok((pts, h264_data))
     }
 
@@ -805,7 +783,7 @@ async fn tsk_adb_scrcpy(
                 continue;
             }
             //AVC base profile, no B frames, only I and P frames
-            let video_codec_options=format!("profile:int=1,level:int=512,i-frame-interval:int={},repeat-previous-frame-after:long=0,max-bframes:int=0",video_codec_params.fps);
+            let video_codec_options=format!("profile:int=1,level:int=512,i-frame-interval:int={},low-latency:int=1,max-bframes:int=0",video_codec_params.fps);
             let mut cmd_shell:Vec<String> = vec![];
             cmd_shell.push("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar".to_string());
             cmd_shell.push("app_process".to_string());
