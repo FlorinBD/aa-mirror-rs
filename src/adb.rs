@@ -50,8 +50,6 @@ pub fn parse_response_lines_old(rsp: Vec<u8>) ->Result<Vec<String>, String>
 ///Find an ADB device, connect to it and return TCP address
 pub(crate) async fn get_first_adb_device(handle: &Handle, config: AppConfig) ->Option<String>
 {
-
-
     // Iterate neighbors
     let mut neighbors = handle.neighbours().get().execute();
     while let Some(neigh) = neighbors.try_next().await {
