@@ -661,7 +661,7 @@ async fn tsk_scrcpy_audio(
                 let dbg_len=min(rd_len,16);
                 if i<5
                 {
-                    info!("Audio task Read {} bytes: {:02x?}", n, &buf_out[..dbg_len]);
+                    info!("Audio task Read {} bytes: {:02x?}", rd_len, &buf_out[..dbg_len]);
                     i=i+1;
                 }
                 if streaming_on && (act_unack<max_unack)
