@@ -803,7 +803,7 @@ async fn tsk_scrcpy_control(
             }
         }
     }
-    Err(())
+    Err(flume::RecvError::Disconnected)
 }
 async fn tsk_adb_scrcpy(
     media_tx: flume::Sender<Packet>,
