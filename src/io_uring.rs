@@ -43,6 +43,7 @@ use protos::*;
 use protos::ControlMessageType::{self, *};
 use protobuf::{Message};
 use std::cmp::min;
+use rtnetlink::new_connection;
 use serde::{Deserialize, Serialize};
 use crate::h264_reader::NalReassembler;
 
@@ -864,6 +865,18 @@ async fn tsk_adb_scrcpy(
         error!("ADB server can't start");
     }
 
+    // Create a netlink connection
+    let (connection, handle, _) = match new_connection() {
+        Ok(conn) => conn,
+        Err(e) => {
+            error!("Failed to open netlink connection: {e}");
+            return Err(Box::new(e));
+        }
+    };
+
+    // Spawn the connection task
+    tokio::spawn(connection);
+
     let mut audio_codec_params = AudioStreamingParams::default();
     let mut video_codec_params = VideoStreamingParams::default();
 
@@ -878,7 +891,7 @@ async fn tsk_adb_scrcpy(
     }
     loop
     {
-        if let Some(device)=adb::get_first_adb_device(config.clone()).await {
+        if let Some(device)=adb::get_first_adb_device(&handle, config.clone()).await {
             info!("{}: ADB device found: {:?}, trying to get video/audio from it now",NAME, device);
 
             let mut cmd_portfw = vec![];
