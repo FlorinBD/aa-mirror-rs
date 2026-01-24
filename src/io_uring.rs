@@ -803,6 +803,7 @@ async fn tsk_scrcpy_control(
             }
         }
     }
+    Err(())
 }
 async fn tsk_adb_scrcpy(
     media_tx: flume::Sender<Packet>,
