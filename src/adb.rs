@@ -1,20 +1,20 @@
 use std::borrow::Cow;
 use std::ffi::OsStr;
-use std::net::{IpAddr, SocketAddrV4};
+use std::net::{IpAddr, Ipv4Addr, SocketAddrV4};
 use std::process::Stdio;
 use std::time::{Duration, Instant};
 use async_arp::{Client, ClientConfigBuilder, ClientSpinner, ProbeStatus};
 use futures::TryStreamExt;
 use log::error;
 use port_check::is_port_reachable_with_timeout;
+use serde_json::Value;
 use simplelog::info;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 use tokio::process::Command;
 use crate::{adb, arp_common};
 use crate::config::{AppConfig, ADB_DEVICE_PORT};
 use simplelog;
-use rtnetlink::{new_connection, Handle};
-use rtnetlink::packet_route::neighbour::{NeighbourMessage, NeighbourState};
+
 
 ///ADB wrapper, needs adb binary installed
 pub(crate) fn parse_response_lines(rsp: Vec<u8>) -> Result<Vec<String>, String> {
@@ -48,70 +48,72 @@ pub fn parse_response_lines_old(rsp: Vec<u8>) ->Result<Vec<String>, String>
 }
 
 ///Find an ADB device, connect to it and return TCP address
-pub(crate) async fn get_first_adb_device(handle: &Handle, config: AppConfig) ->Option<String>
+pub(crate) async fn get_first_adb_device( config: AppConfig) ->Option<String>
 {
-    // Iterate neighbors
-    let mut neighbors = handle.neighbours().get().execute();
-    while let Some(neigh) = neighbors.try_next().await {
-        let payload = neigh.payload();
+    // Run `ip -j neigh` asynchronously
+    let output = Command::new("ip")
+        .args(&["-j", "neigh"])
+        .output()
+        .await
+        .ok()?; // return None if command fails
 
-        // Only reachable neighbors (0x02)
-        if payload.header.state != 0x02 {
+    let stdout = String::from_utf8_lossy(&output.stdout);
+
+    let json: Value = serde_json::from_str(&stdout).ok()?; // parse JSON, return None on error
+
+    let arr = json.as_array()?; // ensure it’s an array
+    for entry in arr {
+        let state = entry.get("state").and_then(|s| s.as_str());
+        if state != Some("REACHABLE") {
             continue;
         }
 
-        // Extract IP address
-        if let Some(dest) = &payload.destination {
-            let ip = match dest.len() {
-                4 => IpAddr::from([dest[0], dest[1], dest[2], dest[3]]),
-                16 => {
-                    let mut octets = [0u8; 16];
-                    octets.copy_from_slice(dest);
-                    IpAddr::from(octets)
-                }
-                _ => continue,
-            };
-
-            // MAC address
-            let mac: Option<&[u8]> = payload.link_layer_address.as_ref().map(|m| &m[..6]);
-            if let Some(mac) = mac {
-                info!("Potential ADB client found: IP: {}, MAC: {:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-                ip, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
-            );
-            }
+        if let (Some(ip), Some(mac)) = (
+            entry.get("dst").and_then(|s| s.as_str()),
+            entry.get("lladdr").and_then(|s| s.as_str()),
+        )
+        {
             let dev_port=ADB_DEVICE_PORT;
-            let dev_socket=SocketAddrV4::new(ip, dev_port);
-            if is_port_reachable_with_timeout(dev_socket, Duration::from_secs(5))
-            {
-                info!("{:?} found port {} open, trying to connect to ADB demon", ip, dev_port);
-                let cmd_connect = Command::new("adb")
-                    .arg("connect")
-                    .arg(dev_socket.to_string())
-                    .output().await.unwrap();
-                let lines=adb::parse_response_lines(cmd_connect.stdout).expect("TODO: panic message");
-                if lines.len() > 0 {
-                    for line in lines {
-                        info!("ADB connect response: {:?}", line);
-                    }
-                }
-                tokio::time::sleep(Duration::from_secs(5)).await;
-                let cmd_dev = Command::new("adb")
-                    .arg("devices")
-                    .output().await.unwrap();
-                let lines=adb::parse_response_lines(cmd_dev.stdout).expect("TODO: panic message");
-                if lines.len() > 0 {
-                    for line in lines {
-                        info!("ADB devices response: {:?}", line);
-                        if line.contains(&dev_socket.to_string()) {
-                            return  Some(dev_socket.to_string());
-
+            // parse the &str into Ipv4Addr
+            if let Ok(ipv4) = ip.parse::<Ipv4Addr>() {
+                let dev_socket = SocketAddrV4::new(ipv4, dev_port);
+                if is_port_reachable_with_timeout(dev_socket, Duration::from_secs(5))
+                {
+                    info!("{:?} found port {} open, trying to connect to ADB demon", ip.to_string(), dev_port);
+                    let cmd_connect = Command::new("adb")
+                        .arg("connect")
+                        .arg(dev_socket.to_string())
+                        .output().await.unwrap();
+                    let lines=adb::parse_response_lines(cmd_connect.stdout).expect("TODO: panic message");
+                    if lines.len() > 0 {
+                        for line in lines {
+                            info!("ADB connect response: {:?}", line);
                         }
                     }
-                }
+                    tokio::time::sleep(Duration::from_secs(5)).await;
+                    let cmd_dev = Command::new("adb")
+                        .arg("devices")
+                        .output().await.unwrap();
+                    let lines=adb::parse_response_lines(cmd_dev.stdout).expect("TODO: panic message");
+                    if lines.len() > 0 {
+                        for line in lines {
+                            info!("ADB devices response: {:?}", line);
+                            if line.contains(&dev_socket.to_string()) {
+                                return  Some(dev_socket.to_string());
 
+                            }
+                        }
+                    }
+
+                }
+            }
+            else
+            {
+                error!("Invalid IP address: {}", ip);
             }
         }
     }
+    None
 }
 pub(crate) async fn get_first_adb_device_old(config: AppConfig) ->Option<String>
 {
