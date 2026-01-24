@@ -43,7 +43,6 @@ use protos::*;
 use protos::ControlMessageType::{self, *};
 use protobuf::{Message};
 use std::cmp::min;
-use rtnetlink::new_connection;
 use serde::{Deserialize, Serialize};
 use crate::h264_reader::NalReassembler;
 
@@ -864,7 +863,7 @@ async fn tsk_adb_scrcpy(
     if !cmd_adb.status.success() {
         error!("ADB server can't start");
     }
-    
+
     let mut audio_codec_params = AudioStreamingParams::default();
     let mut video_codec_params = VideoStreamingParams::default();
 
