@@ -125,8 +125,13 @@ pub enum ScrcpyControlMessageType
     InjectTouchEvent=2,
     InjectScrollEvent,
     BackOrScreenOn,
+    SetDisplayPower=10,
+    RotateDevice=11,
 }
-
+#[derive(Serialize, Deserialize, Copy, Clone, Debug, Default)]
+pub struct ScrcpySetDisplayPowerEvent {
+    pub on: bool,
+}
 #[derive(Serialize, Deserialize, Copy, Clone, Debug, Default)]
 pub struct ScrcpyTouchEvent {
     pub action: u8,
@@ -565,6 +570,7 @@ async fn tsk_scrcpy_video(
     async fn read_scrcpy_packet(stream: &mut TcpStream) -> io::Result<(u64, Vec<u8>)> {
         // First 12 bytes = packet metadata
         let metadata=read_exact(stream, SCRCPY_METADATA_HEADER_LEN).await?;
+        info!("SCRCPY video packet metadata: {:?}",&metadata);
         if metadata.len() != SCRCPY_METADATA_HEADER_LEN {
             error!("read_scrcpy_packet data len error, wanted {} but got {} bytes", SCRCPY_METADATA_HEADER_LEN, metadata.len());
         }
