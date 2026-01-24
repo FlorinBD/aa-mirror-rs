@@ -724,9 +724,10 @@ async fn tsk_scrcpy_control(
                                 let sz = ScrcpySize { width: video_params.res_h, height: video_params.res_h };
                                 let pos = ScrcpyPosition { point: pt, screen_size: sz };
                                 let ev = ScrcpyTouchEvent { action: _action, pointer_id: pointer_id as u64, position: pos, pressure: 255, action_button: 0, buttons: 0 };
+                                info!("SCRCPY Control inject event: {:?}",ev);
                                 let ev_bytes: Vec<u8> = postcard::to_stdvec(&ev)?;
                                 let mut payload: Vec<u8> = Vec::new();
-                                payload.extend_from_slice(&(ScrcpyControlMessageType::InjectTouchEvent as u8).to_be_bytes());
+                                payload.push(ScrcpyControlMessageType::InjectTouchEvent as u8);
                                 payload.extend_from_slice(&ev_bytes);
                                 stream.write_all(payload).await;
                             }
@@ -758,7 +759,7 @@ async fn tsk_scrcpy_control(
                                 let ev = ScrcpyTouchEvent { action: _action, pointer_id: pointer_id as u64, position: pos, pressure: 255, action_button: 0, buttons: 0 };
                                 let ev_bytes: Vec<u8> = postcard::to_stdvec(&ev)?;
                                 let mut payload: Vec<u8> = Vec::new();
-                                payload.extend_from_slice(&(ScrcpyControlMessageType::InjectTouchEvent as u8).to_be_bytes());
+                                payload.push(ScrcpyControlMessageType::InjectTouchEvent as u8);
                                 payload.extend_from_slice(&ev_bytes);
                                 stream.write_all(payload).await;
                             }
@@ -778,7 +779,7 @@ async fn tsk_scrcpy_control(
                                 let ev = ScrcpyKeyEvent { action: _action, key_code: key_ev.keycode() as i32, repeat: 0, metastate: 0 };
                                 let ev_bytes: Vec<u8> = postcard::to_stdvec(&ev)?;
                                 let mut payload: Vec<u8> = Vec::new();
-                                payload.extend_from_slice(&(ScrcpyControlMessageType::InjectKeycode as u8).to_be_bytes());
+                                payload.push(ScrcpyControlMessageType::InjectKeycode as u8);
                                 payload.extend_from_slice(&ev_bytes);
                                 stream.write_all(payload).await;
                             }
@@ -803,7 +804,7 @@ async fn tsk_scrcpy_control(
             }
         }
     }
-    Err(flume::RecvError::Disconnected)
+    Err(Box::new(flume::RecvError::Disconnected))
 }
 async fn tsk_adb_scrcpy(
     media_tx: flume::Sender<Packet>,
