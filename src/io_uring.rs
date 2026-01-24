@@ -438,8 +438,6 @@ async fn tsk_scrcpy_video(
     info!("SCRCPY Video entering main loop");
     let timestamp: u64 = 0;//is not used by HU
     let mut payload: Vec<u8>=Vec::new();
-    let mut header_buf = vec![0u8; 12];
-    //let mut frame_buf = Vec::new();
     //let mut reassembler = NalReassembler::new();
     loop {
         tokio::select! {
