@@ -428,7 +428,7 @@ async fn tsk_scrcpy_video(
                         if  let Ok(rsp) = Ack::parse_from_bytes(&data)
                         {
                             //info!( "{}, channel {:?}: ACK, timestamp_ns: {:?}", get_name(), pkt.channel, rsp.receive_timestamp_ns[0]);
-                            //info!( "tsk_scrcpy_video: video ACK received, sending next frame");
+                            info!( "tsk_scrcpy_video: video ACK received, sending next frame");
                             act_unack=0;
                         }
                         else
@@ -670,7 +670,7 @@ async fn tsk_scrcpy_audio(
                         if  let Ok(rsp) = Ack::parse_from_bytes(&data)
                         {
                             //info!( "{}, channel {:?}: ACK, timestamp_ns: {:?}", get_name(), pkt.channel, rsp.receive_timestamp_ns[0]);
-                            //info!( "tsk_scrcpy_audio: media ACK received, sending next frame");
+                            info!( "tsk_scrcpy_audio: media ACK received, sending next frame");
                             act_unack=0;
                         }
                         else
