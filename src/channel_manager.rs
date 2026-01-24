@@ -412,13 +412,13 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
         //Service>HU
         Some(mut msg) = srv_rx.recv() => {
             srv_read_err=false;
-                if msg.flags&ENCRYPTED !=0
+            if msg.flags&ENCRYPTED !=0
+            {
+                if !ssl_handshake_done
                 {
-                    if !ssl_handshake_done
-                    {
                         error!( "{}: tls proxy error: received encrypted message from service before TLS handshake", get_name());
-                    }
-                    else {
+                }
+                else {
                         let _ = pkt_debug(
                             HexdumpLevel::DecryptedOutput,
                             dmp_level,
@@ -434,9 +434,10 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                             }
                             Err(e) => {error!( "{} encrypt_payload error: {:?}", get_name(), e);},
                         }
-                    }
                 }
-                else {
+            }
+            else
+            {
                     let _ = pkt_debug(
                         HexdumpLevel::DecryptedOutput,
                         dmp_level,
@@ -448,7 +449,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                     w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
                     msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: transmit to HU failed", get_name()))?;
 
-                }
+            }
         }
             // lower priority, HU>Service
         Some(mut msg) = hu_rx.recv() => {
