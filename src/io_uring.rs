@@ -801,6 +801,7 @@ async fn tsk_scrcpy_control(
             Err(flume::RecvError::Disconnected) => {
                 // Sender has been dropped, exit loop
                 println!("Sender closed, exiting scrcpy control loop");
+                break;
             }
         }
     }
