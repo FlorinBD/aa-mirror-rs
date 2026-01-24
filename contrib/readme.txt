@@ -12,5 +12,5 @@ scrcpy-server version: 3.3.4
 
 todo:
 done: implement tokio_uring for adb reading task
-replace postcard with BytesMut to have BE and correct layout, for SCRCPy control channel at least
-replace ARP with ip neigh cli for ADB discovering
+done: replace postcard with BytesMut to have BE and correct layout, for SCRCPy control channel at least
+done: replace ARP with ip neigh cli for ADB discovery
