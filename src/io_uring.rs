@@ -348,46 +348,6 @@ async fn tcp_wait_for_md_connection(listener: &mut TcpListener) -> Result<TcpStr
     Ok(stream)
 }
 
-async fn read_exact(
-    stream: &mut TcpStream,
-    size: usize,
-) -> io::Result<Vec<u8>> {
-    let mut buf = Vec::with_capacity(size);
-
-    while buf.len() < size {
-        let to_read = size - buf.len();
-        let chunk = vec![0u8; to_read];
-
-        let (res, chunk) = stream.read(chunk).await;
-        let rd=res?;
-
-        if rd == 0 {
-            return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "EOF"));
-        }
-
-        buf.extend_from_slice(&chunk[..rd]);
-    }
-
-    Ok(buf)
-}
-/// Read one scrcpy packet (with metadata)
-async fn read_scrcpy_packet(stream: &mut TcpStream) -> io::Result<(u64, Vec<u8>)> {
-    // First 12 bytes = packet metadata
-    let metadata=read_exact(stream, SCRCPY_METADATA_HEADER_LEN).await?;
-    if metadata.len() != SCRCPY_METADATA_HEADER_LEN {
-        error!("read_scrcpy_packet data len error, wanted {} but got {} bytes", SCRCPY_METADATA_HEADER_LEN, metadata.len());
-    }
-    let packet_size = u32::from_be_bytes(metadata[8..].try_into().unwrap()) as usize;
-    let pts = u64::from_be_bytes(metadata[0..8].try_into().unwrap());
-    // Read full packet
-    let payload=read_exact(stream, packet_size).await?;
-
-    let h264_data = payload.to_vec();
-    if h264_data.len() != packet_size {
-        error!("read_scrcpy_packet data len error, wanted {} but got {} bytes", packet_size, h264_data.len());
-    }
-    Ok((pts, h264_data))
-}
 
 async fn tsk_scrcpy_video(
     mut stream: TcpStream,
@@ -543,7 +503,46 @@ async fn tsk_scrcpy_video(
     }
     //reassembler.flush();
     return Ok(());
+    async fn read_exact(
+        stream: &mut TcpStream,
+        size: usize,
+    ) -> io::Result<Vec<u8>> {
+        let mut buf = Vec::with_capacity(size);
 
+        while buf.len() < size {
+            let to_read = size - buf.len();
+            let chunk = vec![0u8; to_read];
+
+            let (res, chunk) = stream.read(chunk).await;
+            let rd=res?;
+
+            if rd == 0 {
+                return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "EOF"));
+            }
+
+            buf.extend_from_slice(&chunk[..rd]);
+        }
+
+        Ok(buf)
+    }
+    /// Read one scrcpy packet (with metadata)
+    async fn read_scrcpy_packet(stream: &mut TcpStream) -> io::Result<(u64, Vec<u8>)> {
+        // First 12 bytes = packet metadata
+        let metadata=read_exact(stream, SCRCPY_METADATA_HEADER_LEN).await?;
+        if metadata.len() != SCRCPY_METADATA_HEADER_LEN {
+            error!("read_scrcpy_packet data len error, wanted {} but got {} bytes", SCRCPY_METADATA_HEADER_LEN, metadata.len());
+        }
+        let packet_size = u32::from_be_bytes(metadata[8..].try_into().unwrap()) as usize;
+        let pts = u64::from_be_bytes(metadata[0..8].try_into().unwrap());
+        // Read full packet
+        let payload=read_exact(stream, packet_size).await?;
+
+        let h264_data = payload.to_vec();
+        if h264_data.len() != packet_size {
+            error!("read_scrcpy_packet data len error, wanted {} but got {} bytes", packet_size, h264_data.len());
+        }
+        Ok((pts, h264_data))
+    }
 }
 
 async fn tsk_scrcpy_audio(
@@ -676,7 +675,48 @@ async fn tsk_scrcpy_audio(
             }
         }
     }
-    Ok(())
+    return Ok(());
+
+    async fn read_exact(
+        stream: &mut TcpStream,
+        size: usize,
+    ) -> io::Result<Vec<u8>> {
+        let mut buf = Vec::with_capacity(size);
+
+        while buf.len() < size {
+            let to_read = size - buf.len();
+            let chunk = vec![0u8; to_read];
+
+            let (res, chunk) = stream.read(chunk).await;
+            let rd=res?;
+
+            if rd == 0 {
+                return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "EOF"));
+            }
+
+            buf.extend_from_slice(&chunk[..rd]);
+        }
+
+        Ok(buf)
+    }
+    /// Read one scrcpy packet (with metadata)
+    async fn read_scrcpy_packet(stream: &mut TcpStream) -> io::Result<(u64, Vec<u8>)> {
+        // First 12 bytes = packet metadata
+        let metadata=read_exact(stream, SCRCPY_METADATA_HEADER_LEN).await?;
+        if metadata.len() != SCRCPY_METADATA_HEADER_LEN {
+            error!("read_scrcpy_packet data len error, wanted {} but got {} bytes", SCRCPY_METADATA_HEADER_LEN, metadata.len());
+        }
+        let packet_size = u32::from_be_bytes(metadata[8..].try_into().unwrap()) as usize;
+        let pts = u64::from_be_bytes(metadata[0..8].try_into().unwrap());
+        // Read full packet
+        let payload=read_exact(stream, packet_size).await?;
+
+        let h264_data = payload.to_vec();
+        if h264_data.len() != packet_size {
+            error!("read_scrcpy_packet data len error, wanted {} but got {} bytes", packet_size, h264_data.len());
+        }
+        Ok((pts, h264_data))
+    }
 }
 
 async fn tsk_scrcpy_control(
