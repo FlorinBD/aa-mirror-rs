@@ -348,6 +348,47 @@ async fn tcp_wait_for_md_connection(listener: &mut TcpListener) -> Result<TcpStr
     Ok(stream)
 }
 
+async fn read_exact(
+    stream: &mut TcpStream,
+    size: usize,
+) -> io::Result<Vec<u8>> {
+    let mut buf = Vec::with_capacity(size);
+
+    while buf.len() < size {
+        let to_read = size - buf.len();
+        let chunk = vec![0u8; to_read];
+
+        let (res, chunk) = stream.read(chunk).await;
+        let rd=res?;
+
+        if rd == 0 {
+            return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "EOF"));
+        }
+
+        buf.extend_from_slice(&chunk[..rd]);
+    }
+
+    Ok(buf)
+}
+/// Read one scrcpy packet (with metadata)
+async fn read_scrcpy_packet(stream: &mut TcpStream) -> io::Result<(u64, Vec<u8>)> {
+    // First 12 bytes = packet metadata
+    let metadata=read_exact(stream, SCRCPY_METADATA_HEADER_LEN).await?;
+    if metadata.len() != SCRCPY_METADATA_HEADER_LEN {
+        error!("read_scrcpy_packet data len error, wanted {} but got {} bytes", SCRCPY_METADATA_HEADER_LEN, metadata.len());
+    }
+    let packet_size = u32::from_be_bytes(metadata[8..].try_into().unwrap()) as usize;
+    let pts = u64::from_be_bytes(metadata[0..8].try_into().unwrap());
+    // Read full packet
+    let payload=read_exact(stream, packet_size).await?;
+
+    let h264_data = payload.to_vec();
+    if h264_data.len() != packet_size {
+        error!("read_scrcpy_packet data len error, wanted {} but got {} bytes", packet_size, h264_data.len());
+    }
+    Ok((pts, h264_data))
+}
+
 async fn tsk_scrcpy_video(
     mut stream: TcpStream,
     mut cmd_rx: flume::Receiver<Packet>,
@@ -403,10 +444,9 @@ async fn tsk_scrcpy_video(
     loop {
         tokio::select! {
             biased;
+            //Read encapsulated video frames, we don't have to slice NAL units, we can send all together as they come from MediaEncoder
             res = read_scrcpy_packet(&mut stream) => {
-                    let (pts, data) = res?;
-                    //Read encapsulated video frames, we don't have to slice NAL units, we can send all together as they come from MediaEncoder
-                    let (pts,  h264_data) = read_scrcpy_packet(&mut stream).await?;
+                    let (pts, h264_data) = res?;
                     //let nals = reassembler.feed(&h264_data);
                     let key_frame=(pts & 0x4000_0000_0000_0000u64) >0;
                     let rec_ts=pts & 0x3FFF_FFFF_FFFF_FFFFu64;
@@ -501,49 +541,6 @@ async fn tsk_scrcpy_video(
     //reassembler.flush();
     return Ok(());
 
-    async fn read_exact(
-        stream: &mut TcpStream,
-        size: usize,
-    ) -> io::Result<Vec<u8>> {
-        let mut buf = Vec::with_capacity(size);
-
-        while buf.len() < size {
-            let to_read = size - buf.len();
-            let chunk = vec![0u8; to_read];
-
-            let (res, chunk) = stream.read(chunk).await;
-            let rd=res?;
-
-            if rd == 0 {
-                return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "EOF"));
-            }
-
-            buf.extend_from_slice(&chunk[..rd]);
-        }
-
-        Ok(buf)
-    }
-    /// Read one scrcpy packet (with metadata)
-    async fn read_scrcpy_packet(stream: &mut TcpStream) -> io::Result<(u64, Vec<u8>)> {
-        // First 12 bytes = packet metadata
-        let metadata=read_exact(stream, SCRCPY_METADATA_HEADER_LEN).await?;
-        if metadata.len() != SCRCPY_METADATA_HEADER_LEN {
-            error!("read_scrcpy_packet video data len error, wanted {} but got {} bytes", SCRCPY_METADATA_HEADER_LEN, metadata.len());
-        }
-        let packet_size = u32::from_be_bytes(metadata[8..].try_into().unwrap()) as usize;
-        let pts = u64::from_be_bytes(metadata[0..8].try_into().unwrap());
-        // Read full packet
-        let payload=read_exact(stream, packet_size).await?;
-
-        let h264_data = payload.to_vec();
-        if h264_data.len() != packet_size {
-            error!("read_scrcpy_packet video data len error, wanted {} but got {} bytes", packet_size, h264_data.len());
-        }
-        Ok((pts, h264_data))
-    }
-
-
-
 }
 
 async fn tsk_scrcpy_audio(
@@ -590,45 +587,46 @@ async fn tsk_scrcpy_audio(
     let mut i=0;
     let timestamp: u64 = 0;//is not used by HU
     loop {
-        let (res, buf_out) = stream.read(buf).await;
-        let n = res?;
-        if n == 0 {
-            info!("Audio connection closed by server?");
-            return Err(Box::new(io::Error::new(
-                io::ErrorKind::Other,
-                "Audio connection closed by server",
-            )));
-        }
-        let dbg_len=min(n,16);
-        if i<5
-        {
-            info!("Audio task Read {} bytes: {:02x?}", n, &buf_out[..dbg_len]);
-            i=i+1;
-        }
-        if streaming_on && (act_unack<max_unack)
-        {
-            let mut payload: Vec<u8>=Vec::new();
-            payload.extend_from_slice(&timestamp.to_be_bytes());
-            payload.extend_from_slice(&buf_out[12..n]);
-            payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) >> 8) as u8);
-            payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) & 0xff) as u8);
+        tokio::select! {
+            biased;
+            res = read_scrcpy_packet(&mut stream) => {
+                let (pts, data) = res?;
+                let rd_len=data.len();
+                if rd_len == 0 {
+                    info!("Audio connection closed by server?");
+                    return Err(Box::new(io::Error::new(
+                        io::ErrorKind::Other,
+                        "Audio connection closed by server",
+                        )));
+                }
+                let dbg_len=min(rd_len,16);
+                if i<5
+                {
+                    info!("Audio task Read {} bytes: {:02x?}", n, &buf_out[..dbg_len]);
+                    i=i+1;
+                }
+                if streaming_on && (act_unack<max_unack)
+                {
+                    let mut payload: Vec<u8>=Vec::new();
+                    payload.extend_from_slice(&timestamp.to_be_bytes());
+                    payload.extend_from_slice(&buf_out[12..n]);
+                    payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) >> 8) as u8);
+                    payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) & 0xff) as u8);
 
-            let pkt_rsp = Packet {
-                channel: sid,
-                flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                final_length: None,
-                payload: payload,
-            };
-            if let Err(_) = audio_tx.send(pkt_rsp){
-                error!( "SCRCPY audio frame send error");
-            };
-        }
-        // Reuse buffer
-        buf = buf_out;
-        //Check custom Service command
-        match cmd_rx.try_recv() {
-            Ok(pkt) => {
-                //info!("tsk_scrcpy_audio Received command packet {:02x?}", pkt);
+                    let pkt_rsp = Packet {
+                        channel: sid,
+                        flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                        final_length: None,
+                        payload: payload,
+                    };
+                    if let Err(_) = audio_tx.send(pkt_rsp){
+                        error!( "SCRCPY audio frame send error");
+                    };
+                }
+            }
+            Ok(pkt) = cmd_rx.recv_async() =>
+            {
+                    //info!("tsk_scrcpy_audio Received command packet {:02x?}", pkt);
                 let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
                 if message_id == MESSAGE_CUSTOM_CMD  as i32
                 {
@@ -668,7 +666,6 @@ async fn tsk_scrcpy_audio(
                     error!("tsk_scrcpy_video unknown message id: {}", message_id);
                 }
             }
-            _ => {}
         }
     }
     Ok(())
