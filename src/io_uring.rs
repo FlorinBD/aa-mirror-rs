@@ -416,37 +416,17 @@ async fn tsk_scrcpy_video(
     info!("Starting video server!");
     let mut streaming_on=true;
     let mut act_unack=0;
-    //let mut frame_buf = vec![];
-    let codec_buf = vec![0u8; 12];
-    //let header_buf = vec![0u8; 12];
     let mut i=0;
-    //let mut ch_id:u8=0;
 
-    //discard codec metadata
-    let (res, buf_out) = stream.read(codec_buf).await;
-    let n = res?;
-    if n == 0 {
-        error!("Video connection closed by server?");
-        return Err(Box::new(io::Error::new(
-            io::ErrorKind::Other,
-            "Video connection closed by server",
-        )));
-    }
-    if n != 12 {
-        error!("Video codec reading error");
-        return Err(Box::new(io::Error::new(
-            io::ErrorKind::Other,
-            "Video codec reading error",
-        )));
-    }
-    info!("SCRCPY Video codec metadata: {:02x?}", &buf_out[..n]);
-    let mut codec_id=String::from_utf8_lossy(&buf_out[0..4]).to_string();
+    //codec metadata
+    let metadata=read_exact(&mut stream, 12).await?;
+    info!("SCRCPY Video codec metadata: {:02x?}", &metadata);
+    let mut codec_id=String::from_utf8_lossy(&metadata[0..4]).to_string();
         codec_id=codec_id.chars()
         .filter(|c| c.is_ascii_graphic() || *c == ' ')
         .collect();
-    //let codec_id = u32::from_be_bytes(buf_out[0..4].try_into().unwrap());
-    let video_res_w = u32::from_be_bytes(buf_out[4..8].try_into().unwrap());
-    let video_res_h = u32::from_be_bytes(buf_out[8..12].try_into().unwrap());
+    let video_res_w = u32::from_be_bytes(metadata[4..8].try_into().unwrap());
+    let video_res_h = u32::from_be_bytes(metadata[8..12].try_into().unwrap());
     info!("SCRCPY Video metadata decoded: id={}, res_w={}, res_h={}", codec_id, video_res_w, video_res_h);
     if (codec_id != "h264".to_string()) || (video_res_w != 800) || (video_res_h != 480) {
         error!("SCRCPY Invalid Video codec configuration");
@@ -612,28 +592,11 @@ async fn tsk_scrcpy_audio(
 
     info!("Starting audio server!");
     let mut streaming_on=false;
-    //let mut ch_id:u8=0;
     let mut act_unack=0;
-    //discard codec metadata
-    let codec_buf = vec![0u8; 4];
-    let (res, buf_out) = stream.read(codec_buf).await;
-    let n = res?;
-    if n == 0 {
-        error!("Audio connection closed by server?");
-        return Err(Box::new(io::Error::new(
-            io::ErrorKind::Other,
-            "Audio connection closed by server?",
-        )));
-    }
-    if n != 4 {
-        error!("Audio codec reading error");
-        return Err(Box::new(io::Error::new(
-            io::ErrorKind::Other,
-            "Audio codec reading error",
-        )));
-    }
-    info!("SCRCPY Audio codec metadata: {:02x?}", &buf_out[..n]);
-    let mut codec_id=String::from_utf8_lossy(&buf_out[0..4]).to_string();
+    //codec metadata
+    let metadata=read_exact(&mut stream, 4).await?;
+    info!("SCRCPY Audio codec metadata: {:02x?}", &metadata);
+    let mut codec_id=String::from_utf8_lossy(&metadata[0..4]).to_string();
         codec_id=codec_id.chars()
         .filter(|c| c.is_ascii_graphic() || *c == ' ')
         .collect();
@@ -642,7 +605,7 @@ async fn tsk_scrcpy_audio(
         error!("SCRCPY Invalid audio codec configuration");
         return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY Invalid audio codec configuration")));
     }
-    let mut buf = vec![0u8; 0xffff];
+    //let mut buf = vec![0u8; 0xffff];
     let mut i=0;
     let timestamp: u64 = 0;//is not used by HU
     loop {
@@ -661,14 +624,14 @@ async fn tsk_scrcpy_audio(
                 let dbg_len=min(rd_len,16);
                 if i<5
                 {
-                    info!("Audio task Read {} bytes: {:02x?}", rd_len, &buf_out[..dbg_len]);
+                    info!("Audio task Read {} bytes: {:02x?}", rd_len, &data[..dbg_len]);
                     i=i+1;
                 }
                 if streaming_on && (act_unack<max_unack)
                 {
                     let mut payload: Vec<u8>=Vec::new();
                     payload.extend_from_slice(&timestamp.to_be_bytes());
-                    payload.extend_from_slice(&buf_out[12..n]);
+                    payload.extend_from_slice(&data);
                     payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) >> 8) as u8);
                     payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) & 0xff) as u8);
 
