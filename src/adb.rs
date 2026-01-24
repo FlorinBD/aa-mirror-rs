@@ -51,13 +51,13 @@ pub fn parse_response_lines_old(rsp: Vec<u8>) ->Result<Vec<String>, String>
 pub(crate) async fn get_first_adb_device( config: AppConfig) ->Option<String>
 {
     // Run `ip -j neigh` asynchronously
-    let output = Command::new("ip")
+    let cmd_ip_neigh = Command::new("ip")
         .args(&["-j", "neigh"])
         .output()
         .await
         .ok()?; // return None if command fails
 
-    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stdout = String::from_utf8_lossy(&cmd_ip_neigh.stdout);
 
     let json: Value = serde_json::from_str(&stdout).ok()?; // parse JSON, return None on error
 
