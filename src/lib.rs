@@ -11,6 +11,5 @@ pub mod channel_manager;
 pub mod usb_gadget;
 pub mod usb_stream;
 pub mod web;
-mod arp_common;
 mod adb;
 mod h264_reader;
