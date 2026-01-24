@@ -3,7 +3,6 @@ use std::ffi::OsStr;
 use std::net::{IpAddr, Ipv4Addr, SocketAddrV4};
 use std::process::Stdio;
 use std::time::{Duration, Instant};
-use async_arp::{Client, ClientConfigBuilder, ClientSpinner, ProbeStatus};
 use futures::TryStreamExt;
 use log::error;
 use port_check::is_port_reachable_with_timeout;
@@ -11,7 +10,7 @@ use serde_json::Value;
 use simplelog::info;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 use tokio::process::Command;
-use crate::{adb, arp_common};
+use crate::{adb};
 use crate::config::{AppConfig, ADB_DEVICE_PORT};
 use simplelog;
 
@@ -126,63 +125,6 @@ pub(crate) async fn get_first_adb_device( config: AppConfig) ->Option<String>
     }
     None
 }
-pub(crate) async fn get_first_adb_device_old(config: AppConfig) ->Option<String>
-{
-    let interface = arp_common::interface_from(&config.iface);
-    let arp_client = Client::new(
-        ClientConfigBuilder::new(&config.iface)
-            .with_response_timeout(Duration::from_millis(500))
-            .build(),
-    ).unwrap();
-    let spinner = ClientSpinner::new(arp_client).with_retries(3);
-    let net = arp_common::net_from(&interface).unwrap();
-    let start = Instant::now();
-    let outcomes = spinner
-        .probe_batch(&arp_common::generate_probe_inputs(net, interface))
-        .await;
-
-    let occupied = outcomes.unwrap()
-        .into_iter()
-        .filter(|outcome| outcome.status == ProbeStatus::Occupied);
-    //let scan_duration = start.elapsed();
-    info!("Found hosts: {}", occupied.clone().count());
-    let dev_port=ADB_DEVICE_PORT;
-    for outcome in occupied {
-        //info!("ADB try to connect to {:?}", outcome.target_ip);
-        let dev_socket=SocketAddrV4::new(outcome.target_ip, dev_port);
-        if is_port_reachable_with_timeout(dev_socket, Duration::from_secs(5))
-        {
-            info!("{:?} found port {} open, trying to connect to ADB demon", outcome.target_ip, dev_port);
-            let cmd_connect = Command::new("adb")
-                .arg("connect")
-                .arg(dev_socket.to_string())
-                .output().await.unwrap();
-            let lines=adb::parse_response_lines(cmd_connect.stdout).expect("TODO: panic message");
-            if lines.len() > 0 {
-                for line in lines {
-                    info!("ADB connect response: {:?}", line);
-                }
-            }
-            tokio::time::sleep(Duration::from_secs(5)).await;
-            let cmd_dev = Command::new("adb")
-                .arg("devices")
-                .output().await.unwrap();
-            let lines=adb::parse_response_lines(cmd_dev.stdout).expect("TODO: panic message");
-            if lines.len() > 0 {
-                for line in lines {
-                    info!("ADB devices response: {:?}", line);
-                    if line.contains(&dev_socket.to_string()) {
-                        return  Some(dev_socket.to_string());
-
-                    }
-                }
-            }
-
-        }
-    }
-    //info!("ADB Scan took {:?} seconds", scan_duration.as_secs());
-    None
-}
 
 pub(crate) async fn run_piped_cmd<I,S>(args: I) ->Result<String, Box<dyn std::error::Error + Send + Sync>>
 where
@@ -204,34 +146,6 @@ where
     }
 
     Err("no output received".into())
-}
-
-pub(crate) async fn shell_cmd_old<I,S>(args: I) ->Result<(tokio::process::Child, String), Box<dyn std::error::Error + Send + Sync>>
-where
-    I: IntoIterator<Item = S>,
-    I::Item: AsRef<OsStr>,
-{
-    let mut adb_cmd = Command::new("adb")
-        .arg("shell")
-        .args(args)
-        .stdout(Stdio::piped())
-        //.stderr(Stdio::piped())
-        .spawn()?;
-
-    let stdout = adb_cmd.stdout.take().unwrap();
-    let mut lines = BufReader::new(stdout).lines();
-
-    // Read first line (or first meaningful line)
-    let first_line = match lines.next_line().await? {
-        Some(line) => line,
-        None => return Err("no output received".into()),
-    };
-
-    // IMPORTANT:
-    // - child is still alive
-    // - stdout is now partially consumed
-    // - process keeps running
-    Ok((adb_cmd, first_line))
 }
 
 pub(crate) async fn shell_cmd<I,S>(args: I) ->Result<(tokio::process::Child, BufReader<tokio::process::ChildStdout>, String), Box<dyn std::error::Error + Send + Sync>>
