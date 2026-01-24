@@ -717,7 +717,7 @@ async fn tsk_scrcpy_control(
                                 {
                                     _action = AndroidTouchEvent::Move as u8;
                                 } else {
-                                    error!( "tsk_scrcpy_control Received invalid touchpad action");
+                                    error!( "tsk_scrcpy_control Received invalid touchscreen action");
                                     continue;
                                 }
                                 let pt = ScrcpyPoint { x: touch_x as i32, y: touch_y as i32 };
