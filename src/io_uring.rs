@@ -552,10 +552,10 @@ async fn tsk_scrcpy_video(
 
         while buf.len() < size {
             let to_read = size - buf.len();
-            let chunk = vec![0u8; to_read];
+            let mut chunk = vec![0u8; to_read];
 
-            let (res, mut chunk) = stream.read(chunk).await;
-            chunk=chunk;
+            let (res, nchunk) = stream.read(chunk).await;
+            chunk=nchunk;
             let rd=res?;
 
             if rd == 0 {
