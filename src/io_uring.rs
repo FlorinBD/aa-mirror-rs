@@ -1060,22 +1060,18 @@ async fn tsk_adb_scrcpy(
                         }
                         Ok(..) = &mut done_th_rx_video => {
                             error!("SCRCPY Video Task finished");
-                            shell.kill().await?;
-                            continue;
+                            break;
                         }
                         Ok(..) = &mut done_th_rx_audio => {
                             error!("SCRCPY Audio Task finished");
-                            shell.kill().await?;
-                            continue;
+                            break;
                         }
                         Ok(..) = &mut done_th_rx_ctrl => {
                             error!("SCRCPY Control Task finished");
-                            shell.kill().await?;
-                            continue;
+                            break;
                         }
                     }
 
-                    //TODO  restart connection
                 }
                 // When done, stop the shell
                 shell.kill().await?;
