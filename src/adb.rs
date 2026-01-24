@@ -79,7 +79,7 @@ pub(crate) async fn get_first_adb_device( config: AppConfig) ->Option<String>
                 let dev_socket = SocketAddrV4::new(ipv4, dev_port);
                 if is_port_reachable_with_timeout(dev_socket, Duration::from_secs(5))
                 {
-                    info!("{:?} found port {} open, trying to connect to ADB demon", ip.to_string(), dev_port);
+                    info!("{:?} found port {} open, trying to connect to ADB demon. MAC= {:?}", ip.to_string(), dev_port, mac.to_string());
                     let cmd_connect = Command::new("adb")
                         .arg("connect")
                         .arg(dev_socket.to_string())
