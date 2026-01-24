@@ -451,7 +451,7 @@ async fn tsk_scrcpy_video(
                     let key_frame=(pts & 0x4000_0000_0000_0000u64) >0;
                     let rec_ts=pts & 0x3FFF_FFFF_FFFF_FFFFu64;
                     let config_frame=(pts & 0x8000_0000_0000_0000u64) >0;
-                    /*let rd_len=h264_data.len();
+                    let rd_len=h264_data.len();
                     let dbg_len=min(rd_len, 16);
                     if i<10
                     {
@@ -466,7 +466,7 @@ async fn tsk_scrcpy_video(
                         }
 
                     i=i+1;
-                    }*/
+                    }
 
                     if streaming_on && (act_unack < max_unack)
                     {
