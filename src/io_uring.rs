@@ -691,7 +691,7 @@ async fn tsk_scrcpy_control(
                 // Received a packet
 
                 let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-                //info!("tsk_scrcpy_control Received command id {:?}", message_id);
+                info!("tsk_scrcpy_control Received command id {:?}", message_id);
                 if message_id == InputMessageId::INPUT_MESSAGE_INPUT_REPORT  as i32
                 {
                     let data = &pkt.payload[2..]; // start of message data, without message_id
