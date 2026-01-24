@@ -36,7 +36,7 @@ use tokio::net::TcpStream as TokioTcpStream;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::sync::broadcast::error::TryRecvError;
 use std::str::FromStr;
-use tokio_util::bytes::BufMut;
+use tokio_util::bytes::{BufMut, BytesMut};
 use crate::aa_services::{VideoStreamingParams, AudioStreamingParams, CommandState, ServiceType};
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use protos::*;
@@ -138,6 +138,21 @@ pub struct ScrcpyTouchEvent {
     pub buttons:i32,
 }
 
+impl ScrcpyTouchEvent {
+    /// Serialize struct into big-endian bytes using BytesMut
+    fn to_be_bytes(&self) -> Vec<u8> {
+        let mut buf = BytesMut::new();
+        buf.extend_from_slice(&self.action.to_be_bytes());
+        buf.extend_from_slice(&self.pointer_id.to_be_bytes());
+        buf.extend_from_slice(&self.position.to_be_bytes());
+        buf.extend_from_slice(&self.pressure.to_be_bytes());
+        buf.extend_from_slice(&self.action_button.to_be_bytes());
+        buf.extend_from_slice(&self.buttons.to_be_bytes());
+        buf.to_vec() // convert BytesMut to Vec<u8>
+    }
+}
+
+
 #[derive(Serialize, Deserialize, Copy, Clone, Debug, Default)]
 pub struct ScrcpyKeyEvent {
     pub action: u8,
@@ -146,10 +161,32 @@ pub struct ScrcpyKeyEvent {
     pub metastate:i32,
 }
 
+impl ScrcpyKeyEvent {
+    /// Serialize struct into big-endian bytes using BytesMut
+    fn to_be_bytes(&self) -> Vec<u8> {
+        let mut buf = BytesMut::new();
+        buf.extend_from_slice(&self.action.to_be_bytes());
+        buf.extend_from_slice(&self.key_code.to_be_bytes());
+        buf.extend_from_slice(&self.repeat.to_be_bytes());
+        buf.extend_from_slice(&self.metastate.to_be_bytes());
+        buf.to_vec() // convert BytesMut to Vec<u8>
+    }
+}
+
 #[derive(Serialize, Deserialize, Copy, Clone, Debug, Default)]
 pub struct ScrcpyPosition {
     pub point: ScrcpyPoint,
     pub screen_size: ScrcpySize,
+}
+
+impl ScrcpyPosition {
+    /// Serialize struct into big-endian bytes using BytesMut
+    fn to_be_bytes(&self) -> Vec<u8> {
+        let mut buf = BytesMut::new();
+        buf.extend_from_slice(&self.point.to_be_bytes());
+        buf.extend_from_slice(&self.screen_size.to_be_bytes());
+        buf.to_vec() // convert BytesMut to Vec<u8>
+    }
 }
 
 #[derive(Serialize, Deserialize, Copy, Clone, Debug, Default)]
@@ -157,10 +194,30 @@ pub struct ScrcpyPoint {
     pub x: i32,
     pub y: i32,
 }
+
+impl ScrcpyPoint {
+    /// Serialize struct into big-endian bytes using BytesMut
+    fn to_be_bytes(&self) -> Vec<u8> {
+        let mut buf = BytesMut::new();
+        buf.extend_from_slice(&self.x.to_be_bytes());
+        buf.extend_from_slice(&self.y.to_be_bytes());
+        buf.to_vec() // convert BytesMut to Vec<u8>
+    }
+}
 #[derive(Serialize, Deserialize, Copy, Clone, Debug, Default)]
 pub struct ScrcpySize {
     pub width: i32,
     pub height: i32,
+}
+
+impl ScrcpySize {
+    /// Serialize struct into big-endian bytes using BytesMut
+    fn to_be_bytes(&self) -> Vec<u8> {
+        let mut buf = BytesMut::new();
+        buf.extend_from_slice(&self.width.to_be_bytes());
+        buf.extend_from_slice(&self.height.to_be_bytes());
+        buf.to_vec() // convert BytesMut to Vec<u8>
+    }
 }
 
 async fn transfer_monitor(
@@ -728,8 +785,6 @@ async fn tsk_scrcpy_control(
     loop {
         match cmd_rx.recv_async().await {
             Ok(pkt) => {
-                //FIXME drop postcard and use BytesMut to have BE serialization
-                continue;
                 // Received a packet
                 let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
                 info!("tsk_scrcpy_control Received command id {:?}", message_id);
@@ -766,7 +821,7 @@ async fn tsk_scrcpy_control(
                                 let pos = ScrcpyPosition { point: pt, screen_size: sz };
                                 let ev = ScrcpyTouchEvent { action: _action, pointer_id: pointer_id as u64, position: pos, pressure: 255, action_button: 0, buttons: 0 };
                                 info!("SCRCPY Control inject event: {:?}",ev);
-                                let ev_bytes: Vec<u8> = postcard::to_stdvec(&ev)?;
+                                let ev_bytes=ev.to_be_bytes();
                                 let mut payload: Vec<u8> = Vec::new();
                                 payload.push(ScrcpyControlMessageType::InjectTouchEvent as u8);
                                 payload.extend_from_slice(&ev_bytes);
@@ -799,7 +854,7 @@ async fn tsk_scrcpy_control(
                                 let pos = ScrcpyPosition { point: pt, screen_size: sz };
                                 let ev = ScrcpyTouchEvent { action: _action, pointer_id: pointer_id as u64, position: pos, pressure: 255, action_button: 0, buttons: 0 };
                                 info!("SCRCPY Control inject event: {:?}",ev);
-                                let ev_bytes: Vec<u8> = postcard::to_stdvec(&ev)?;
+                                let ev_bytes=ev.to_be_bytes();
                                 let mut payload: Vec<u8> = Vec::new();
                                 payload.push(ScrcpyControlMessageType::InjectTouchEvent as u8);
                                 payload.extend_from_slice(&ev_bytes);
@@ -820,7 +875,7 @@ async fn tsk_scrcpy_control(
 
                                 let ev = ScrcpyKeyEvent { action: _action, key_code: key_ev.keycode() as i32, repeat: 0, metastate: 0 };
                                 info!("SCRCPY Control inject event: {:?}",ev);
-                                let ev_bytes: Vec<u8> = postcard::to_stdvec(&ev)?;
+                                let ev_bytes=ev.to_be_bytes();
                                 let mut payload: Vec<u8> = Vec::new();
                                 payload.push(ScrcpyControlMessageType::InjectKeycode as u8);
                                 payload.extend_from_slice(&ev_bytes);
