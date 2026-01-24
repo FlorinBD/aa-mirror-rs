@@ -605,7 +605,6 @@ async fn tsk_scrcpy_audio(
         error!("SCRCPY Invalid audio codec configuration");
         return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY Invalid audio codec configuration")));
     }
-    //let mut buf = vec![0u8; 0xffff];
     let mut i=0;
     let timestamp: u64 = 0;//is not used by HU
     loop {
