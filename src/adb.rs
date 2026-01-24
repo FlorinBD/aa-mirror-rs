@@ -59,6 +59,7 @@ pub(crate) async fn get_first_adb_device( config: AppConfig) ->Option<String>
     let stdout = String::from_utf8_lossy(&cmd_ip_neigh.stdout);
 
     for line in stdout.lines() {
+        info!("Shell response for ip neigh: {:?}", line.to_string());
         let parts: Vec<&str> = line.split_whitespace().collect();
 
         // IP is always first
