@@ -536,6 +536,11 @@ async fn tsk_scrcpy_video(
                         error!("tsk_scrcpy_video unknown message id: {}", message_id);
                     }
                 }
+            else => {
+                // all branches are closed
+                error!("All SCRCPY Video tasks are closed");
+                break;
+            }
         }
     }
     //reassembler.flush();
@@ -665,6 +670,11 @@ async fn tsk_scrcpy_audio(
                 {
                     error!("tsk_scrcpy_video unknown message id: {}", message_id);
                 }
+            }
+            else => {
+                // all branches are closed
+                error!("All SCRCPY Audio tasks are closed");
+                break;
             }
         }
     }
@@ -1047,6 +1057,11 @@ async fn tsk_adb_scrcpy(
                         }
                         Ok(..) = &mut done_th_rx_ctrl => {
                             error!("SCRCPY Control Task finished");
+                            break;
+                        }
+                        else => {
+                            // all branches are closed
+                            error!("All SCRCPY tasks are closed");
                             break;
                         }
                     }
