@@ -1024,7 +1024,7 @@ async fn tsk_adb_scrcpy(
                 hnd_scrcpy_ctrl = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_control(
                         ctrl_stream,
-                        rx_scrcpy_ctrl,
+                        rx_scrcpy_ctrl.clone(),
                         video_codec_params.clone(),
                     ).await;
                     let _ = done_th_tx_ctrl.send(res);
