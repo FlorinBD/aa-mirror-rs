@@ -12,3 +12,5 @@ scrcpy-server version: 3.3.4
 
 todo:
 done: implement tokio_uring for adb reading task
+replace postcard with BytesMut to have BE and correct layout
+replace ARP with rtnetlink for ADB discovering
