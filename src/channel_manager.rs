@@ -12,6 +12,7 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
 use flume::TryRecvError;
+use futures::future::err;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -380,10 +381,78 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
     let mut server = openssl::ssl::SslStream::new(ssl, mem_buf.clone())?;
     info!( "{}: Starting message proxy loop...", get_name());
     loop {
-        //HU>Service
-        match hu_rx.try_recv() {
-            Ok(mut msg) => {
-                hu_read_err=false;
+        tokio::select! {
+        biased;
+
+        // 🔴 highest priority, SCRCPY>HU
+            Ok(mut msg) = scrcpy_rx.recv_async() => {
+            if !ssl_handshake_done
+                {
+                    error!( "{}: tls proxy error: received encrypted message from service before TLS handshake", get_name());
+                }
+                else
+                {
+                    /*let _ = pkt_debug(
+                        HexdumpLevel::DecryptedOutput,
+                        dmp_level,
+                        &msg,
+                        "SCRCPY".parse().unwrap()
+                    ).await;*/
+                    match msg.encrypt_payload(&mut mem_buf, &mut server).await {
+                        Ok(_) => {
+                            // Increment byte counters for statistics
+                            // fixme: compute final_len for precise stats
+                            w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
+                            msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: transmit to HU failed", get_name()))?;
+                        }
+                        Err(e) => {error!( "{} encrypt_payload error: {:?}", get_name(), e);},
+                    }
+                }
+        }
+        //Service>HU
+        Some(mut msg) = srv_rx.recv() => {
+            srv_read_err=false;
+                if msg.flags&ENCRYPTED !=0
+                {
+                    if !ssl_handshake_done
+                    {
+                        error!( "{}: tls proxy error: received encrypted message from service before TLS handshake", get_name());
+                    }
+                    else {
+                        let _ = pkt_debug(
+                            HexdumpLevel::DecryptedOutput,
+                            dmp_level,
+                            &msg,
+                            "MD".parse().unwrap()
+                        ).await;
+                        match msg.encrypt_payload(&mut mem_buf, &mut server).await {
+                            Ok(_) => {
+                                // Increment byte counters for statistics
+                                // fixme: compute final_len for precise stats
+                                w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
+                                msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: transmit to HU failed", get_name()))?;
+                            }
+                            Err(e) => {error!( "{} encrypt_payload error: {:?}", get_name(), e);},
+                        }
+                    }
+                }
+                else {
+                    let _ = pkt_debug(
+                        HexdumpLevel::DecryptedOutput,
+                        dmp_level,
+                        &msg,
+                        "MD".parse().unwrap()
+                    ).await;
+                    // Increment byte counters for statistics
+                    // fixme: compute final_len for precise stats
+                    w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
+                    msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: transmit to HU failed", get_name()))?;
+
+                }
+        }
+            // lower priority, HU>Service
+        Some(mut msg) = hu_rx.recv() => {
+            hu_read_err=false;
                 // Increment byte counters for statistics
                 // fixme: compute final_len for precise stats
                 r_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
@@ -467,112 +536,16 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                     }
 
                 }
-            }
-
-            // For both errors (Disconnected and Empty), the correct action
-            // is to process the items.  If the error was Disconnected, on
-            // the next iteration rx.recv().await will be None and we'll
-            // break from the outer loop anyway.
-            Err(_) => {
-                /*error!( "{}: tls proxy error receiving message from HU", get_name());*/
-                //thread::yield_now();
-                hu_read_err=true;
-            },
         }
-
-        //Service>HU
-        match srv_rx.try_recv() {
-            Ok(mut msg) => {
-                srv_read_err=false;
-                if msg.flags&ENCRYPTED !=0
-                {
-                    if !ssl_handshake_done
-                    {
-                        error!( "{}: tls proxy error: received encrypted message from service before TLS handshake", get_name());
-                    }
-                    else {
-                        let _ = pkt_debug(
-                            HexdumpLevel::DecryptedOutput,
-                            dmp_level,
-                            &msg,
-                            "MD".parse().unwrap()
-                        ).await;
-                        match msg.encrypt_payload(&mut mem_buf, &mut server).await {
-                            Ok(_) => {
-                                // Increment byte counters for statistics
-                                // fixme: compute final_len for precise stats
-                                w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
-                                msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: transmit to HU failed", get_name()))?;
-                            }
-                            Err(e) => {error!( "{} encrypt_payload error: {:?}", get_name(), e);},
-                        }
-                    }
-                }
-                else {
-                    let _ = pkt_debug(
-                        HexdumpLevel::DecryptedOutput,
-                        dmp_level,
-                        &msg,
-                        "MD".parse().unwrap()
-                    ).await;
-                    // Increment byte counters for statistics
-                    // fixme: compute final_len for precise stats
-                    w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
-                    msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: transmit to HU failed", get_name()))?;
-
-                }
-            }
-
-            // For both errors (Disconnected and Empty), the correct action
-            // is to process the items.  If the error was Disconnected, on
-            // the next iteration rx.recv().await will be None and we'll
-            // break from the outer loop anyway.
-            Err(_) => {
-                srv_read_err=true;
-            },
+        else => {
+            // all channels closed
+            tokio::time::sleep(Duration::from_secs(1)).await;
+                error!("packet_tls_proxy ALL CHANNELS CLOSED! handle app restart needed")
         }
-
-        //SCRCPY>HU
-        match scrcpy_rx.try_recv() {
-            Ok(mut msg) => {
-                if !ssl_handshake_done
-                {
-                    error!( "{}: tls proxy error: received encrypted message from service before TLS handshake", get_name());
-                }
-                else {
-                    /*let _ = pkt_debug(
-                        HexdumpLevel::DecryptedOutput,
-                        dmp_level,
-                        &msg,
-                        "SCRCPY".parse().unwrap()
-                    ).await;*/
-                    match msg.encrypt_payload(&mut mem_buf, &mut server).await {
-                        Ok(_) => {
-                            // Increment byte counters for statistics
-                            // fixme: compute final_len for precise stats
-                            w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
-                            msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: transmit to HU failed", get_name()))?;
-                        }
-                        Err(e) => {error!( "{} encrypt_payload error: {:?}", get_name(), e);},
-                    }
-                }
-            }
-
-            // For both errors (Disconnected and Empty), the correct action
-            // is to process the items.  If the error was Disconnected, on
-            // the next iteration rx.recv().await will be None and we'll
-            // break from the outer loop anyway.
-            Err(_) => {
-                //if both errors and this one also we must wait to prevent tokio runtime starvation
-                if hu_read_err && srv_read_err
-                {
-                    tokio::time::sleep(Duration::from_millis(1)).await;
-                }
-
-            },
         }
-
     }
+
+
 
     /// checking if there was a true fatal SSL error
     /// Note that the error may not be fatal. For example if the underlying
