@@ -1,9 +1,11 @@
 use std::borrow::Cow;
 use std::ffi::OsStr;
-use std::net::SocketAddrV4;
+use std::net::{IpAddr, SocketAddrV4};
 use std::process::Stdio;
 use std::time::{Duration, Instant};
 use async_arp::{Client, ClientConfigBuilder, ClientSpinner, ProbeStatus};
+use futures::TryStreamExt;
+use log::error;
 use port_check::is_port_reachable_with_timeout;
 use simplelog::info;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
@@ -11,6 +13,8 @@ use tokio::process::Command;
 use crate::{adb, arp_common};
 use crate::config::{AppConfig, ADB_DEVICE_PORT};
 use simplelog;
+use rtnetlink::{new_connection};
+use rtnetlink::packet_route::neighbour::{NeighbourMessage, NeighbourState};
 
 ///ADB wrapper, needs adb binary installed
 pub(crate) fn parse_response_lines(rsp: Vec<u8>) -> Result<Vec<String>, String> {
@@ -45,6 +49,84 @@ pub fn parse_response_lines_old(rsp: Vec<u8>) ->Result<Vec<String>, String>
 
 ///Find an ADB device, connect to it and return TCP address
 pub(crate) async fn get_first_adb_device(config: AppConfig) ->Option<String>
+{
+    // Create a netlink connection
+    let (connection, handle, _) = match new_connection() {
+        Ok(conn) => conn,
+        Err(e) => {
+            error!("Failed to open netlink connection: {e}");
+            return None;
+        }
+    };
+
+    // Spawn the connection task
+    tokio::spawn(connection);
+
+    // Iterate neighbors
+    let mut neighbors = handle.neighbours().get().execute();
+
+    while let Some(neigh) = neighbors.try_next().await {
+        // Filter for reachable state (2 = REACHABLE)
+        if neigh.header.state != NeighbourState::Reachable {
+            continue;
+        }
+        let payload = neigh.payload();
+
+        // IP address
+        let ip = match payload.destination.as_ref().map(|addr| match addr.len() {
+            4 => IpAddr::from([addr[0], addr[1], addr[2], addr[3]]),
+            16 => {
+                let mut octets = [0u8; 16];
+                octets.copy_from_slice(addr);
+                IpAddr::from(octets)
+            }
+            _ => return None,
+        }) {
+            Some(ip) => ip,
+            None => continue,
+        };
+
+        // MAC address
+        let mac: Option<&[u8]> = payload.link_layer_address.as_ref().map(|m| &m[..6]);
+        if let Some(mac) = mac {
+            info!("Potential ADB client found: IP: {}, MAC: {:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+                ip, mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]
+            );
+        }
+        let dev_port=ADB_DEVICE_PORT;
+        let dev_socket=SocketAddrV4::new(ip, dev_port);
+        if is_port_reachable_with_timeout(dev_socket, Duration::from_secs(5))
+        {
+            info!("{:?} found port {} open, trying to connect to ADB demon", ip, dev_port);
+            let cmd_connect = Command::new("adb")
+                .arg("connect")
+                .arg(dev_socket.to_string())
+                .output().await.unwrap();
+            let lines=adb::parse_response_lines(cmd_connect.stdout).expect("TODO: panic message");
+            if lines.len() > 0 {
+                for line in lines {
+                    info!("ADB connect response: {:?}", line);
+                }
+            }
+            tokio::time::sleep(Duration::from_secs(5)).await;
+            let cmd_dev = Command::new("adb")
+                .arg("devices")
+                .output().await.unwrap();
+            let lines=adb::parse_response_lines(cmd_dev.stdout).expect("TODO: panic message");
+            if lines.len() > 0 {
+                for line in lines {
+                    info!("ADB devices response: {:?}", line);
+                    if line.contains(&dev_socket.to_string()) {
+                        return  Some(dev_socket.to_string());
+
+                    }
+                }
+            }
+
+        }
+    }
+}
+pub(crate) async fn get_first_adb_device_old(config: AppConfig) ->Option<String>
 {
     let interface = arp_common::interface_from(&config.iface);
     let arp_client = Client::new(
