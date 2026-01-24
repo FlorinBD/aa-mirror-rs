@@ -350,7 +350,7 @@ async fn tcp_wait_for_md_connection(listener: &mut TcpListener) -> Result<TcpStr
 
 async fn tsk_scrcpy_video(
     mut stream: TcpStream,
-    mut cmd_rx: broadcast::Receiver<Packet>,
+    mut cmd_rx: flume::Receiver<Packet>,
     video_tx: flume::Sender<Packet>,
     max_unack:u32,
     sid:u8,
@@ -567,7 +567,7 @@ async fn tsk_scrcpy_video(
 
 async fn tsk_scrcpy_audio(
     mut stream: TcpStream,
-    mut cmd_rx: broadcast::Receiver<Packet>,
+    mut cmd_rx: flume::Receiver<Packet>,
     audio_tx: flume::Sender<Packet>,
     max_unack:u32,
     sid:u8
@@ -1016,14 +1016,13 @@ async fn tsk_adb_scrcpy(
                 let (done_th_tx_video, mut done_th_rx_video) = oneshot::channel();
                 let (done_th_tx_audio, mut done_th_rx_audio) = oneshot::channel();
                 let (done_th_tx_ctrl, mut done_th_rx_ctrl) = oneshot::channel();
-                let (tx_cmd, _rx_cmd)=broadcast::channel::<Packet>(5);
-                let tx_cmd_video = tx_cmd.clone();
-                let tx_cmd_audio = tx_cmd.clone();
+                let tx_cmd_video = srv_cmd_rx_scrcpy.clone();
+                let tx_cmd_audio = srv_cmd_rx_scrcpy.clone();
 
                 hnd_scrcpy_video = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_video(
                         video_stream,
-                        tx_cmd_video.subscribe(),
+                        tx_cmd_video,
                         video_tx,
                         video_codec_params.max_unack,
                         video_codec_params.sid).await;
@@ -1033,7 +1032,7 @@ async fn tsk_adb_scrcpy(
                 hnd_scrcpy_audio = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_audio(
                         audio_stream,
-                        tx_cmd_audio.subscribe(),
+                        tx_cmd_audio,
                         audio_tx,
                         audio_codec_params.max_unack,
                         audio_codec_params.sid,
@@ -1052,47 +1051,31 @@ async fn tsk_adb_scrcpy(
 
 
                 info!("Connected to control server!");
-
+                let mut buf = [0u8; 1024];
                 loop {
+                    tokio::select! {
+                    biased;
+                        Ok(n) = sh_reader.read(&mut buf) => {
+                            info!("shell stdout: {}", String::from_utf8_lossy(&buf[..n]));
+                        }
+                        Ok(..) = &mut done_th_rx_video => {
+                            error!("SCRCPY Video Task finished");
+                            shell.kill().await?;
+                            continue;
+                        }
+                        Ok(..) = &mut done_th_rx_audio => {
+                            error!("SCRCPY Audio Task finished");
+                            shell.kill().await?;
+                            continue;
+                        }
+                        Ok(..) = &mut done_th_rx_ctrl => {
+                            error!("SCRCPY Control Task finished");
+                            shell.kill().await?;
+                            continue;
+                        }
+                    }
 
-                    if done_th_rx_video.try_recv().is_ok() {
-                        info!("SCRCPY Video Task finished");
-                        tokio::time::sleep(Duration::from_secs(1)).await;
-                    }
-                    else if done_th_rx_audio.try_recv().is_ok() {
-                        info!("SCRCPY Audio Task finished");
-                        tokio::time::sleep(Duration::from_secs(1)).await;
-                    }
-                    else if done_th_rx_ctrl.try_recv().is_ok() {
-                        info!("SCRCPY Control Task finished");
-                        tokio::time::sleep(Duration::from_secs(1)).await;
-                    }
-                    else {
-                        tokio::time::sleep(Duration::from_secs(1)).await;
-                    }
-                    let mut buf = [0u8; 1024];
-                    match timeout(Duration::from_millis(1000), sh_reader.read(&mut buf)).await {
-                        Ok(Ok(n)) if n > 0 => {
-                            println!("shell stdout: {}", String::from_utf8_lossy(&buf[..n]));
-                        }
-                        Ok(Ok(_)) => {
-                            // EOF
-                        }
-                        Ok(Err(e)) => {
-                            eprintln!("read error: {}", e);
-                        }
-                        Err(_) => {
-                            // no data yet (non-blocking behavior)
-                        }
-                    }
-                    //CMD proxy to audio/video threads
-                    match srv_cmd_rx_scrcpy.try_recv(){
-                        Ok(pkt)=>{
-                            tx_cmd.send(pkt)?;
-                        }
-                        _ => {}
-                    }
-                    //TODO check audio/video task if they finished to restart connection
+                    //TODO  restart connection
                 }
                 // When done, stop the shell
                 shell.kill().await?;
