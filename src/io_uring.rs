@@ -1016,13 +1016,13 @@ async fn tsk_adb_scrcpy(
                 let (done_th_tx_video, mut done_th_rx_video) = oneshot::channel();
                 let (done_th_tx_audio, mut done_th_rx_audio) = oneshot::channel();
                 let (done_th_tx_ctrl, mut done_th_rx_ctrl) = oneshot::channel();
-                let tx_cmd_video = srv_cmd_rx_scrcpy.clone();
-                let tx_cmd_audio = srv_cmd_rx_scrcpy.clone();
+                let rx_cmd_video = srv_cmd_rx_scrcpy.clone();
+                let rx_cmd_audio = srv_cmd_rx_scrcpy.clone();
 
                 hnd_scrcpy_video = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_video(
                         video_stream,
-                        tx_cmd_video,
+                        rx_cmd_video,
                         video_tx,
                         video_codec_params.max_unack,
                         video_codec_params.sid).await;
@@ -1032,7 +1032,7 @@ async fn tsk_adb_scrcpy(
                 hnd_scrcpy_audio = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_audio(
                         audio_stream,
-                        tx_cmd_audio,
+                        rx_cmd_audio,
                         audio_tx,
                         audio_codec_params.max_unack,
                         audio_codec_params.sid,
