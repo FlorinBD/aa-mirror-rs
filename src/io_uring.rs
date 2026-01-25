@@ -500,7 +500,7 @@ async fn tsk_scrcpy_video(
             i = i + 1;
         }
 
-        if streaming_on && (act_unack < max_unack)
+        if streaming_on //&& (act_unack < max_unack)
         {
             payload.clear();
             if config_frame
@@ -638,6 +638,7 @@ async fn tsk_scrcpy_audio(
             _ => {}
         }
         //Read video frames from SCRCPY server
+
         let (pts, data) = read_scrcpy_packet(&mut stream).await?;
         let rd_len=data.len();
         if rd_len == 0 {
@@ -653,7 +654,7 @@ async fn tsk_scrcpy_audio(
             info!("Audio task Read {} bytes: {:02x?}", rd_len, &data[..dbg_len]);
             i=i+1;
         }
-        if streaming_on && (act_unack<max_unack)
+        if streaming_on //&& (act_unack<max_unack)
         {
             let mut payload: Vec<u8>=Vec::new();
             payload.extend_from_slice(&timestamp.to_be_bytes());
