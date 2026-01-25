@@ -1093,8 +1093,6 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                                 payload: payload,
                             };
                             tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
-
-                            info!( "{} Send custom CMD_START_VIDEO_RECORDING for ch {}",get_name(), ch_id);
                         }
                         else
                         {

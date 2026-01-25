@@ -42,6 +42,8 @@ use protos::*;
 use protos::ControlMessageType::{self, *};
 use protobuf::{Message};
 use std::cmp::min;
+use futures::future::err;
+use libc::sigdelset;
 use serde::{Deserialize, Serialize};
 use crate::h264_reader::NalReassembler;
 
@@ -412,14 +414,12 @@ async fn tcp_wait_for_md_connection(listener: &mut TcpListener) -> Result<TcpStr
 
 async fn tsk_scrcpy_video(
     mut stream: TcpStream,
-    mut cmd_rx: flume::Receiver<Packet>,
+    ack_notify:Arc<Notify>,
     video_tx: flume::Sender<Packet>,
     max_unack:u32,
     sid:u8,
 ) -> Result<()> {
     info!("Starting video server!");
-    let mut streaming_on=true;
-    let mut act_unack=0;
     let mut i=0;
 
     //codec metadata
@@ -441,87 +441,59 @@ async fn tsk_scrcpy_video(
     let mut payload: Vec<u8>=Vec::new();
     //let mut reassembler = NalReassembler::new();
     loop {
-        //Check custom Service command
-        match cmd_rx.try_recv() {
-            Ok(pkt) => {
-                //info!("tsk_scrcpy_video Received command packet {:02x?}", pkt);
-                let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-                if message_id == MESSAGE_CUSTOM_CMD as i32
-                {
-                    let cmd_id: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
-                    let data = &pkt.payload[4..]; // start of message data, without message_id
-                    if cmd_id == CustomCommand::CMD_STOP_VIDEO_RECORDING as i32
+        for _ in 0..max_unack {
+            //Read video frames from SCRCPY server
+            match read_scrcpy_packet(&mut stream).await {
+                Ok((pts, h264_data)) => {
+                    let key_frame = (pts & 0x4000_0000_0000_0000u64) > 0;
+                    let rec_ts = pts & 0x3FFF_FFFF_FFFF_FFFFu64;
+                    let config_frame = (pts & 0x8000_0000_0000_0000u64) > 0;
+                    let rd_len = h264_data.len();
+                    let dbg_len = min(rd_len, 16);
+                    if i < 10
                     {
-                        act_unack = max_unack;
-                        streaming_on = false;
-                        info!("tsk_scrcpy_video Video streaming stopped");
-                        break;
-                    }
-                } else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK as i32
-                {
-                    if pkt.channel == sid
-                    {
-                        //info!("{} Received {} message", sid.to_string(), message_id);
-                        let data = &pkt.payload[2..]; // start of message data, without message_id
-                        if let Ok(rsp) = Ack::parse_from_bytes(&data)
+                        if rd_len > dbg_len
                         {
-                            //info!( "{}, channel {:?}: ACK, timestamp_ns: {:?}", get_name(), pkt.channel, rsp.receive_timestamp_ns[0]);
-                            //info!( "tsk_scrcpy_video: video ACK received, sending next frame");
-                            act_unack = 0;
+                            let end_offset = rd_len - dbg_len;
+                            info!("Video task got frame config={:?}, act size: {}, raw slice: {:02x?}...{:02x?}",config_frame, rd_len, &h264_data[..dbg_len], &h264_data[end_offset..]);
                         } else {
-                            error!( "tsk_scrcpy_video Unable to parse received message");
+                            info!("Video task got frame config={:?}, act size: {}, raw bytes: {:02x?}",config_frame, rd_len, &h264_data[..dbg_len]);
                         }
-                    } else {
-                        //info!( "tsk_scrcpy_video: media ACK received but not for VIDEO, discarded");
+                        i = i + 1;
                     }
-                } else {
-                    error!("tsk_scrcpy_video unknown message id: {}", message_id);
+
+                    if config_frame
+                    {
+                        payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
+                        payload.extend_from_slice(&h264_data);
+                    } else {
+                        payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
+                        payload.extend_from_slice(&timestamp.to_be_bytes());
+                        payload.extend_from_slice(&h264_data);
+                    }
+
+                    let pkt_rsp = Packet {
+                        channel: sid,
+                        flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                        final_length: None,
+                        payload: std::mem::take(&mut payload),
+                    };
+                    video_tx.send_async(pkt_rsp).await?;
+                }
+                Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
+                    error!("scrcpy vide stream ended");
+                    break
+                }
+                Err(e) => {
+                    error!("scrcpy video read failed: {}", e);
+                    break
                 }
             }
-            _ => {}
-        }
-        //Read video frames from SCRCPY server
-        let (pts, h264_data) = read_scrcpy_packet(&mut stream).await?;
 
-        let key_frame=(pts & 0x4000_0000_0000_0000u64) >0;
-        let rec_ts=pts & 0x3FFF_FFFF_FFFF_FFFFu64;
-        let config_frame=(pts & 0x8000_0000_0000_0000u64) >0;
-        let rd_len=h264_data.len();
-        let dbg_len=min(rd_len, 16);
-        if i<10
-        {
-            if rd_len > dbg_len
-            {
-                let end_offset = rd_len - dbg_len;
-                info!("Video task got frame config={:?}, act size: {}, raw slice: {:02x?}...{:02x?}",config_frame, rd_len, &h264_data[..dbg_len], &h264_data[end_offset..]);
-            } else {
-                info!("Video task got frame config={:?}, act size: {}, raw bytes: {:02x?}",config_frame, rd_len, &h264_data[..dbg_len]);
-            }
-            i = i + 1;
         }
+        //info!("SCRCPY Video max ACK limit hit, waiting new ACK");
+        ack_notify.notified().await;
 
-        if streaming_on //&& (act_unack < max_unack)
-        {
-            payload.clear();
-            if config_frame
-            {
-                payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
-                payload.extend_from_slice(&h264_data);
-            } else {
-                payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
-                payload.extend_from_slice(&timestamp.to_be_bytes());
-                payload.extend_from_slice(&h264_data);
-            }
-
-            let pkt_rsp = Packet {
-                channel: sid,
-                flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                final_length: None,
-                payload: std::mem::take(&mut payload),
-            };
-            video_tx.send_async(pkt_rsp).await?;
-            act_unack = act_unack + 1;
-        }
     }
     //reassembler.flush();
     return Ok(());
@@ -550,37 +522,56 @@ async fn tsk_scrcpy_video(
     }
     /// Read one scrcpy packet (with metadata)
     async fn read_scrcpy_packet(stream: &mut TcpStream) -> io::Result<(u64, Vec<u8>)> {
-        // First 12 bytes = packet metadata
-        let metadata=read_exact(stream, SCRCPY_METADATA_HEADER_LEN).await?;
-        //info!("SCRCPY video packet metadata: {:02x?}",&metadata);
-        if metadata.len() != SCRCPY_METADATA_HEADER_LEN {
-            error!("read_scrcpy_packet data len error, wanted {} but got {} bytes", SCRCPY_METADATA_HEADER_LEN, metadata.len());
-        }
-        let pts = u64::from_be_bytes(metadata[0..8].try_into().unwrap());
-        let packet_size = u32::from_be_bytes(metadata[8..].try_into().unwrap()) as usize;
 
-        // Read full packet
-        let h264_data=read_exact(stream, packet_size).await?;
-
-        //let h264_data = payload.to_vec();
-        if h264_data.len() != packet_size {
-            error!("read_scrcpy_packet data len error, wanted {} but got {} bytes", packet_size, h264_data.len());
+        match read_exact(stream, SCRCPY_METADATA_HEADER_LEN).await {
+            // First 12 bytes = packet metadata
+            Ok((metadata)) => {
+                //info!("SCRCPY video packet metadata: {:02x?}",&metadata);
+                if metadata.len() != SCRCPY_METADATA_HEADER_LEN {
+                    error!("read_scrcpy_packet data len error, wanted {} but got {} bytes", SCRCPY_METADATA_HEADER_LEN, metadata.len());
+                }
+                let pts = u64::from_be_bytes(metadata[0..8].try_into().unwrap());
+                let packet_size = u32::from_be_bytes(metadata[8..].try_into().unwrap()) as usize;
+                match read_exact(stream, packet_size).await {
+                    Ok((h264_data)) => {
+                        // Read full packet
+                        if h264_data.len() != packet_size {
+                            error!("read_scrcpy_packet data len error, wanted {} but got {} bytes", packet_size, h264_data.len());
+                        }
+                        Ok((pts, h264_data))
+                    }
+                    Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
+                        info!("scrcpy stream ended");
+                        return Err(e);
+                    }
+                    Err(e) => {
+                        error!("scrcpy read failed: {}", e);
+                        return Err(e);
+                    }
+                }
+            }
+            Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
+                info!("scrcpy stream ended");
+                return Err(e);
+            }
+            Err(e) => {
+                error!("scrcpy read failed: {}", e);
+                return Err(e);
+            }
         }
-        Ok((pts, h264_data))
+
     }
 }
 
 async fn tsk_scrcpy_audio(
     mut stream: TcpStream,
-    mut cmd_rx: flume::Receiver<Packet>,
+    ack_notify:Arc<Notify>,
     audio_tx: flume::Sender<Packet>,
     max_unack:u32,
     sid:u8
 ) -> Result<()> {
 
     info!("Starting audio server!");
-    let mut streaming_on=false;
-    let mut act_unack=0;
     //codec metadata
     let metadata=read_exact(&mut stream, 4).await?;
     info!("SCRCPY Audio codec metadata: {:02x?}", &metadata);
@@ -596,67 +587,25 @@ async fn tsk_scrcpy_audio(
     let mut i=0;
     let timestamp: u64 = 0;//is not used by HU
     loop {
-        //Check service commands
-        match cmd_rx.try_recv()
-        {
-            Ok(pkt) =>
-                {
-                    //info!("tsk_scrcpy_audio Received command packet {:02x?}", pkt);
-                    let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-                    if message_id == MESSAGE_CUSTOM_CMD as i32
-                    {
-                        let cmd_id: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
-                        //let data = &pkt.payload[4..]; // start of message data, without message_id
-                        if cmd_id == CustomCommand::CMD_STOP_AUDIO_RECORDING as i32
-                        {
-                            act_unack = max_unack;
-                            streaming_on = false;
-                            info!("tsk_scrcpy_audio Audio streaming stopped");
-                        }
-                    }
-                    else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK as i32
-                    {
-                        if pkt.channel == sid
-                        {
-                            info!("{} Received {} message", sid.to_string(), message_id);
-                            let data = &pkt.payload[2..]; // start of message data, without message_id
-                            if let Ok(rsp) = Ack::parse_from_bytes(&data)
-                            {
-                                //info!( "{}, channel {:?}: ACK, timestamp_ns: {:?}", get_name(), pkt.channel, rsp.receive_timestamp_ns[0]);
-                                info!( "tsk_scrcpy_audio: media ACK received, sending next frame");
-                                act_unack = 0;
-                            } else {
-                                error!( "tsk_scrcpy_audio Unable to parse MEDIA ACK message");
-                            }
-                        } else {
-                            //info!( "tsk_scrcpy_audio: media ACK received but not for AUDIO, discarded");
-                        }
-                    } else {
-                        error!("tsk_scrcpy_video unknown message id: {}", message_id);
-                    }
-                }
-            _ => {}
-        }
-        //Read video frames from SCRCPY server
+        for _ in 0..max_unack {
+            //Read video frames from SCRCPY server
+            let (pts, data) = read_scrcpy_packet(&mut stream).await?;
+            let rd_len = data.len();
+            if rd_len == 0 {
+                info!("Audio connection closed by server?");
+                return Err(Box::new(io::Error::new(
+                    io::ErrorKind::Other,
+                    "Audio connection closed by server",
+                )));
+            }
+            let dbg_len = min(rd_len, 16);
+            if i < 5
+            {
+                info!("Audio task Read {} bytes: {:02x?}", rd_len, &data[..dbg_len]);
+                i = i + 1;
+            }
 
-        let (pts, data) = read_scrcpy_packet(&mut stream).await?;
-        let rd_len=data.len();
-        if rd_len == 0 {
-            info!("Audio connection closed by server?");
-            return Err(Box::new(io::Error::new(
-                io::ErrorKind::Other,
-                "Audio connection closed by server",
-            )));
-        }
-        let dbg_len=min(rd_len,16);
-        if i<5
-        {
-            info!("Audio task Read {} bytes: {:02x?}", rd_len, &data[..dbg_len]);
-            i=i+1;
-        }
-        if streaming_on //&& (act_unack<max_unack)
-        {
-            let mut payload: Vec<u8>=Vec::new();
+            let mut payload: Vec<u8> = Vec::new();
             payload.extend_from_slice(&timestamp.to_be_bytes());
             payload.extend_from_slice(&data);
             payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) >> 8) as u8);
@@ -668,10 +617,12 @@ async fn tsk_scrcpy_audio(
                 final_length: None,
                 payload: payload,
             };
-            if let Err(_) = audio_tx.send(pkt_rsp){
+            //Audio is disabled ATM
+            /*if let Err(_) = audio_tx.send(pkt_rsp){
                 error!( "SCRCPY audio frame send error");
-            };
+            };*/
         }
+        ack_notify.notified().await;
     }
     return Ok(());
 
@@ -1025,7 +976,7 @@ async fn tsk_adb_scrcpy(
             info!("ADB video shell response: {:?}", line);
             if line.contains("[server] INFO: Device:") && shell.id().is_some()
             {
-                tokio::time::sleep(Duration::from_secs(3)).await;//give some time to start sockets
+                tokio::time::sleep(Duration::from_secs(1)).await;//give some time to start sockets
                 let addr = format!("127.0.0.1:{}", SCRCPY_PORT).parse().unwrap();
                 let mut video_stream = TcpStream::connect(addr).await?;
                 video_stream.set_nodelay(true)?;
@@ -1047,11 +998,12 @@ async fn tsk_adb_scrcpy(
                 let rx_cmd_video = srv_cmd_rx_scrcpy.clone();
                 let rx_cmd_audio = srv_cmd_rx_scrcpy.clone();
                 let rx_cmd_ctrl = rx_scrcpy_ctrl.clone();
-
+                let ack_notify_video = Arc::new(Notify::new());
+                let ack_notify_audio = Arc::new(Notify::new());
                 hnd_scrcpy_video = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_video(
                         video_stream,
-                        rx_cmd_video,
+                        ack_notify_video.clone(),
                         video_tx,
                         video_codec_params.max_unack,
                         video_codec_params.sid).await;
@@ -1061,7 +1013,7 @@ async fn tsk_adb_scrcpy(
                 hnd_scrcpy_audio = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_audio(
                         audio_stream,
-                        rx_cmd_audio,
+                        ack_notify_audio,
                         audio_tx,
                         audio_codec_params.max_unack,
                         audio_codec_params.sid,
@@ -1084,6 +1036,57 @@ async fn tsk_adb_scrcpy(
                 loop {
                     tokio::select! {
                     biased;
+                        Ok(pkt)=srv_cmd_rx_scrcpy.recv_async() => {
+                            //info!("tsk_scrcpy_video Received command packet {:02x?}", pkt);
+                            let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+                            if message_id == MESSAGE_CUSTOM_CMD as i32
+                            {
+                                let cmd_id: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
+                                let data = &pkt.payload[4..]; // start of message data, without message_id
+                                if cmd_id == CustomCommand::CMD_STOP_VIDEO_RECORDING as i32
+                                {
+
+                                    info!("tsk_scrcpy_video Video streaming stopped");
+                                    video_stream.shutdown(std::net::Shutdown::Both)?;
+                                    break;
+                                }
+                                else if cmd_id == CustomCommand::CMD_STOP_AUDIO_RECORDING as i32
+                                {
+
+                                    info!("tsk_scrcpy_video Audio streaming stopped");
+                                    audio_stream.shutdown(std::net::Shutdown::Both)?;
+                                    break;
+                                }
+                            }
+                            else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK as i32
+                            {
+                                //info!("{} Received {} message", sid.to_string(), message_id);
+                                let data = &pkt.payload[2..]; // start of message data, without message_id
+                                if let Ok(rsp) = Ack::parse_from_bytes(&data)
+                                {
+                                    if pkt.channel == video_codec_params.sid
+                                    {
+                                        ack_notify_video.notify_one();
+                                    }
+                                    else if pkt.channel == audio_codec_params.sid
+                                    {
+                                        ack_notify_audio.notify_one();
+                                    }
+                                    else
+                                    {
+                                        error!("tsk_scrcpy unexpected channel ID for ACK command");
+                                    }
+                                }
+                                else
+                                {
+                                    error!( "tsk_scrcpy Unable to parse MEDIA_MESSAGE_ACK message");
+                                }
+                            }
+                            else
+                            {
+                                error!("tsk_scrcpy_video unknown message id: {}", message_id);
+                            }
+                        }
                         Ok(n) = sh_reader.read(&mut buf) => {
                             info!("shell stdout: {}", String::from_utf8_lossy(&buf[..n]));
                         }
@@ -1105,7 +1108,6 @@ async fn tsk_adb_scrcpy(
                             break;
                         }
                     }
-
                 }
                 // When done, stop the shell
                 shell.kill().await?;
