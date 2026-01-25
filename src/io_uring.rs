@@ -1040,7 +1040,7 @@ async fn tsk_adb_scrcpy(
                 hnd_scrcpy_audio = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_audio(
                         &mut audio_stream,
-                        ack_notify_audio,
+                        ack_notify_audio.clone(),
                         audio_tx,
                         audio_codec_params.max_unack,
                         audio_codec_params.sid,
