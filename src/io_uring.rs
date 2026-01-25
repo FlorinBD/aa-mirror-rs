@@ -481,7 +481,7 @@ async fn tsk_scrcpy_video(
                     video_tx.send_async(pkt_rsp).await?;
                 }
                 Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
-                    error!("scrcpy vide stream ended");
+                    error!("scrcpy video stream ended");
                     break
                 }
                 Err(e) => {
@@ -588,44 +588,47 @@ async fn tsk_scrcpy_audio(
     let timestamp: u64 = 0;//is not used by HU
     loop {
         for _ in 0..max_unack {
-            //Read video frames from SCRCPY server
-            let (pts, data) = read_scrcpy_packet(&mut stream).await?;
-            let rd_len = data.len();
-            if rd_len == 0 {
-                info!("Audio connection closed by server?");
-                return Err(Box::new(io::Error::new(
-                    io::ErrorKind::Other,
-                    "Audio connection closed by server",
-                )));
-            }
-            let dbg_len = min(rd_len, 16);
-            if i < 5
-            {
-                info!("Audio task Read {} bytes: {:02x?}", rd_len, &data[..dbg_len]);
-                i = i + 1;
+            match read_scrcpy_packet(&mut stream).await {
+                Ok((pts, data)) => {
+                    let rd_len = data.len();
+                    let dbg_len = min(rd_len, 16);
+                    if i < 5
+                    {
+                        info!("Audio task Read {} bytes: {:02x?}", rd_len, &data[..dbg_len]);
+                        i = i + 1;
+                    }
+
+                    let mut payload: Vec<u8> = Vec::new();
+                    payload.extend_from_slice(&timestamp.to_be_bytes());
+                    payload.extend_from_slice(&data);
+                    payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) >> 8) as u8);
+                    payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) & 0xff) as u8);
+
+                    let pkt_rsp = Packet {
+                        channel: sid,
+                        flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                        final_length: None,
+                        payload: payload,
+                    };
+                    //Audio is disabled ATM
+                    /*if let Err(_) = audio_tx.send(pkt_rsp){
+                        error!( "SCRCPY audio frame send error");
+                    };*/
+                }
+                Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
+                    error!("scrcpy audio stream ended");
+                    break
+                }
+                Err(e) => {
+                    error!("scrcpy audio read failed: {}", e);
+                    break
+                }
             }
 
-            let mut payload: Vec<u8> = Vec::new();
-            payload.extend_from_slice(&timestamp.to_be_bytes());
-            payload.extend_from_slice(&data);
-            payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) >> 8) as u8);
-            payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) & 0xff) as u8);
-
-            let pkt_rsp = Packet {
-                channel: sid,
-                flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                final_length: None,
-                payload: payload,
-            };
-            //Audio is disabled ATM
-            /*if let Err(_) = audio_tx.send(pkt_rsp){
-                error!( "SCRCPY audio frame send error");
-            };*/
         }
         ack_notify.notified().await;
     }
     return Ok(());
-
     async fn read_exact(
         stream: &mut TcpStream,
         size: usize,
@@ -634,9 +637,10 @@ async fn tsk_scrcpy_audio(
 
         while buf.len() < size {
             let to_read = size - buf.len();
-            let chunk = vec![0u8; to_read];
+            let mut chunk = vec![0u8; to_read];
 
-            let (res, chunk) = stream.read(chunk).await;
+            let (res, nchunk) = stream.read(chunk).await;
+            chunk=nchunk;
             let rd=res?;
 
             if rd == 0 {
@@ -650,21 +654,44 @@ async fn tsk_scrcpy_audio(
     }
     /// Read one scrcpy packet (with metadata)
     async fn read_scrcpy_packet(stream: &mut TcpStream) -> io::Result<(u64, Vec<u8>)> {
-        // First 12 bytes = packet metadata
-        let metadata=read_exact(stream, SCRCPY_METADATA_HEADER_LEN).await?;
-        if metadata.len() != SCRCPY_METADATA_HEADER_LEN {
-            error!("read_scrcpy_packet data len error, wanted {} but got {} bytes", SCRCPY_METADATA_HEADER_LEN, metadata.len());
-        }
-        let packet_size = u32::from_be_bytes(metadata[8..].try_into().unwrap()) as usize;
-        let pts = u64::from_be_bytes(metadata[0..8].try_into().unwrap());
-        // Read full packet
-        let payload=read_exact(stream, packet_size).await?;
 
-        let h264_data = payload.to_vec();
-        if h264_data.len() != packet_size {
-            error!("read_scrcpy_packet data len error, wanted {} but got {} bytes", packet_size, h264_data.len());
+        match read_exact(stream, SCRCPY_METADATA_HEADER_LEN).await {
+            // First 12 bytes = packet metadata
+            Ok((metadata)) => {
+                //info!("SCRCPY video packet metadata: {:02x?}",&metadata);
+                if metadata.len() != SCRCPY_METADATA_HEADER_LEN {
+                    error!("read_scrcpy_packet data len error, wanted {} but got {} bytes", SCRCPY_METADATA_HEADER_LEN, metadata.len());
+                }
+                let pts = u64::from_be_bytes(metadata[0..8].try_into().unwrap());
+                let packet_size = u32::from_be_bytes(metadata[8..].try_into().unwrap()) as usize;
+                match read_exact(stream, packet_size).await {
+                    Ok((h264_data)) => {
+                        // Read full packet
+                        if h264_data.len() != packet_size {
+                            error!("read_scrcpy_packet data len error, wanted {} but got {} bytes", packet_size, h264_data.len());
+                        }
+                        Ok((pts, h264_data))
+                    }
+                    Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
+                        info!("scrcpy stream ended");
+                        return Err(e);
+                    }
+                    Err(e) => {
+                        error!("scrcpy read failed: {}", e);
+                        return Err(e);
+                    }
+                }
+            }
+            Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
+                info!("scrcpy stream ended");
+                return Err(e);
+            }
+            Err(e) => {
+                error!("scrcpy read failed: {}", e);
+                return Err(e);
+            }
         }
-        Ok((pts, h264_data))
+
     }
 }
 
