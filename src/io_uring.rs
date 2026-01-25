@@ -1032,7 +1032,7 @@ async fn tsk_adb_scrcpy(
                 hnd_scrcpy_video = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_video(
                         video_stream,
-                        ack_notify_video.clone(),
+                        ack_notify_video.clone().clone(),
                         video_tx,
                         video_codec_params.max_unack,
                         video_codec_params.sid).await;
@@ -1042,7 +1042,7 @@ async fn tsk_adb_scrcpy(
                 hnd_scrcpy_audio = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_audio(
                         audio_stream,
-                        ack_notify_audio.clone(),
+                        ack_notify_audio.clone().clone(),
                         audio_tx,
                         audio_codec_params.max_unack,
                         audio_codec_params.sid,
@@ -1076,14 +1076,16 @@ async fn tsk_adb_scrcpy(
                                 {
 
                                     info!("tsk_scrcpy_video Video streaming stopped");
-                                    drop(video_stream);
+                                    //drop(video_stream);
+                                    //FIXME close the stream
                                     break;
                                 }
                                 else if cmd_id == CustomCommand::CMD_STOP_AUDIO_RECORDING as i32
                                 {
 
                                     info!("tsk_scrcpy_video Audio streaming stopped");
-                                    drop(audio_stream);
+                                    //drop(audio_stream);
+                                    //FIXME close the stream
                                     break;
                                 }
                             }
