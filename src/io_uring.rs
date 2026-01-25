@@ -210,8 +210,8 @@ impl ScrcpyPoint {
 }
 #[derive(Serialize, Deserialize, Copy, Clone, Debug, Default)]
 pub struct ScrcpySize {
-    pub width: i32,
-    pub height: i32,
+    pub width: u16,
+    pub height: u16,
 }
 
 impl ScrcpySize {
