@@ -1029,10 +1029,12 @@ async fn tsk_adb_scrcpy(
                 let rx_cmd_ctrl = rx_scrcpy_ctrl.clone();
                 let ack_notify_video = Arc::new(Notify::new());
                 let ack_notify_audio = Arc::new(Notify::new());
+                let ack_notify_video_clone = ack_notify_video.clone();
+                let ack_notify_audio_clone = ack_notify_audio.clone();
                 hnd_scrcpy_video = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_video(
                         video_stream,
-                        ack_notify_video.clone().clone(),
+                        ack_notify_video_clone,
                         video_tx,
                         video_codec_params.max_unack,
                         video_codec_params.sid).await;
@@ -1042,7 +1044,7 @@ async fn tsk_adb_scrcpy(
                 hnd_scrcpy_audio = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_audio(
                         audio_stream,
-                        ack_notify_audio.clone().clone(),
+                        ack_notify_audio_clone,
                         audio_tx,
                         audio_codec_params.max_unack,
                         audio_codec_params.sid,
