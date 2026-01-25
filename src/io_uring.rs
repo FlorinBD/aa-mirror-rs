@@ -943,6 +943,8 @@ async fn tsk_adb_scrcpy(
                 }
             }
 
+            let video_sid=video_codec_params.sid.clone();
+            let audio_sid=audio_codec_params.sid.clone();
             let mut cmd_push = vec![];
             cmd_push.push(String::from("/etc/aa-mirror-rs/scrcpy-server"));
             cmd_push.push(String::from("/data/local/tmp/scrcpy-server-manual.jar"));
@@ -1091,11 +1093,11 @@ async fn tsk_adb_scrcpy(
                                 let data = &pkt.payload[2..]; // start of message data, without message_id
                                 if let Ok(rsp) = Ack::parse_from_bytes(&data)
                                 {
-                                    if pkt.channel == video_codec_params.sid
+                                    if pkt.channel == video_sid
                                     {
                                         ack_notify_video.notify_one();
                                     }
-                                    else if pkt.channel == audio_codec_params.sid
+                                    else if pkt.channel == audio_sid
                                     {
                                         ack_notify_audio.notify_one();
                                     }
