@@ -441,105 +441,86 @@ async fn tsk_scrcpy_video(
     let mut payload: Vec<u8>=Vec::new();
     //let mut reassembler = NalReassembler::new();
     loop {
-        tokio::select! {
-            biased;
-            //Read encapsulated video frames, we don't have to slice NAL units, we can send all together as they come from MediaEncoder
-            res = read_scrcpy_packet(&mut stream) => {
-                    let (pts, h264_data) = res?;
-                    //let nals = reassembler.feed(&h264_data);
-                    let key_frame=(pts & 0x4000_0000_0000_0000u64) >0;
-                    let rec_ts=pts & 0x3FFF_FFFF_FFFF_FFFFu64;
-                    let config_frame=(pts & 0x8000_0000_0000_0000u64) >0;
-                    let rd_len=h264_data.len();
-                    let dbg_len=min(rd_len, 16);
-                    if i<10
-                    {
-                        if rd_len>dbg_len
-                        {
-                            let end_offset= rd_len - dbg_len;
-                            info!("Video task got frame config={:?}, act size: {}, raw slice: {:02x?}...{:02x?}",config_frame, rd_len, &h264_data[..dbg_len], &h264_data[end_offset..]);
-                        }
-                        else
-                        {
-                            info!("Video task got frame config={:?}, act size: {}, raw bytes: {:02x?}",config_frame, rd_len, &h264_data[..dbg_len]);
-                        }
-
-                    i=i+1;
-                    }
-
-                    if streaming_on && (act_unack < max_unack)
-                    {
-
-                        payload.clear();
-                        if config_frame
-                        {
-                            payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
-                            payload.extend_from_slice(&h264_data);
-                        }
-                        else {
-                            payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
-                            payload.extend_from_slice(&timestamp.to_be_bytes());
-                            payload.extend_from_slice(&h264_data);
-                        }
-
-                        let pkt_rsp = Packet {
-                            channel: sid,
-                            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                            final_length: None,
-                            payload: std::mem::take(&mut payload),
-                        };
-                        video_tx.send_async(pkt_rsp).await?;
-                        act_unack=act_unack+1;
-                    }
-                }
-            Ok(pkt) = cmd_rx.recv_async() =>
+        //Check custom Service command
+        match cmd_rx.try_recv() {
+            Ok(pkt) => {
+                //info!("tsk_scrcpy_video Received command packet {:02x?}", pkt);
+                let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+                if message_id == MESSAGE_CUSTOM_CMD as i32
                 {
-                    //info!("tsk_scrcpy_video Received command packet {:02x?}", pkt);
-                    let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-                    if message_id == MESSAGE_CUSTOM_CMD  as i32
+                    let cmd_id: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
+                    let data = &pkt.payload[4..]; // start of message data, without message_id
+                    if cmd_id == CustomCommand::CMD_STOP_VIDEO_RECORDING as i32
                     {
-                        let cmd_id: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
-                        let data = &pkt.payload[4..]; // start of message data, without message_id
-                        if cmd_id == CustomCommand::CMD_STOP_VIDEO_RECORDING as i32
-                        {
-                            act_unack=max_unack;
-                            streaming_on = false;
-                            info!("tsk_scrcpy_video Video streaming stopped");
-                            break;
-                        }
-
+                        act_unack = max_unack;
+                        streaming_on = false;
+                        info!("tsk_scrcpy_video Video streaming stopped");
+                        break;
                     }
-                    else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK  as i32
+                } else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK as i32
+                {
+                    if pkt.channel == sid
                     {
-                        if pkt.channel ==  sid
+                        //info!("{} Received {} message", sid.to_string(), message_id);
+                        let data = &pkt.payload[2..]; // start of message data, without message_id
+                        if let Ok(rsp) = Ack::parse_from_bytes(&data)
                         {
-                            //info!("{} Received {} message", sid.to_string(), message_id);
-                            let data = &pkt.payload[2..]; // start of message data, without message_id
-                            if  let Ok(rsp) = Ack::parse_from_bytes(&data)
-                            {
-                                //info!( "{}, channel {:?}: ACK, timestamp_ns: {:?}", get_name(), pkt.channel, rsp.receive_timestamp_ns[0]);
-                                info!( "tsk_scrcpy_video: video ACK received, sending next frame");
-                                act_unack=0;
-                            }
-                            else
-                            {
-                                error!( "tsk_scrcpy_video Unable to parse received message");
-                            }
+                            //info!( "{}, channel {:?}: ACK, timestamp_ns: {:?}", get_name(), pkt.channel, rsp.receive_timestamp_ns[0]);
+                            //info!( "tsk_scrcpy_video: video ACK received, sending next frame");
+                            act_unack = 0;
+                        } else {
+                            error!( "tsk_scrcpy_video Unable to parse received message");
                         }
-                        else {
+                    } else {
                         //info!( "tsk_scrcpy_video: media ACK received but not for VIDEO, discarded");
-                        }
                     }
-                    else
-                    {
-                        error!("tsk_scrcpy_video unknown message id: {}", message_id);
-                    }
+                } else {
+                    error!("tsk_scrcpy_video unknown message id: {}", message_id);
                 }
-            else => {
-                // all branches are closed
-                error!("All SCRCPY Video tasks are closed");
-                break;
             }
+            _ => {}
+        }
+        //Read video frames from SCRCPY server
+        let (pts, h264_data) = read_scrcpy_packet(&mut stream).await?;
+
+        let key_frame=(pts & 0x4000_0000_0000_0000u64) >0;
+        let rec_ts=pts & 0x3FFF_FFFF_FFFF_FFFFu64;
+        let config_frame=(pts & 0x8000_0000_0000_0000u64) >0;
+        let rd_len=h264_data.len();
+        let dbg_len=min(rd_len, 16);
+        if i<10
+        {
+            if rd_len > dbg_len
+            {
+                let end_offset = rd_len - dbg_len;
+                info!("Video task got frame config={:?}, act size: {}, raw slice: {:02x?}...{:02x?}",config_frame, rd_len, &h264_data[..dbg_len], &h264_data[end_offset..]);
+            } else {
+                info!("Video task got frame config={:?}, act size: {}, raw bytes: {:02x?}",config_frame, rd_len, &h264_data[..dbg_len]);
+            }
+            i = i + 1;
+        }
+
+        if streaming_on && (act_unack < max_unack)
+        {
+            payload.clear();
+            if config_frame
+            {
+                payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
+                payload.extend_from_slice(&h264_data);
+            } else {
+                payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
+                payload.extend_from_slice(&timestamp.to_be_bytes());
+                payload.extend_from_slice(&h264_data);
+            }
+
+            let pkt_rsp = Packet {
+                channel: sid,
+                flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                final_length: None,
+                payload: std::mem::take(&mut payload),
+            };
+            video_tx.send_async(pkt_rsp).await?;
+            act_unack = act_unack + 1;
         }
     }
     //reassembler.flush();
