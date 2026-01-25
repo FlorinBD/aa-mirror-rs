@@ -596,90 +596,80 @@ async fn tsk_scrcpy_audio(
     let mut i=0;
     let timestamp: u64 = 0;//is not used by HU
     loop {
-        tokio::select! {
-            biased;
-            res = read_scrcpy_packet(&mut stream) => {
-                let (pts, data) = res?;
-                let rd_len=data.len();
-                if rd_len == 0 {
-                    info!("Audio connection closed by server?");
-                    return Err(Box::new(io::Error::new(
-                        io::ErrorKind::Other,
-                        "Audio connection closed by server",
-                        )));
-                }
-                let dbg_len=min(rd_len,16);
-                if i<5
+        //Check service commands
+        match cmd_rx.try_recv()
+        {
+            Ok(pkt) =>
                 {
-                    info!("Audio task Read {} bytes: {:02x?}", rd_len, &data[..dbg_len]);
-                    i=i+1;
-                }
-                if streaming_on && (act_unack<max_unack)
-                {
-                    let mut payload: Vec<u8>=Vec::new();
-                    payload.extend_from_slice(&timestamp.to_be_bytes());
-                    payload.extend_from_slice(&data);
-                    payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) >> 8) as u8);
-                    payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) & 0xff) as u8);
-
-                    let pkt_rsp = Packet {
-                        channel: sid,
-                        flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                        final_length: None,
-                        payload: payload,
-                    };
-                    if let Err(_) = audio_tx.send(pkt_rsp){
-                        error!( "SCRCPY audio frame send error");
-                    };
-                }
-            }
-            Ok(pkt) = cmd_rx.recv_async() =>
-            {
                     //info!("tsk_scrcpy_audio Received command packet {:02x?}", pkt);
-                let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-                if message_id == MESSAGE_CUSTOM_CMD  as i32
-                {
-                    let cmd_id: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
-                    //let data = &pkt.payload[4..]; // start of message data, without message_id
-                    if cmd_id == CustomCommand::CMD_STOP_AUDIO_RECORDING as i32
+                    let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+                    if message_id == MESSAGE_CUSTOM_CMD as i32
                     {
-                        act_unack=max_unack;
-                        streaming_on = false;
-                        info!("tsk_scrcpy_audio Audio streaming stopped");
+                        let cmd_id: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
+                        //let data = &pkt.payload[4..]; // start of message data, without message_id
+                        if cmd_id == CustomCommand::CMD_STOP_AUDIO_RECORDING as i32
+                        {
+                            act_unack = max_unack;
+                            streaming_on = false;
+                            info!("tsk_scrcpy_audio Audio streaming stopped");
+                        }
                     }
+                    else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK as i32
+                    {
+                        if pkt.channel == sid
+                        {
+                            info!("{} Received {} message", sid.to_string(), message_id);
+                            let data = &pkt.payload[2..]; // start of message data, without message_id
+                            if let Ok(rsp) = Ack::parse_from_bytes(&data)
+                            {
+                                //info!( "{}, channel {:?}: ACK, timestamp_ns: {:?}", get_name(), pkt.channel, rsp.receive_timestamp_ns[0]);
+                                info!( "tsk_scrcpy_audio: media ACK received, sending next frame");
+                                act_unack = 0;
+                            } else {
+                                error!( "tsk_scrcpy_audio Unable to parse MEDIA ACK message");
+                            }
+                        } else {
+                            //info!( "tsk_scrcpy_audio: media ACK received but not for AUDIO, discarded");
+                        }
+                    } else {
+                        error!("tsk_scrcpy_video unknown message id: {}", message_id);
+                    }
+                }
+            _ => {}
+        }
+        //Read video frames from SCRCPY server
+        let (pts, data) = read_scrcpy_packet(&mut stream).await?;
+        let rd_len=data.len();
+        if rd_len == 0 {
+            info!("Audio connection closed by server?");
+            return Err(Box::new(io::Error::new(
+                io::ErrorKind::Other,
+                "Audio connection closed by server",
+            )));
+        }
+        let dbg_len=min(rd_len,16);
+        if i<5
+        {
+            info!("Audio task Read {} bytes: {:02x?}", rd_len, &data[..dbg_len]);
+            i=i+1;
+        }
+        if streaming_on && (act_unack<max_unack)
+        {
+            let mut payload: Vec<u8>=Vec::new();
+            payload.extend_from_slice(&timestamp.to_be_bytes());
+            payload.extend_from_slice(&data);
+            payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) >> 8) as u8);
+            payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) & 0xff) as u8);
 
-                }
-                else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK  as i32
-                {
-                    if pkt.channel == sid
-                    {
-                        info!("{} Received {} message", sid.to_string(), message_id);
-                        let data = &pkt.payload[2..]; // start of message data, without message_id
-                        if  let Ok(rsp) = Ack::parse_from_bytes(&data)
-                        {
-                            //info!( "{}, channel {:?}: ACK, timestamp_ns: {:?}", get_name(), pkt.channel, rsp.receive_timestamp_ns[0]);
-                            info!( "tsk_scrcpy_audio: media ACK received, sending next frame");
-                            act_unack=0;
-                        }
-                        else
-                        {
-                            error!( "tsk_scrcpy_audio Unable to parse MEDIA ACK message");
-                        }
-                    }
-                    else {
-                        //info!( "tsk_scrcpy_audio: media ACK received but not for AUDIO, discarded");
-                    }
-                }
-                else
-                {
-                    error!("tsk_scrcpy_video unknown message id: {}", message_id);
-                }
-            }
-            else => {
-                // all branches are closed
-                error!("All SCRCPY Audio tasks are closed");
-                break;
-            }
+            let pkt_rsp = Packet {
+                channel: sid,
+                flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                final_length: None,
+                payload: payload,
+            };
+            if let Err(_) = audio_tx.send(pkt_rsp){
+                error!( "SCRCPY audio frame send error");
+            };
         }
     }
     return Ok(());
