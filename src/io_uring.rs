@@ -413,7 +413,7 @@ async fn tcp_wait_for_md_connection(listener: &mut TcpListener) -> Result<TcpStr
 
 
 async fn tsk_scrcpy_video(
-    mut stream: TcpStream,
+    stream: &mut TcpStream,
     ack_notify:Arc<Notify>,
     video_tx: flume::Sender<Packet>,
     max_unack:u32,
@@ -423,7 +423,7 @@ async fn tsk_scrcpy_video(
     let mut i=0;
 
     //codec metadata
-    let metadata=read_exact(&mut stream, 12).await?;
+    let metadata=read_exact(stream, 12).await?;
     info!("SCRCPY Video codec metadata: {:02x?}", &metadata);
     let mut codec_id=String::from_utf8_lossy(&metadata[0..4]).to_string();
         codec_id=codec_id.chars()
@@ -443,7 +443,7 @@ async fn tsk_scrcpy_video(
     loop {
         for _ in 0..max_unack {
             //Read video frames from SCRCPY server
-            match read_scrcpy_packet(&mut stream).await {
+            match read_scrcpy_packet(stream).await {
                 Ok((pts, h264_data)) => {
                     let key_frame = (pts & 0x4000_0000_0000_0000u64) > 0;
                     let rec_ts = pts & 0x3FFF_FFFF_FFFF_FFFFu64;
@@ -564,7 +564,7 @@ async fn tsk_scrcpy_video(
 }
 
 async fn tsk_scrcpy_audio(
-    mut stream: TcpStream,
+    stream: &mut TcpStream,
     ack_notify:Arc<Notify>,
     audio_tx: flume::Sender<Packet>,
     max_unack:u32,
@@ -573,7 +573,7 @@ async fn tsk_scrcpy_audio(
 
     info!("Starting audio server!");
     //codec metadata
-    let metadata=read_exact(&mut stream, 4).await?;
+    let metadata=read_exact(stream, 4).await?;
     info!("SCRCPY Audio codec metadata: {:02x?}", &metadata);
     let mut codec_id=String::from_utf8_lossy(&metadata[0..4]).to_string();
         codec_id=codec_id.chars()
@@ -588,7 +588,7 @@ async fn tsk_scrcpy_audio(
     let timestamp: u64 = 0;//is not used by HU
     loop {
         for _ in 0..max_unack {
-            match read_scrcpy_packet(&mut stream).await {
+            match read_scrcpy_packet(stream).await {
                 Ok((pts, data)) => {
                     let rd_len = data.len();
                     let dbg_len = min(rd_len, 16);
@@ -1029,7 +1029,7 @@ async fn tsk_adb_scrcpy(
                 let ack_notify_audio = Arc::new(Notify::new());
                 hnd_scrcpy_video = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_video(
-                        video_stream,
+                        &mut video_stream,
                         ack_notify_video.clone(),
                         video_tx,
                         video_codec_params.max_unack,
@@ -1039,7 +1039,7 @@ async fn tsk_adb_scrcpy(
                 });
                 hnd_scrcpy_audio = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_audio(
-                        audio_stream,
+                        &mut audio_stream,
                         ack_notify_audio,
                         audio_tx,
                         audio_codec_params.max_unack,
