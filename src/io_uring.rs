@@ -1076,14 +1076,14 @@ async fn tsk_adb_scrcpy(
                                 {
 
                                     info!("tsk_scrcpy_video Video streaming stopped");
-                                    video_stream.shutdown(std::net::Shutdown::Both)?;
+                                    drop(video_stream);
                                     break;
                                 }
                                 else if cmd_id == CustomCommand::CMD_STOP_AUDIO_RECORDING as i32
                                 {
 
                                     info!("tsk_scrcpy_video Audio streaming stopped");
-                                    audio_stream.shutdown(std::net::Shutdown::Both)?;
+                                    drop(audio_stream);
                                     break;
                                 }
                             }
