@@ -575,8 +575,9 @@ async fn tsk_scrcpy_video(
         if metadata.len() != SCRCPY_METADATA_HEADER_LEN {
             error!("read_scrcpy_packet data len error, wanted {} but got {} bytes", SCRCPY_METADATA_HEADER_LEN, metadata.len());
         }
-        let packet_size = u32::from_be_bytes(metadata[8..].try_into().unwrap()) as usize;
         let pts = u64::from_be_bytes(metadata[0..8].try_into().unwrap());
+        let packet_size = u32::from_be_bytes(metadata[8..].try_into().unwrap()) as usize;
+
         // Read full packet
         let h264_data=read_exact(stream, packet_size).await?;
 
