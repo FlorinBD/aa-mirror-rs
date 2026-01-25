@@ -137,7 +137,7 @@ pub struct ScrcpyTouchEvent {
     pub action: u8,
     pub pointer_id: u64,
     pub position:ScrcpyPosition,
-    pub pressure:i16,
+    pub pressure:u16,
     pub action_button:i32,
     pub buttons:i32,
 }
@@ -740,7 +740,7 @@ async fn tsk_scrcpy_control(
                             for (_,touch_ev) in rsp.touch_event.pointer_data.iter().enumerate() {
                                 let touch_x = touch_ev.x();
                                 let touch_y = touch_ev.y();
-                                let pointer_id = touch_ev.pointer_id();
+                                let pointer_id = 1;//touch_ev.pointer_id();
 
 
                                 let mut _action: u8;
@@ -760,7 +760,7 @@ async fn tsk_scrcpy_control(
                                 let pt = ScrcpyPoint { x: touch_x as i32, y: touch_y as i32 };
                                 let sz = ScrcpySize { width: video_params.res_w, height: video_params.res_h };
                                 let pos = ScrcpyPosition { point: pt, screen_size: sz };
-                                let ev = ScrcpyTouchEvent { action: _action, pointer_id: pointer_id as u64, position: pos, pressure: 255, action_button: 0, buttons: 0 };
+                                let ev = ScrcpyTouchEvent { action: _action, pointer_id: pointer_id as u64, position: pos, pressure: 0xffff, action_button: 1, buttons: 1 };//AMOTION_EVENT_BUTTON_PRIMARY
                                 info!("SCRCPY Control inject event: {:?}",ev);
                                 let ev_bytes=ev.to_be_bytes();
                                 let mut payload: Vec<u8> = Vec::new();
@@ -775,7 +775,7 @@ async fn tsk_scrcpy_control(
                             for (_,touch_ev) in rsp.touchpad_event.pointer_data.iter().enumerate() {
                                 let touch_x = touch_ev.x();
                                 let touch_y = touch_ev.y();
-                                let pointer_id = touch_ev.pointer_id();
+                                let pointer_id = 1;//touch_ev.pointer_id();
                                 let mut _action: u8;
                                 if touch_action == PointerAction::ACTION_DOWN
                                 {
@@ -793,7 +793,7 @@ async fn tsk_scrcpy_control(
                                 let pt = ScrcpyPoint { x: touch_x as i32, y: touch_y as i32 };
                                 let sz = ScrcpySize { width: video_params.res_w, height: video_params.res_h };
                                 let pos = ScrcpyPosition { point: pt, screen_size: sz };
-                                let ev = ScrcpyTouchEvent { action: _action, pointer_id: pointer_id as u64, position: pos, pressure: 255, action_button: 0, buttons: 0 };
+                                let ev = ScrcpyTouchEvent { action: _action, pointer_id: pointer_id as u64, position: pos, pressure: 0xffff, action_button: 1, buttons: 1 };//AMOTION_EVENT_BUTTON_PRIMARY
                                 info!("SCRCPY Control inject event: {:?}",ev);
                                 let ev_bytes=ev.to_be_bytes();
                                 let mut payload: Vec<u8> = Vec::new();
