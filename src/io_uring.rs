@@ -758,7 +758,7 @@ async fn tsk_scrcpy_control(
                                     continue;
                                 }
                                 let pt = ScrcpyPoint { x: touch_x as i32, y: touch_y as i32 };
-                                let sz = ScrcpySize { width: video_params.res_h, height: video_params.res_h };
+                                let sz = ScrcpySize { width: video_params.res_w, height: video_params.res_h };
                                 let pos = ScrcpyPosition { point: pt, screen_size: sz };
                                 let ev = ScrcpyTouchEvent { action: _action, pointer_id: pointer_id as u64, position: pos, pressure: 255, action_button: 0, buttons: 0 };
                                 info!("SCRCPY Control inject event: {:?}",ev);
@@ -791,7 +791,7 @@ async fn tsk_scrcpy_control(
                                     continue;
                                 }
                                 let pt = ScrcpyPoint { x: touch_x as i32, y: touch_y as i32 };
-                                let sz = ScrcpySize { width: video_params.res_h, height: video_params.res_h };
+                                let sz = ScrcpySize { width: video_params.res_w, height: video_params.res_h };
                                 let pos = ScrcpyPosition { point: pt, screen_size: sz };
                                 let ev = ScrcpyTouchEvent { action: _action, pointer_id: pointer_id as u64, position: pos, pressure: 255, action_button: 0, buttons: 0 };
                                 info!("SCRCPY Control inject event: {:?}",ev);
