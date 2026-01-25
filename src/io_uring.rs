@@ -740,7 +740,7 @@ async fn tsk_scrcpy_control(
                             for (_,touch_ev) in rsp.touch_event.pointer_data.iter().enumerate() {
                                 let touch_x = touch_ev.x();
                                 let touch_y = touch_ev.y();
-                                let pointer_id = 1;//touch_ev.pointer_id();
+                                let pointer_id = touch_ev.pointer_id();
 
 
                                 let mut _action: u8;
@@ -775,7 +775,7 @@ async fn tsk_scrcpy_control(
                             for (_,touch_ev) in rsp.touchpad_event.pointer_data.iter().enumerate() {
                                 let touch_x = touch_ev.x();
                                 let touch_y = touch_ev.y();
-                                let pointer_id = 1;//touch_ev.pointer_id();
+                                let pointer_id = touch_ev.pointer_id();
                                 let mut _action: u8;
                                 if touch_action == PointerAction::ACTION_DOWN
                                 {
