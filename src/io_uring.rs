@@ -611,9 +611,9 @@ async fn tsk_scrcpy_audio(
                         payload: payload,
                     };
                     //Audio is disabled ATM
-                    /*if let Err(_) = audio_tx.send(pkt_rsp){
+                    if let Err(_) = audio_tx.send(pkt_rsp){
                         error!( "SCRCPY audio frame send error");
-                    };*/
+                    };
                 }
                 Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
                     error!("scrcpy audio stream ended");
