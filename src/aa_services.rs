@@ -1394,7 +1394,39 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                         if let Err(_) = tx_srv.send(pkt_rsp).await{
                             error!( "{} send error",get_name());
                         };*/
+                        audio_stream_started=true;
+                        info!( "{}, channel {:?}: MD connected, starting audio streaming", get_name(), pkt.channel);
+                        let bytes: Vec<u8> = postcard::to_stdvec(&audio_params)?;
+                        let mut payload = Vec::new();
+                        payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+                        payload.extend_from_slice(&(CustomCommand::CMD_START_AUDIO_RECORDING as u16).to_be_bytes());
+                        payload.extend_from_slice(&bytes);
+
+                        let pkt_rsp = Packet {
+                            channel: ch_id as u8,
+                            flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                            final_length: None,
+                            payload: payload.clone(),
+                        };
+                        scrcpy_cmd.send_async(pkt_rsp).await?;
+                    }
+                    else if cmd == CustomCommand::MD_DISCONNECTED as i32 {
+                        info!("{} MD diconnected",get_name());
+                        md_connected=false;
+
                         audio_stream_started=false;
+                        info!( "{}, channel {:?}: MD diconnected, stopping audio streaming", get_name(), pkt.channel);
+                        let mut payload = Vec::new();
+                        payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+                        payload.extend_from_slice(&(CustomCommand::CMD_STOP_AUDIO_RECORDING as u16).to_be_bytes());
+
+                        let pkt_rsp = Packet {
+                            channel: ch_id as u8,
+                            flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                            final_length: None,
+                            payload: payload.clone(),
+                        };
+                        scrcpy_cmd.send_async(pkt_rsp).await?;
                     }
             }
             else if message_id == MEDIA_MESSAGE_CONFIG  as i32
