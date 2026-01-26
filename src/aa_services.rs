@@ -113,7 +113,7 @@ impl Default for AudioStreamingParams {
         Self {
             bitrate: 4800,
             sid:0,
-            max_unack:4096,
+            max_unack:0,
         }
     }
 }
