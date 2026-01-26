@@ -739,7 +739,7 @@ async fn tsk_scrcpy_control(
                                 let sz = ScrcpySize { width: video_params.res_w as u16, height: video_params.res_h as u16 };
                                 let pos = ScrcpyPosition { point: pt, screen_size: sz };
                                 let ev = ScrcpyTouchEvent { action: _action, pointer_id: pointer_id as u64, position: pos, pressure: 0xffff, action_button: 1, buttons: 1 };//AMOTION_EVENT_BUTTON_PRIMARY
-                                info!("SCRCPY Control inject event: {:?}",ev);
+                                //info!("SCRCPY Control inject event: {:?}",ev);
                                 let ev_bytes=ev.to_be_bytes();
                                 let mut payload: Vec<u8> = Vec::new();
                                 payload.push(ScrcpyControlMessageType::InjectTouchEvent as u8);
@@ -772,7 +772,7 @@ async fn tsk_scrcpy_control(
                                 let sz = ScrcpySize { width: video_params.res_w as u16, height: video_params.res_h as u16 };
                                 let pos = ScrcpyPosition { point: pt, screen_size: sz };
                                 let ev = ScrcpyTouchEvent { action: _action, pointer_id: pointer_id as u64, position: pos, pressure: 0xffff, action_button: 1, buttons: 1 };//AMOTION_EVENT_BUTTON_PRIMARY
-                                info!("SCRCPY Control inject event: {:?}",ev);
+                                //info!("SCRCPY Control inject event: {:?}",ev);
                                 let ev_bytes=ev.to_be_bytes();
                                 let mut payload: Vec<u8> = Vec::new();
                                 payload.push(ScrcpyControlMessageType::InjectTouchEvent as u8);
@@ -793,7 +793,7 @@ async fn tsk_scrcpy_control(
                                 }
 
                                 let ev = ScrcpyKeyEvent { action: _action, key_code: key_ev.keycode() as i32, repeat: 0, metastate: 0 };
-                                info!("SCRCPY Control inject event: {:?}",ev);
+                                //info!("SCRCPY Control inject event: {:?}",ev);
                                 let ev_bytes=ev.to_be_bytes();
                                 let mut payload: Vec<u8> = Vec::new();
                                 payload.push(ScrcpyControlMessageType::InjectKeycode as u8);
@@ -993,6 +993,8 @@ async fn tsk_adb_scrcpy(
             cmd_shell.push("video=true".to_string());
             cmd_shell.push("control=true".to_string());
             cmd_shell.push("cleanup=true".to_string());
+            cmd_shell.push("display_ime_policy=local".to_string());
+            cmd_shell.push("stay_awake=true".to_string());
             cmd_shell.push("audio_codec=aac".to_string());
             cmd_shell.push(format!("audio_bit_rate={}", audio_codec_params.bitrate));
             cmd_shell.push(format!("max_size={}", video_codec_params.res_w));
