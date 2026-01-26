@@ -1004,14 +1004,13 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                     }
                     else if cmd == CustomCommand::MD_DISCONNECTED as i32 {
                         info!("{} MD disconnected, send media STOP to HU",get_name());
-                        md_connected=false;
                         if md_connected
                         {
                             session_id +=1;
                             video_stream_started=false;
                             stop_start_media(&tx_srv, ch_id as u8, session_id).await?;
                         }
-
+                        md_connected=false;
                     }
             }
             else if message_id == MediaMessageId::MEDIA_MESSAGE_CONFIG  as i32
