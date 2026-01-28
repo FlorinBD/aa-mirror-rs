@@ -720,7 +720,7 @@ async fn tsk_scrcpy_audio(
 async fn tsk_scrcpy_control(
     mut stream: TcpStream,
     cmd_rx: flume::Receiver<Packet>,
-    video_params:VideoStreamingParams,
+    screen_size:ScrcpySize,
 ) -> Result<()> {
     info!("Starting control server!");
     loop {
@@ -758,8 +758,8 @@ async fn tsk_scrcpy_control(
                                     continue;
                                 }
                                 let pt = ScrcpyPoint { x: touch_x as i32, y: touch_y as i32 };
-                                let sz = ScrcpySize { width: video_params.res_w as u16, height: video_params.res_h as u16 };
-                                let pos = ScrcpyPosition { point: pt, screen_size: sz };
+                                //let sz = ScrcpySize { width: video_params.res_w as u16, height: video_params.res_h as u16 };
+                                let pos = ScrcpyPosition { point: pt, screen_size: screen_size.clone() };
                                 let ev = ScrcpyTouchEvent { action: _action, pointer_id: pointer_id as u64, position: pos, pressure: 0xffff, action_button: 1, buttons: 1 };//AMOTION_EVENT_BUTTON_PRIMARY
                                 //info!("SCRCPY Control inject event: {:?}",ev);
                                 let ev_bytes=ev.to_be_bytes();
@@ -791,8 +791,8 @@ async fn tsk_scrcpy_control(
                                     continue;
                                 }
                                 let pt = ScrcpyPoint { x: touch_x as i32, y: touch_y as i32 };
-                                let sz = ScrcpySize { width: video_params.res_w as u16, height: video_params.res_h as u16 };
-                                let pos = ScrcpyPosition { point: pt, screen_size: sz };
+                                //let sz = ScrcpySize { width: video_params.res_w as u16, height: video_params.res_h as u16 };
+                                let pos = ScrcpyPosition { point: pt, screen_size: screen_size.clone() };
                                 let ev = ScrcpyTouchEvent { action: _action, pointer_id: pointer_id as u64, position: pos, pressure: 0xffff, action_button: 1, buttons: 1 };//AMOTION_EVENT_BUTTON_PRIMARY
                                 //info!("SCRCPY Control inject event: {:?}",ev);
                                 let ev_bytes=ev.to_be_bytes();
@@ -1097,11 +1097,12 @@ async fn tsk_adb_scrcpy(
                     let _ = done_th_tx_audio.send(res);
                 });
 
+                let screen_size=ScrcpySize{ width: video_codec_params.res_w.clone() as u16, height: video_codec_params.res_h.clone() as u16 };
                 hnd_scrcpy_ctrl = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_control(
                         ctrl_stream,
                         rx_cmd_ctrl,
-                        video_codec_params.clone(),
+                        screen_size,
                     ).await;
                     let _ = done_th_tx_ctrl.send(res);
                 });
