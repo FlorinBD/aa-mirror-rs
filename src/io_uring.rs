@@ -58,7 +58,7 @@ const USB_ACCESSORY_PATH: &str = "/dev/usb_accessory";
 pub const BUFFER_LEN: usize = 16 * 1024;
 pub const TCP_CLIENT_TIMEOUT: Duration = Duration::new(30, 0);
 
-use crate::config::{Action, AppConfig, SharedConfig, ADB_DEVICE_PORT, SCRCPY_VERSION, SCRCPY_PORT, SCRCPY_METADATA_HEADER_LEN};
+use crate::config::{Action, AppConfig, SharedConfig, ADB_DEVICE_PORT, SCRCPY_VERSION, SCRCPY_PORT, SCRCPY_METADATA_HEADER_LEN, HU_CONFIG_DELAY_MS};
 use crate::config::{TCP_DHU_PORT, TCP_MD_SERVER_PORT};
 use crate::channel_manager::{endpoint_reader, ch_proxy, packet_tls_proxy, ENCRYPTED, FRAME_TYPE_CONTROL, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
 use crate::channel_manager::Packet;
@@ -442,6 +442,7 @@ async fn tsk_scrcpy_video(
     //let mut reassembler = NalReassembler::new();
     while ack_notify.try_recv().is_ok() {
         //drain all permits
+        tokio::time::sleep(Duration::from_millis(1)).await;
     }
     loop {
 
@@ -597,6 +598,7 @@ async fn tsk_scrcpy_audio(
     let timestamp: u64 = 0;//is not used by HU
     while ack_notify.try_recv().is_ok() {
         //drain all permits
+        tokio::time::sleep(Duration::from_millis(1)).await;
     }
     loop {
             match read_scrcpy_packet(&mut stream).await {
