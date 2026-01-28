@@ -14,3 +14,4 @@ todo:
 done: implement tokio_uring for adb reading task
 done: replace postcard with BytesMut to have BE and correct layout, for SCRCPy control channel at least
 done: replace ARP with ip neigh cli for ADB discovery
+remove clone for structs that dosen't need to be clonable because is expensive, copy is ok
