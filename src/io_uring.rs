@@ -1080,8 +1080,9 @@ async fn tsk_adb_scrcpy(
                         video_stream,
                         rx_ack_video,
                         video_tx,
-                        video_codec_params.max_unack,
-                        video_codec_params.sid).await;
+                        video_codec_params.max_unack.clone(),
+                        video_codec_params.sid.clone()
+                    ).await;
                     let _ = done_th_tx_video.send(res);
 
                 });
@@ -1090,8 +1091,8 @@ async fn tsk_adb_scrcpy(
                         audio_stream,
                         rx_ack_audio,
                         audio_tx,
-                        audio_codec_params.max_unack,
-                        audio_codec_params.sid,
+                        audio_codec_params.max_unack.clone(),
+                        audio_codec_params.sid.clone(),
                     ).await;
                     let _ = done_th_tx_audio.send(res);
                 });
