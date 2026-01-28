@@ -723,6 +723,7 @@ async fn tsk_scrcpy_control(
     screen_size:ScrcpySize,
 ) -> Result<()> {
     info!("Starting control server!");
+    let mut screen_off_done=false;
     loop {
         match cmd_rx.recv_async().await {
             Ok(pkt) => {
@@ -731,6 +732,15 @@ async fn tsk_scrcpy_control(
                 info!("tsk_scrcpy_control Received command id {:?}", message_id);
                 if message_id == InputMessageId::INPUT_MESSAGE_INPUT_REPORT  as i32
                 {
+                    if !screen_off_done {
+
+                        let mut payload: Vec<u8> = Vec::new();
+                        payload.push(ScrcpyControlMessageType::SetDisplayPower as u8);
+                        payload.push(0);
+                        stream.write_all(payload).await;
+
+                        screen_off_done=true;
+                    }
                     let data = &pkt.payload[2..]; // start of message data, without message_id
                     if  let Ok(rsp) = InputReport::parse_from_bytes(&data) {
                         //info!( "tsk_scrcpy_control InputReport received: {:?}", rsp);
