@@ -1062,18 +1062,19 @@ async fn tsk_adb_scrcpy(
                 let rx_cmd_video = srv_cmd_rx_scrcpy.clone();
                 let rx_cmd_audio = srv_cmd_rx_scrcpy.clone();
                 let rx_cmd_ctrl = rx_scrcpy_ctrl.clone();
-                let mut audio_max_unack= 1usize;
-                let mut video_max_unack=1usize;
+                //mpsc channels for ACK notification, to maintain frame window
+                let mut audio_max_unack_mpsc = 1usize;
+                let mut video_max_unack_mpsc =1usize;
                 if audio_codec_params.max_unack > 0
                 {
-                    audio_max_unack =audio_codec_params.max_unack.clone() as usize;
+                    audio_max_unack_mpsc =audio_codec_params.max_unack.clone() as usize;
                 }
                 if video_codec_params.max_unack > 0
                 {
-                    video_max_unack =video_codec_params.max_unack.clone() as usize;
+                    video_max_unack_mpsc =video_codec_params.max_unack.clone() as usize;
                 }
-                let (tx_ack_audio, rx_ack_audio) = mpsc::channel::<u32>(audio_max_unack);
-                let (tx_ack_video, rx_ack_video) = mpsc::channel::<u32>(video_max_unack);
+                let (tx_ack_audio, rx_ack_audio) = mpsc::channel::<u32>(audio_max_unack_mpsc);
+                let (tx_ack_video, rx_ack_video) = mpsc::channel::<u32>(video_max_unack_mpsc);
                 hnd_scrcpy_video = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_video(
                         video_stream,
