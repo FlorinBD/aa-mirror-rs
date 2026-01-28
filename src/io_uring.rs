@@ -1143,10 +1143,12 @@ async fn tsk_adb_scrcpy(
                                     if pkt.channel == video_sid
                                     {
                                         tx_ack_video.try_send(1).expect("ACK send error");
+                                        info!("tsk_scrcpy: video ACK recived")
                                     }
                                     else if pkt.channel == audio_sid
                                     {
                                         tx_ack_audio.try_send(1).expect("ACK send error");
+                                        info!("tsk_scrcpy: audio ACK recived")
                                     }
                                     else
                                     {
