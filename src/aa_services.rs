@@ -1377,6 +1377,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
     info!( "{}: Starting...", get_name());
     let mut audio_stream_started:bool=false;
     let mut md_connected=false;
+    let mut session_id=1;
     loop {
         let pkt=  rx_srv.recv().await.ok_or("service reader channel hung up")?;
         if pkt.channel !=ch_id as u8
@@ -1444,53 +1445,19 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                     else if cmd == CustomCommand::MD_CONNECTED as i32 {
                         info!("{} MD connected, send media STOP to HU",get_name());
                         md_connected=true;
-                        //Send STOP to HU
-                        /*let mut media_stop= Stop::new();
-                        let mut payload: Vec<u8>=media_stop.write_to_bytes()?;
-                        payload.insert(0,((MEDIA_MESSAGE_STOP as u16) >> 8) as u8);
-                        payload.insert( 1,((MEDIA_MESSAGE_STOP as u16) & 0xff) as u8);
-                        let pkt_rsp = Packet {
-                            channel: ch_id as u8,
-                            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                            final_length: None,
-                            payload: payload,
-                        };
-                        if let Err(_) = tx_srv.send(pkt_rsp).await{
-                            error!( "{} send error",get_name());
-                        };*/
-                        audio_stream_started=true;
-                        info!( "{}, channel {:?}: MD connected, starting audio streaming", get_name(), pkt.channel);
-                        let bytes: Vec<u8> = postcard::to_stdvec(&audio_params)?;
-                        let mut payload = Vec::new();
-                        payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
-                        payload.extend_from_slice(&(CustomCommand::CMD_START_AUDIO_RECORDING as u16).to_be_bytes());
-                        payload.extend_from_slice(&bytes);
-
-                        let pkt_rsp = Packet {
-                            channel: ch_id as u8,
-                            flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                            final_length: None,
-                            payload: payload.clone(),
-                        };
-                        scrcpy_cmd.send_async(pkt_rsp).await?;
+                        session_id +=1;
+                        audio_stream_started=false;
+                        stop_start_media(&tx_srv, ch_id as u8, session_id).await?;
                     }
                     else if cmd == CustomCommand::MD_DISCONNECTED as i32 {
                         info!("{} MD diconnected",get_name());
+                        if md_connected
+                        {
+                            session_id +=1;
+                            audio_stream_started=false;
+                            stop_start_media(&tx_srv, ch_id as u8, session_id).await?;
+                        }
                         md_connected=false;
-
-                        audio_stream_started=false;
-                        info!( "{}, channel {:?}: MD diconnected, stopping audio streaming", get_name(), pkt.channel);
-                        let mut payload = Vec::new();
-                        payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
-                        payload.extend_from_slice(&(CustomCommand::CMD_STOP_AUDIO_RECORDING as u16).to_be_bytes());
-
-                        let pkt_rsp = Packet {
-                            channel: ch_id as u8,
-                            flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                            final_length: None,
-                            payload: payload.clone(),
-                        };
-                        scrcpy_cmd.send_async(pkt_rsp).await?;
                     }
             }
             else if message_id == MEDIA_MESSAGE_CONFIG  as i32
@@ -1552,6 +1519,42 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
             }
         }
 
+    }
+
+    async fn stop_start_media(tx: &Sender<Packet>, ch_id: u8, session_id:i32)->Result<()> {
+        info!( "{}, channel {:?}: Sending STOP command", get_name(), ch_id);
+        let mut media_stop= Stop::new();
+        let mut payload: Vec<u8>=Vec::new();
+        payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_STOP as u16).to_be_bytes());
+        payload.extend_from_slice(&(media_stop.write_to_bytes()?));
+        let pkt_rsp = Packet {
+            channel: ch_id,
+            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+            final_length: None,
+            payload: payload,
+        };
+        if let Err(_) = tx.send(pkt_rsp).await{
+            error!( "{} send error",get_name());
+        };
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        info!( "{}, channel {:?}: Sending START command", get_name(), ch_id);
+        let mut start_req = Start::new();
+        start_req.set_session_id(session_id);
+        start_req.set_configuration_index(0);
+        let mut payload: Vec<u8> = start_req.write_to_bytes().expect("serialization failed");
+        payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_START as u16) >> 8) as u8);
+        payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_START as u16) & 0xff) as u8);
+
+        let pkt_rsp = Packet {
+            channel: ch_id,
+            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+            final_length: None,
+            payload: payload,
+        };
+        if let Err(_) = tx.send(pkt_rsp).await{
+            error!( "{} response send error",get_name());
+        };
+        Ok(())
     }
     fn get_name() -> String {
         let dev = "MediaSinkService Audio Streaming";
