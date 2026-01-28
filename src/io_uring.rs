@@ -1066,11 +1066,11 @@ async fn tsk_adb_scrcpy(
                 let mut video_max_unack=1usize;
                 if audio_codec_params.max_unack > 0
                 {
-                    audio_max_unack =audio_codec_params.max_unack as usize;
+                    audio_max_unack =audio_codec_params.max_unack.clone() as usize;
                 }
                 if video_codec_params.max_unack > 0
                 {
-                    video_max_unack =video_codec_params.max_unack as usize;
+                    video_max_unack =video_codec_params.max_unack.clone() as usize;
                 }
                 let (tx_ack_audio, rx_ack_audio) = mpsc::channel::<u32>(audio_max_unack);
                 let (tx_ack_video, rx_ack_video) = mpsc::channel::<u32>(video_max_unack);
