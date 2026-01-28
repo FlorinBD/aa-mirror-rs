@@ -909,6 +909,8 @@ async fn tsk_adb_scrcpy(
                 payload: std::mem::take(&mut payload),
             };
             srv_cmd_tx.send_async(pkt_rsp).await?;
+            let mut start_audio_recived=false;
+            let mut start_video_recived=false;
             //wait for custom CMD to start recording
             loop {
                 match srv_cmd_rx_scrcpy.recv_async().await {
@@ -927,7 +929,12 @@ async fn tsk_adb_scrcpy(
                                         info!("Parsed VideoStreamingParams: {:?}", cmd);
                                         info!("Remaining bytes: {}", rest.len());
                                         video_codec_params =cmd;
-                                        break;
+                                        start_video_recived=true;
+                                        if start_audio_recived && start_video_recived
+                                        {
+                                            break;
+                                        }
+
                                     }
                                     Err(e) => {
                                         error!("postcard parsing error: {:?}", e);
@@ -941,7 +948,11 @@ async fn tsk_adb_scrcpy(
                                         info!("Parsed AudioStreamingParams: {:?}", cmd);
                                         info!("Remaining bytes: {}", rest.len());
                                         audio_codec_params =cmd;
-                                        //break; FIXME start recording on audio also
+                                        start_audio_recived=true;
+                                        if start_audio_recived && start_video_recived
+                                        {
+                                            break;
+                                        }
                                     }
                                     Err(e) => {
                                         error!("postcard parsing error: {:?}", e);
