@@ -1067,11 +1067,11 @@ async fn tsk_adb_scrcpy(
                 let mut video_max_unack_mpsc =1usize;
                 if audio_codec_params.max_unack > 0
                 {
-                    audio_max_unack_mpsc =audio_codec_params.max_unack.clone() as usize;
+                    audio_max_unack_mpsc =audio_codec_params.max_unack as usize;
                 }
                 if video_codec_params.max_unack > 0
                 {
-                    video_max_unack_mpsc =video_codec_params.max_unack.clone() as usize;
+                    video_max_unack_mpsc =video_codec_params.max_unack as usize;
                 }
                 let (tx_ack_audio, rx_ack_audio) = mpsc::channel::<u32>(audio_max_unack_mpsc);
                 let (tx_ack_video, rx_ack_video) = mpsc::channel::<u32>(video_max_unack_mpsc);
@@ -1080,8 +1080,8 @@ async fn tsk_adb_scrcpy(
                         video_stream,
                         rx_ack_video,
                         video_tx,
-                        video_codec_params.max_unack.clone(),
-                        video_codec_params.sid.clone()
+                        video_codec_params.max_unack,
+                        video_codec_params.sid
                     ).await;
                     let _ = done_th_tx_video.send(res);
 
@@ -1091,13 +1091,13 @@ async fn tsk_adb_scrcpy(
                         audio_stream,
                         rx_ack_audio,
                         audio_tx,
-                        audio_codec_params.max_unack.clone(),
-                        audio_codec_params.sid.clone(),
+                        audio_codec_params.max_unack,
+                        audio_codec_params.sid,
                     ).await;
                     let _ = done_th_tx_audio.send(res);
                 });
 
-                let screen_size=ScrcpySize{ width: video_codec_params.res_w.clone() as u16, height: video_codec_params.res_h.clone() as u16 };
+                let screen_size=ScrcpySize{ width: video_codec_params.res_w as u16, height: video_codec_params.res_h as u16 };
                 hnd_scrcpy_ctrl = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_control(
                         ctrl_stream,
