@@ -414,7 +414,7 @@ async fn tcp_wait_for_md_connection(listener: &mut TcpListener) -> Result<TcpStr
 
 async fn tsk_scrcpy_video(
     mut stream: TcpStream,
-    ack_notify:Arc<Notify>,
+    mut ack_notify:Receiver<u32>,
     video_tx: flume::Sender<Packet>,
     max_unack:u32,
     sid:u8,
@@ -440,8 +440,11 @@ async fn tsk_scrcpy_video(
     let timestamp: u64 = 0;//is not used by HU
     let mut payload: Vec<u8>=Vec::new();
     //let mut reassembler = NalReassembler::new();
+    while ack_notify.try_recv().is_ok() {
+        //drain all permits
+    }
     loop {
-        for _ in 0..max_unack {
+
             //Read video frames from SCRCPY server
             match read_scrcpy_packet(&mut stream).await {
                 Ok((pts, h264_data)) => {
@@ -490,9 +493,15 @@ async fn tsk_scrcpy_video(
                 }
             }
 
+        match ack_notify.recv().await {
+            Some(frame) => {
+                continue;
+            }
+            None => {
+                error!("Video Channel closed, exiting");
+                return Err(Box::new(io::Error::new(io::ErrorKind::Other, "channel closed")));
+            }
         }
-        //info!("SCRCPY Video max ACK limit hit, waiting new ACK");
-        ack_notify.notified().await;
 
     }
     //reassembler.flush();
@@ -565,7 +574,7 @@ async fn tsk_scrcpy_video(
 
 async fn tsk_scrcpy_audio(
     mut stream: TcpStream,
-    ack_notify:Arc<Notify>,
+    mut ack_notify:Receiver<u32>,
     audio_tx: flume::Sender<Packet>,
     max_unack:u32,
     sid:u8
@@ -586,8 +595,10 @@ async fn tsk_scrcpy_audio(
     }
     let mut i=0;
     let timestamp: u64 = 0;//is not used by HU
+    while ack_notify.try_recv().is_ok() {
+        //drain all permits
+    }
     loop {
-        for _ in 0..max_unack {
             match read_scrcpy_packet(&mut stream).await {
                 Ok((pts, data)) => {
                     let rd_len = data.len();
@@ -625,8 +636,17 @@ async fn tsk_scrcpy_audio(
                 }
             }
 
+        match ack_notify.recv().await {
+            Some(frame) => {
+                continue;
+            }
+            None => {
+                error!("Audio Channel closed, exiting");
+                return Err(Box::new(io::Error::new(io::ErrorKind::Other, "channel closed")));
+            }
         }
-        ack_notify.notified().await;
+
+
     }
     return Ok(());
     async fn read_exact(
@@ -1029,14 +1049,12 @@ async fn tsk_adb_scrcpy(
                 let rx_cmd_video = srv_cmd_rx_scrcpy.clone();
                 let rx_cmd_audio = srv_cmd_rx_scrcpy.clone();
                 let rx_cmd_ctrl = rx_scrcpy_ctrl.clone();
-                let ack_notify_video = Arc::new(Notify::new());
-                let ack_notify_audio = Arc::new(Notify::new());
-                let ack_notify_video_clone = ack_notify_video.clone();
-                let ack_notify_audio_clone = ack_notify_audio.clone();
+                let (tx_ack_audio, rx_ack_audio) = mpsc::channel::<u32>(audio_codec_params.max_unack as usize);
+                let (tx_ack_video, rx_ack_video) = mpsc::channel::<u32>(video_codec_params.max_unack as usize);
                 hnd_scrcpy_video = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_video(
                         video_stream,
-                        ack_notify_video_clone,
+                        rx_ack_video,
                         video_tx,
                         video_codec_params.max_unack,
                         video_codec_params.sid).await;
@@ -1046,7 +1064,7 @@ async fn tsk_adb_scrcpy(
                 hnd_scrcpy_audio = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_audio(
                         audio_stream,
-                        ack_notify_audio_clone,
+                        rx_ack_audio,
                         audio_tx,
                         audio_codec_params.max_unack,
                         audio_codec_params.sid,
@@ -1080,7 +1098,7 @@ async fn tsk_adb_scrcpy(
                                 {
 
                                     info!("tsk_scrcpy_video Video streaming stopped");
-                                    //drop(video_stream);
+                                    drop(tx_ack_video);
                                     //FIXME close the stream
                                     break;
                                 }
@@ -1088,7 +1106,7 @@ async fn tsk_adb_scrcpy(
                                 {
 
                                     info!("tsk_scrcpy_video Audio streaming stopped");
-                                    //drop(audio_stream);
+                                    drop(tx_ack_audio);
                                     //FIXME close the stream
                                     break;
                                 }
@@ -1101,11 +1119,11 @@ async fn tsk_adb_scrcpy(
                                 {
                                     if pkt.channel == video_sid
                                     {
-                                        ack_notify_video.notify_one();
+                                        tx_ack_video.try_send(1).expect("ACK send error");
                                     }
                                     else if pkt.channel == audio_sid
                                     {
-                                        ack_notify_audio.notify_one();
+                                        tx_ack_audio.try_send(1).expect("ACK send error");
                                     }
                                     else
                                     {
