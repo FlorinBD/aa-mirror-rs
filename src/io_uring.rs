@@ -440,10 +440,8 @@ async fn tsk_scrcpy_video(
     let timestamp: u64 = 0;//is not used by HU
     let mut payload: Vec<u8>=Vec::new();
     //let mut reassembler = NalReassembler::new();
-    while ack_notify.try_recv().is_ok() {
-        //drain all permits
-        tokio::time::sleep(Duration::from_millis(1)).await;
-    }
+    //drain all previous permits
+    while let Ok(_) = ack_notify.try_recv() {}
     loop {
 
             //Read video frames from SCRCPY server
@@ -596,10 +594,8 @@ async fn tsk_scrcpy_audio(
     }
     let mut i=0;
     let timestamp: u64 = 0;//is not used by HU
-    while ack_notify.try_recv().is_ok() {
-        //drain all permits
-        tokio::time::sleep(Duration::from_millis(1)).await;
-    }
+    //drain all previous permits
+    while let Ok(_) = ack_notify.try_recv() {}
     loop {
             match read_scrcpy_packet(&mut stream).await {
                 Ok((pts, data)) => {
