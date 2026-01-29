@@ -645,6 +645,7 @@ pub async fn ch_proxy(
     scrcpy_cmd_rx: flume::Receiver<Packet>,
     scrcpy_ctrl_tx: flume::Sender<Packet>,
 ) -> Result<()> {
+    let mut audio_focus=false;
     info!( "{} Entering channel manager",get_name());
    // waiting for initial version frame (HU is starting transmission)
     info!( "{} Waiting for HU version request...",get_name());
@@ -935,6 +936,7 @@ pub async fn ch_proxy(
                         if msg.focus_state() == AudioFocusStateType::AUDIO_FOCUS_STATE_GAIN
                         {
                             info!( "{} CMD OPEN_CHANNEL will be done next",get_name());
+                            audio_focus=true;
                             tokio::time::sleep(Duration::from_millis(HU_CONFIG_DELAY_MS)).await; //reconfiguration time for HU
                             //Open CH for all
                             for (idx, _) in srv_senders.iter().enumerate()
