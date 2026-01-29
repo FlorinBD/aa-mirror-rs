@@ -438,59 +438,32 @@ async fn tsk_scrcpy_video(
     }
     info!("SCRCPY Video entering main loop");
     let timestamp: u64 = 0;//is not used by HU
-    let mut payload: Vec<u8>=Vec::new();
     //let mut reassembler = NalReassembler::new();
     //drain all previous permits
     while let Ok(_) = ack_notify.try_recv() {}
+    //send first unacked packets
+    for _ in max_unack {
+        match read_send_packet(&mut stream, &video_tx, sid, &mut i).await {
+            Ok(()) => {
+            }
+
+            Err(e) => {
+                error!("scrcpy video read failed: {}", e);
+                return Err(e);
+            }
+        }
+    }
     loop {
 
-            //Read video frames from SCRCPY server
-            match read_scrcpy_packet(&mut stream).await {
-                Ok((pts, h264_data)) => {
-                    let key_frame = (pts & 0x4000_0000_0000_0000u64) > 0;
-                    let rec_ts = pts & 0x3FFF_FFFF_FFFF_FFFFu64;
-                    let config_frame = (pts & 0x8000_0000_0000_0000u64) > 0;
-                    let rd_len = h264_data.len();
-                    let dbg_len = min(rd_len, 16);
-                    if i < 10
-                    {
-                        if rd_len > dbg_len
-                        {
-                            let end_offset = rd_len - dbg_len;
-                            info!("Video task got frame config={:?}, act size: {}, raw slice: {:02x?}...{:02x?}",config_frame, rd_len, &h264_data[..dbg_len], &h264_data[end_offset..]);
-                        } else {
-                            info!("Video task got frame config={:?}, act size: {}, raw bytes: {:02x?}",config_frame, rd_len, &h264_data[..dbg_len]);
-                        }
-                        i = i + 1;
-                    }
-
-                    if config_frame
-                    {
-                        payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
-                        payload.extend_from_slice(&h264_data);
-                    } else {
-                        payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
-                        payload.extend_from_slice(&timestamp.to_be_bytes());
-                        payload.extend_from_slice(&h264_data);
-                    }
-
-                    let pkt_rsp = Packet {
-                        channel: sid,
-                        flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                        final_length: None,
-                        payload: std::mem::take(&mut payload),
-                    };
-                    video_tx.send_async(pkt_rsp).await?;
-                }
-                Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
-                    error!("scrcpy video stream ended");
-                    break
-                }
-                Err(e) => {
-                    error!("scrcpy video read failed: {}", e);
-                    break
-                }
+        match read_send_packet(&mut stream, &video_tx, sid, &mut i).await {
+            Ok(()) => {
             }
+
+            Err(e) => {
+                error!("scrcpy video read failed: {}", e);
+                break;
+            }
+        }
 
         match ack_notify.recv().await {
             Some(frame) => {
@@ -505,6 +478,58 @@ async fn tsk_scrcpy_video(
     }
     //reassembler.flush();
     return Ok(());
+
+    async fn read_send_packet(
+        stream: &mut TcpStream,
+        video_tx: &flume::Sender<Packet>,
+        sid:u8,
+        dbg_count: &mut i32,
+    ) -> () {
+        let timestamp: u64 = 0;//is not used by HU
+        //Read video frames from SCRCPY server
+        match read_scrcpy_packet(stream).await {
+            Ok((pts, h264_data)) => {
+                let mut payload: Vec<u8>=Vec::new();
+                let key_frame = (pts & 0x4000_0000_0000_0000u64) > 0;
+                let rec_ts = pts & 0x3FFF_FFFF_FFFF_FFFFu64;
+                let config_frame = (pts & 0x8000_0000_0000_0000u64) > 0;
+                let rd_len = h264_data.len();
+                let dbg_len = min(rd_len, 16);
+                if dbg_count < &mut 10
+                {
+                    if rd_len > dbg_len
+                    {
+                        let end_offset = rd_len - dbg_len;
+                        info!("Video task got frame config={:?}, act size: {}, raw slice: {:02x?}...{:02x?}",config_frame, rd_len, &h264_data[..dbg_len], &h264_data[end_offset..]);
+                    } else {
+                        info!("Video task got frame config={:?}, act size: {}, raw bytes: {:02x?}",config_frame, rd_len, &h264_data[..dbg_len]);
+                    }
+                    *dbg_count += 1;
+                }
+                if config_frame
+                {
+                    payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
+                    payload.extend_from_slice(&h264_data);
+                } else {
+                    payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
+                    payload.extend_from_slice(&timestamp.to_be_bytes());
+                    payload.extend_from_slice(&h264_data);
+                }
+
+                let pkt_rsp = Packet {
+                    channel: sid,
+                    flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                    final_length: None,
+                    payload,
+                };
+                video_tx.send_async(pkt_rsp).await.expect("TODO: panic message");
+            }
+            Err(e) => {
+                error!("scrcpy video read failed: {}", e);
+                Err(e).expect("TODO: panic message");
+            }
+        }
+    }
     async fn read_exact(
         stream: &mut TcpStream,
         size: usize,
@@ -596,9 +621,53 @@ async fn tsk_scrcpy_audio(
     let timestamp: u64 = 0;//is not used by HU
     //drain all previous permits
     while let Ok(_) = ack_notify.try_recv() {}
+    for _ in max_unack {
+        match read_scrcpy_packet(&mut stream).await {
+            Ok((pts, h264_data)) => {
+                let mut payload: Vec<u8>=Vec::new();
+                let key_frame = (pts & 0x4000_0000_0000_0000u64) > 0;
+                let rec_ts = pts & 0x3FFF_FFFF_FFFF_FFFFu64;
+                let config_frame = (pts & 0x8000_0000_0000_0000u64) > 0;
+                let rd_len = h264_data.len();
+                let dbg_len = min(rd_len, 16);
+                if i < 10
+                {
+                    if rd_len > dbg_len
+                    {
+                        let end_offset = rd_len - dbg_len;
+                        info!("Video task got frame config={:?}, act size: {}, raw slice: {:02x?}...{:02x?}",config_frame, rd_len, &h264_data[..dbg_len], &h264_data[end_offset..]);
+                    } else {
+                        info!("Video task got frame config={:?}, act size: {}, raw bytes: {:02x?}",config_frame, rd_len, &h264_data[..dbg_len]);
+                    }
+                    i = i + 1;
+                }
+
+                payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
+                payload.extend_from_slice(&timestamp.to_be_bytes());
+                payload.extend_from_slice(&h264_data);
+
+                let pkt_rsp = Packet {
+                    channel: sid,
+                    flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                    final_length: None,
+                    payload
+                };
+                audio_tx.send_async(pkt_rsp).await?;
+            }
+            Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
+                error!("scrcpy audio stream ended");
+                break
+            }
+            Err(e) => {
+                error!("scrcpy audio read failed: {}", e);
+                break
+            }
+        }
+    }
     loop {
             match read_scrcpy_packet(&mut stream).await {
                 Ok((pts, data)) => {
+                    let mut payload: Vec<u8>=Vec::new();
                     let rd_len = data.len();
                     let dbg_len = min(rd_len, 16);
                     if i < 5
@@ -607,7 +676,6 @@ async fn tsk_scrcpy_audio(
                         i = i + 1;
                     }
 
-                    let mut payload: Vec<u8> = Vec::new();
                     payload.extend_from_slice(&timestamp.to_be_bytes());
                     payload.extend_from_slice(&data);
                     payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) >> 8) as u8);
@@ -617,7 +685,7 @@ async fn tsk_scrcpy_audio(
                         channel: sid,
                         flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                         final_length: None,
-                        payload: payload,
+                        payload,
                     };
                     //Audio is disabled ATM
                     if let Err(_) = audio_tx.send(pkt_rsp){
