@@ -1539,6 +1539,17 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                     scrcpy_cmd.send_async(pkt).await?;
                 }
             }
+            else if message_id == MediaMessageId::MEDIA_MESSAGE_AUDIO_UNDERFLOW_NOTIFICATION  as i32
+            {
+                let data = &pkt.payload[2..]; // start of message data, without message_id
+                if  let Ok(rsp) = AudioUnderflowNotification::parse_from_bytes(&data)
+                {
+                    info!("{} Received {} message: MEDIA_MESSAGE_AUDIO_UNDERFLOW_NOTIFICATION", ch_id.to_string(), message_id);
+                }
+                else {
+                    error!("{}: Unable to deserialize MEDIA_MESSAGE_AUDIO_UNDERFLOW_NOTIFICATION", ch_id.to_string())
+                }
+            }
             else
             {
                 info!( "{} Unknown message ID: {} received", get_name(), message_id);
