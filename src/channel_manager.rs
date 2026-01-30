@@ -636,7 +636,7 @@ fn get_service_index(arr:&Vec<ServiceStatus>, ch:i32)->usize
 /// main thread doing all packet processing between HU and device
 pub async fn ch_proxy(
     mut rx_srv: Receiver<Packet>,
-    mut tx_srv: Sender<Packet>,
+    tx_srv: Sender<Packet>,
     scrcpy_cmd_tx: flume::Sender<Packet>,
     scrcpy_cmd_rx: flume::Receiver<Packet>,
     scrcpy_ctrl_tx: flume::Sender<Packet>,
@@ -884,7 +884,7 @@ pub async fn ch_proxy(
     }
     info!( "{} ServiceDiscovery done, starting AA Mirror loop",get_name());
     loop {
-        let mut pkt = rx_srv.recv().await.ok_or("rx_srv channel hung up")?;
+        let pkt = rx_srv.recv().await.ok_or("rx_srv channel hung up")?;
         if pkt.channel !=0
         {
             let ch=pkt.channel;
@@ -968,7 +968,7 @@ pub async fn ch_proxy(
 
         //check for SCRCPY CMDs
         match scrcpy_cmd_rx.try_recv() {
-            Ok(mut pkt) => {
+            Ok(pkt) => {
                 let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
                 if message_id == MESSAGE_CUSTOM_CMD  as i32
                 {

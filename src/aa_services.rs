@@ -3,7 +3,7 @@
 use std::error::Error;
 use simplelog::*;
 use std::fmt;
-use std::io::{Read, Write};
+use std::io::{Read};
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::time::{Duration, SystemTime};
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -1517,7 +1517,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                         if md_connected && audio_focus
                         {
                             audio_stream_started=false;
-                            stop_media(&tx_srv, ch_id as u8, session_id).await?;
+                            stop_media(&tx_srv, ch_id as u8).await?;
                         }
                         md_connected=false;
                     }
@@ -1578,7 +1578,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
             else if message_id == MediaMessageId::MEDIA_MESSAGE_AUDIO_UNDERFLOW_NOTIFICATION  as i32
             {
                 let data = &pkt.payload[2..]; // start of message data, without message_id
-                if  let Ok(rsp) = AudioUnderflowNotification::parse_from_bytes(&data)
+                if  let Ok(_) = AudioUnderflowNotification::parse_from_bytes(&data)
                 {
                     info!("{} Received {} message: MEDIA_MESSAGE_AUDIO_UNDERFLOW_NOTIFICATION", ch_id.to_string(), message_id);
                 }
@@ -1594,7 +1594,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
 
     }
 
-    async fn stop_media(tx: &Sender<Packet>, ch_id: u8, session_id:i32)->Result<()> {
+    async fn stop_media(tx: &Sender<Packet>, ch_id: u8)->Result<()> {
         info!( "{}, channel {:?}: Sending STOP command", get_name(), ch_id);
         let mut media_stop= Stop::new();
         let mut payload: Vec<u8>=Vec::new();
