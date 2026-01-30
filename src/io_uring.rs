@@ -604,7 +604,7 @@ async fn tsk_scrcpy_audio(
     max_unack:u32,
     sid:u8
 ) -> Result<()> {
-
+    let mut dbg_counter=0;
     info!("Starting audio server!");
     //codec metadata
     let metadata=read_exact(&mut stream, 4).await?;
@@ -623,86 +623,25 @@ async fn tsk_scrcpy_audio(
     //drain all previous permits
     while let Ok(_) = ack_notify.try_recv() {}
     for _ in 0..max_unack {
-        match read_scrcpy_packet(&mut stream).await {
-            Ok((pts, h264_data)) => {
-                let mut payload: Vec<u8>=Vec::new();
-                let key_frame = (pts & 0x4000_0000_0000_0000u64) > 0;
-                let rec_ts = pts & 0x3FFF_FFFF_FFFF_FFFFu64;
-                let config_frame = (pts & 0x8000_0000_0000_0000u64) > 0;
-                let rd_len = h264_data.len();
-                let dbg_len = min(rd_len, 16);
-                if i < 10
-                {
-                    if rd_len > dbg_len
-                    {
-                        let end_offset = rd_len - dbg_len;
-                        info!("Video task got frame config={:?}, act size: {}, raw slice: {:02x?}...{:02x?}",config_frame, rd_len, &h264_data[..dbg_len], &h264_data[end_offset..]);
-                    } else {
-                        info!("Video task got frame config={:?}, act size: {}, raw bytes: {:02x?}",config_frame, rd_len, &h264_data[..dbg_len]);
-                    }
-                    i = i + 1;
-                }
-
-                payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
-                payload.extend_from_slice(&timestamp.to_be_bytes());
-                payload.extend_from_slice(&h264_data);
-
-                let pkt_rsp = Packet {
-                    channel: sid,
-                    flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                    final_length: None,
-                    payload
-                };
-                audio_tx.send_async(pkt_rsp).await?;
+        match read_send_packet(&mut stream, &audio_tx, sid, &mut dbg_counter).await {
+            Ok(()) => {
             }
-            Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
-                error!("scrcpy audio stream ended");
-                break
-            }
+
             Err(e) => {
                 error!("scrcpy audio read failed: {}", e);
-                break
+                return Err(e);
             }
         }
     }
     loop {
-            match read_scrcpy_packet(&mut stream).await {
-                Ok((pts, data)) => {
-                    let mut payload: Vec<u8>=Vec::new();
-                    let rd_len = data.len();
-                    let dbg_len = min(rd_len, 16);
-                    if i < 5
-                    {
-                        info!("Audio task Read {} bytes: {:02x?}", rd_len, &data[..dbg_len]);
-                        i = i + 1;
-                    }
+        match read_send_packet(&mut stream, &audio_tx, sid, &mut dbg_counter).await {
+            Ok(()) => {}
 
-                    payload.extend_from_slice(&timestamp.to_be_bytes());
-                    payload.extend_from_slice(&data);
-                    payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) >> 8) as u8);
-                    payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) & 0xff) as u8);
-
-                    let pkt_rsp = Packet {
-                        channel: sid,
-                        flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                        final_length: None,
-                        payload,
-                    };
-                    //Audio is disabled ATM
-                    if let Err(_) = audio_tx.send(pkt_rsp){
-                        error!( "SCRCPY audio frame send error");
-                    };
-                }
-                Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
-                    error!("scrcpy audio stream ended");
-                    break
-                }
-                Err(e) => {
-                    error!("scrcpy audio read failed: {}", e);
-                    break
-                }
+            Err(e) => {
+                error!("scrcpy audio read failed: {}", e);
+                return Err(e);
             }
-
+        }
         match ack_notify.recv().await {
             Some(frame) => {
                 continue;
@@ -712,10 +651,52 @@ async fn tsk_scrcpy_audio(
                 return Err(Box::new(io::Error::new(io::ErrorKind::Other, "channel closed")));
             }
         }
-
-
     }
     return Ok(());
+
+    async fn read_send_packet(
+        stream: &mut TcpStream,
+        audio_tx: &flume::Sender<Packet>,
+        sid:u8,
+        dbg_count: &mut u32,
+    ) ->Result<()> {
+        let timestamp: u64 = 0;//is not used by HU
+        //Read video frames from SCRCPY server
+        match read_scrcpy_packet(stream).await {
+            Ok((pts, data)) => {
+                let mut payload: Vec<u8>=Vec::new();
+                let rd_len = data.len();
+                let dbg_len = min(rd_len, 16);
+                if dbg_count < &mut 10
+                {
+                    info!("Audio task Read {} bytes: {:02x?}", rd_len, &data[..dbg_len]);
+                    *dbg_count+=1;
+                }
+
+                payload.extend_from_slice(&timestamp.to_be_bytes());
+                payload.extend_from_slice(&data);
+                payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) >> 8) as u8);
+                payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) & 0xff) as u8);
+
+                let pkt_rsp = Packet {
+                    channel: sid,
+                    flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                    final_length: None,
+                    payload,
+                };
+                audio_tx.send(pkt_rsp).await?;
+            }
+            Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
+                error!("scrcpy audio stream ended");
+                return Err(Box::from(e));
+            }
+            Err(e) => {
+                error!("scrcpy audio read failed: {}", e);
+                return Err(Box::from(e));
+            }
+        }
+        Ok(())
+    }
     async fn read_exact(
         stream: &mut TcpStream,
         size: usize,
