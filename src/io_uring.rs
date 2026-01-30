@@ -684,7 +684,7 @@ async fn tsk_scrcpy_audio(
                     final_length: None,
                     payload,
                 };
-                audio_tx.send(pkt_rsp).await?;
+                audio_tx.send_async(pkt_rsp).await?;
             }
             Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
                 error!("scrcpy audio stream ended");
