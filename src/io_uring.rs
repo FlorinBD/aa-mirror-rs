@@ -783,9 +783,11 @@ async fn tsk_scrcpy_control(
                         payload.push(ScrcpyControlMessageType::SetDisplayPower as u8);
                         payload.push(0);
                         //stream.write_all(payload).await;
-                        if let Err(_) = stream.write_all(payload).await{
-                            error!( "tsk_scrcpy_control send error");
-                        };
+                        let (res, payload) = stream.write_all(payload).await;
+                        if let Err(e) = res {
+                            error!("tsk_scrcpy_control send error: {}", e);
+                        }
+
                         screen_off_done=true;
                     }
                     let data = &pkt.payload[2..]; // start of message data, without message_id
@@ -824,9 +826,10 @@ async fn tsk_scrcpy_control(
                                 payload.push(ScrcpyControlMessageType::InjectTouchEvent as u8);
                                 payload.extend_from_slice(&ev_bytes);
                                 //stream.write_all(payload).await;
-                                if let Err(_) = stream.write_all(payload).await{
-                                    error!( "tsk_scrcpy_control send error");
-                                };
+                                let (res, payload) = stream.write_all(payload).await;
+                                if let Err(e) = res {
+                                    error!("tsk_scrcpy_control send error: {}", e);
+                                }
                             }
                         }
                         else if rsp.touchpad_event.is_some()
@@ -860,9 +863,10 @@ async fn tsk_scrcpy_control(
                                 payload.push(ScrcpyControlMessageType::InjectTouchEvent as u8);
                                 payload.extend_from_slice(&ev_bytes);
                                 //stream.write_all(payload).await;
-                                if let Err(_) = stream.write_all(payload).await{
-                                    error!( "tsk_scrcpy_control send error");
-                                };
+                                let (res, payload) = stream.write_all(payload).await;
+                                if let Err(e) = res {
+                                    error!("tsk_scrcpy_control send error: {}", e);
+                                }
                             }
                         }
                         else if rsp.key_event.is_some()
@@ -884,9 +888,10 @@ async fn tsk_scrcpy_control(
                                 payload.push(ScrcpyControlMessageType::InjectKeycode as u8);
                                 payload.extend_from_slice(&ev_bytes);
                                 //stream.write_all(payload).await;
-                                if let Err(_) = stream.write_all(payload).await{
-                                    error!( "tsk_scrcpy_control send error");
-                                };
+                                let (res, payload) = stream.write_all(payload).await;
+                                if let Err(e) = res {
+                                    error!("tsk_scrcpy_control send error: {}", e);
+                                }
                             }
                         }
                         else {
