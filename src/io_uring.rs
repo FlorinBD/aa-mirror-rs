@@ -560,7 +560,7 @@ async fn tsk_scrcpy_video(
 
         match read_exact(stream, SCRCPY_METADATA_HEADER_LEN).await {
             // First 12 bytes = packet metadata
-            Ok((metadata)) => {
+            Ok(metadata) => {
                 //info!("SCRCPY video packet metadata: {:02x?}",&metadata);
                 if metadata.len() != SCRCPY_METADATA_HEADER_LEN {
                     error!("read_scrcpy_packet data len error, wanted {} but got {} bytes", SCRCPY_METADATA_HEADER_LEN, metadata.len());
@@ -1215,7 +1215,7 @@ async fn tsk_adb_scrcpy(
                                 {
                                     if pkt.channel == video_sid
                                     {
-                                        info!("tsk_scrcpy: video ACK recived")
+                                        info!("tsk_scrcpy: video ACK recived");
                                         if let Err(_) = tx_ack_video.try_send(1)
                                         {
                                             error!( "tsk_scrcpy video ACK send error");
@@ -1223,7 +1223,7 @@ async fn tsk_adb_scrcpy(
                                     }
                                     else if pkt.channel == audio_sid
                                     {
-                                        info!("tsk_scrcpy: audio ACK recived")
+                                        info!("tsk_scrcpy: audio ACK recived");
                                         if let Err(_) = tx_ack_audio.try_send(1)
                                         {
                                             error!( "tsk_scrcpy audio ACK send error");
