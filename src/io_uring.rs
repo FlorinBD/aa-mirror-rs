@@ -496,7 +496,9 @@ async fn tsk_scrcpy_video(
                 {
                     payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
                     payload.extend_from_slice(&h264_data);
-                } else {
+                }
+                else
+                {
                     payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
                     payload.extend_from_slice(&rec_ts.to_be_bytes());
                     payload.extend_from_slice(&h264_data);
@@ -667,7 +669,9 @@ async fn tsk_scrcpy_audio(
                 {
                     payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
                     payload.extend_from_slice(&data);
-                } else {
+                }
+                else
+                {
                     payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
                     payload.extend_from_slice(&rec_ts.to_be_bytes());
                     payload.extend_from_slice(&data);
