@@ -606,6 +606,7 @@ async fn tsk_scrcpy_audio(
         error!("SCRCPY Invalid audio codec configuration");
         return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY Invalid audio codec configuration")));
     }
+    let mut payload: Vec<u8>=Vec::new();
     //drain all previous permits
     while let Ok(_) = ack_notify.try_recv() {}
     for _ in 0..max_unack {
@@ -645,11 +646,13 @@ async fn tsk_scrcpy_audio(
         audio_tx: &flume::Sender<Packet>,
         sid:u8,
         dbg_count: &mut u32,
+        payload:&mut Vec<u8>,
     ) ->Result<()> {
         //Read video frames from SCRCPY server
         match read_scrcpy_packet(stream).await {
             Ok((pts, data)) => {
-                let mut payload: Vec<u8>=Vec::new();
+                //let mut payload: Vec<u8>=Vec::new();
+                payload.clear();
                 let rd_len = data.len();
                 let dbg_len = min(rd_len, 16);
                 let rec_ts = pts & 0x3FFF_FFFF_FFFF_FFFFu64;
