@@ -677,7 +677,7 @@ async fn tsk_scrcpy_audio(
                     }
                     *dbg_count+=1;
                 }
-                let timestamp=pts & 0x3FFF_FFFF_FFFF_FFFF;
+                let timestamp=pts & 0x3FFF_FFFF_FFFF_FFFF;//for audio we need timestamp
                 payload.extend_from_slice(&timestamp.to_be_bytes());
                 payload.extend_from_slice(&data);
                 payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) >> 8) as u8);
