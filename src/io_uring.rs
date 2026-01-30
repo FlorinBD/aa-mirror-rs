@@ -420,7 +420,7 @@ async fn tsk_scrcpy_video(
     sid:u8,
 ) -> Result<()> {
     info!("Starting video server!");
-    let mut i=0;
+    let mut dbg_counter=0;
 
     //codec metadata
     let metadata=read_exact(&mut stream, 12).await?;
@@ -442,8 +442,8 @@ async fn tsk_scrcpy_video(
     //drain all previous permits
     while let Ok(_) = ack_notify.try_recv() {}
     //send first unacked packets
-    for i in 0..max_unack {
-        match read_send_packet(&mut stream, &video_tx, sid, &mut i).await {
+    for _ in 0..max_unack {
+        match read_send_packet(&mut stream, &video_tx, sid, &mut dbg_counter).await {
             Ok(()) => {
             }
 
@@ -455,7 +455,7 @@ async fn tsk_scrcpy_video(
     }
     loop {
 
-        match read_send_packet(&mut stream, &video_tx, sid, &mut i).await {
+        match read_send_packet(&mut stream, &video_tx, sid, &mut dbg_counter).await {
             Ok(()) => {
             }
 
