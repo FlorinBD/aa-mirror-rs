@@ -371,8 +371,6 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
     dmp_level:HexdumpLevel,
     ) -> Result<()> {
     let mut ssl_handshake_done:bool=false;
-    let mut hu_read_err:bool=false;
-    let mut srv_read_err:bool=false;
     let ssl = ssl_builder().await?;
     let mut mem_buf = SslMemBuf {
         client_stream: Arc::new(Mutex::new(VecDeque::new())),
@@ -411,7 +409,6 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
         }
         //Service>HU
         Some(mut msg) = srv_rx.recv() => {
-            srv_read_err=false;
             if msg.flags&ENCRYPTED !=0
             {
                 if !ssl_handshake_done
@@ -453,7 +450,6 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
         }
             // lower priority, HU>Service
         Some(mut msg) = hu_rx.recv() => {
-            hu_read_err=false;
                 // Increment byte counters for statistics
                 // fixme: compute final_len for precise stats
                 r_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
