@@ -42,6 +42,7 @@ use protos::*;
 use protos::ControlMessageType::{self, *};
 use protobuf::{Message};
 use std::cmp::min;
+use std::sync::mpsc::TrySendError;
 use futures::future::err;
 use libc::sigdelset;
 use serde::{Deserialize, Serialize};
@@ -1214,13 +1215,37 @@ async fn tsk_adb_scrcpy(
                                 {
                                     if pkt.channel == video_sid
                                     {
-                                        tx_ack_video.try_send(1).expect("ACK send error");
                                         info!("tsk_scrcpy: video ACK recived")
+                                        match tx_ack_video.try_send(1) {
+                                            Ok(()) => {
+                                                // sent successfully
+                                            }
+                                            Err(TrySendError::Full(val)) => {
+                                                // channel is full — decide what to do with `val`
+                                                error!("tsk_scrcpy video ack channel channel full, dropping");
+                                            }
+                                            Err(TrySendError::Disconnected(val)) => {
+                                                // receiver is gone
+                                                error!("tsk_scrcpy video ack channel receiver disconnected, dropping");
+                                            }
+                                        }
                                     }
                                     else if pkt.channel == audio_sid
                                     {
-                                        tx_ack_audio.try_send(1).expect("ACK send error");
                                         info!("tsk_scrcpy: audio ACK recived")
+                                        match tx_ack_audio.try_send(1) {
+                                            Ok(()) => {
+                                                // sent successfully
+                                            }
+                                            Err(TrySendError::Full(val)) => {
+                                                // channel is full — decide what to do with `val`
+                                                error!("tsk_scrcpy audio ack channel channel full, dropping");
+                                            }
+                                            Err(TrySendError::Disconnected(val)) => {
+                                                // receiver is gone
+                                                error!("tsk_scrcpy audio ack channel receiver disconnected, dropping");
+                                            }
+                                        }
                                     }
                                     else
                                     {

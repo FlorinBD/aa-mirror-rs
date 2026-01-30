@@ -9,6 +9,7 @@ use std::ffi::CString;
 use std::io::{Read, Write};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::mpmc::TrySendError;
 use std::sync::Mutex;
 use std::time::Duration;
 use flume::TryRecvError;
@@ -895,7 +896,10 @@ pub async fn ch_proxy(
             let idx=get_service_index(&channel_status, ch as i32);
             if idx !=255
             {
-                srv_senders[idx].send(pkt).await.expect("Error sending message to service");
+                //srv_senders[idx].send(pkt).await.expect("Error sending message to service");
+                if let Err(_) = srv_senders[idx].send(pkt).await{
+                    error!( "{} srv send error",get_name());
+                };
             }
             else {
                 error!( "{} Invalid channel {}",get_name(), ch);
@@ -990,7 +994,10 @@ pub async fn ch_proxy(
                                 final_length: None,
                                 payload: std::mem::take(&mut payload),
                             };
-                            srv_senders[idx].send(pkt_rsp).await.expect("Error sending message to service");
+                            //srv_senders[idx].send(pkt_rsp).await.expect("Error sending message to service");
+                            if let Err(_) = srv_senders[idx].send(pkt_rsp).await{
+                                error!( "{} srv send error",get_name());
+                            };
                         }
                         else {
                             error!( "{} Invalid channel {}",get_name(), ch);
@@ -1007,7 +1014,10 @@ pub async fn ch_proxy(
                                 final_length: None,
                                 payload: std::mem::take(&mut payload),
                             };
-                            srv_senders[idx].send(pkt_rsp).await.expect("Error sending message to service");
+                            //srv_senders[idx].send(pkt_rsp).await.expect("Error sending message to service");
+                            if let Err(_) = srv_senders[idx].send(pkt_rsp).await{
+                                error!( "{} srv send error",get_name());
+                            };
                         }
                         else {
                             error!( "{} Invalid channel {}",get_name(), ch);
@@ -1029,7 +1039,10 @@ pub async fn ch_proxy(
                                 final_length: None,
                                 payload: std::mem::take(&mut payload),
                             };
-                            srv_senders[idx].send(pkt_rsp).await.expect("Error sending message to service");
+                            //srv_senders[idx].send(pkt_rsp).await.expect("Error sending message to service");
+                            if let Err(_) = srv_senders[idx].send(pkt_rsp).await{
+                                error!( "{} srv send error",get_name());
+                            };
                         }
                         else {
                             error!( "{} Invalid channel {}",get_name(), ch);
@@ -1046,7 +1059,10 @@ pub async fn ch_proxy(
                                 final_length: None,
                                 payload: std::mem::take(&mut payload),
                             };
-                            srv_senders[idx].send(pkt_rsp).await.expect("Error sending message to service");
+                            //srv_senders[idx].send(pkt_rsp).await.expect("Error sending message to service");
+                            if let Err(_) = srv_senders[idx].send(pkt_rsp).await{
+                                error!( "{} srv send error",get_name());
+                            };
                         }
                         else {
                             error!( "{} Invalid channel {}",get_name(), ch);
