@@ -610,7 +610,7 @@ async fn tsk_scrcpy_audio(
     //drain all previous permits
     while let Ok(_) = ack_notify.try_recv() {}
     for _ in 0..max_unack {
-        match read_send_packet(&mut stream, &audio_tx, sid, &mut dbg_counter).await {
+        match read_send_packet(&mut stream, &audio_tx, sid, &mut dbg_counter, &mut payload).await {
             Ok(()) => {
             }
 
@@ -621,7 +621,7 @@ async fn tsk_scrcpy_audio(
         }
     }
     loop {
-        match read_send_packet(&mut stream, &audio_tx, sid, &mut dbg_counter).await {
+        match read_send_packet(&mut stream, &audio_tx, sid, &mut dbg_counter, &mut payload).await {
             Ok(()) => {}
 
             Err(e) => {
