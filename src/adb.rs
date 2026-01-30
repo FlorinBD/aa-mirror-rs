@@ -1,6 +1,5 @@
-use std::borrow::Cow;
 use std::ffi::OsStr;
-use std::net::{IpAddr, Ipv4Addr, SocketAddrV4};
+use std::net::{Ipv4Addr, SocketAddrV4};
 use std::process::Stdio;
 use std::time::{Duration};
 use log::error;
