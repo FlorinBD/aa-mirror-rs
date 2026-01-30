@@ -772,7 +772,7 @@ pub async fn ch_proxy(
                         };
                         let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                         srv_senders.push(tx);
-                        srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_audio_guidance(ch_id,false, tx_srv.clone(), rx, audio_cfg)));
+                        srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_audio_guidance(ch_id,true, tx_srv.clone(), rx, audio_cfg)));
                     }
                     else if srv_type == AUDIO_STREAM_MEDIA
                     {
@@ -788,7 +788,7 @@ pub async fn ch_proxy(
                         audio_codec_params.sid=ch_id as u8;
                         let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                         srv_senders.push(tx);
-                        srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_audio_streaming(ch_id,false, tx_srv.clone(), rx, scrcpy_cmd_tx.clone(), audio_cfg, audio_codec_params.clone())));
+                        srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_audio_streaming(ch_id,true, tx_srv.clone(), rx, scrcpy_cmd_tx.clone(), audio_cfg, audio_codec_params.clone())));
                     }
                     else {
                         error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
