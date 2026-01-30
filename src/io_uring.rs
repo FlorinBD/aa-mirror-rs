@@ -426,12 +426,11 @@ async fn tsk_scrcpy_video(
     }
     info!("SCRCPY Video entering main loop");
     //let mut reassembler = NalReassembler::new();
-    let mut payload: Vec<u8>=Vec::new();
     //drain all previous permits
     while let Ok(_) = ack_notify.try_recv() {}
     //send first unacked packets
     for _ in 0..max_unack {
-        match read_send_packet(&mut stream, &video_tx, sid, &mut dbg_counter, &mut payload).await {
+        match read_send_packet(&mut stream, &video_tx, sid, &mut dbg_counter).await {
             Ok(()) => {
             }
 
@@ -443,7 +442,7 @@ async fn tsk_scrcpy_video(
     }
     loop {
 
-        match read_send_packet(&mut stream, &video_tx, sid, &mut dbg_counter, &mut payload).await {
+        match read_send_packet(&mut stream, &video_tx, sid, &mut dbg_counter).await {
             Ok(()) => {
             }
 
@@ -472,13 +471,11 @@ async fn tsk_scrcpy_video(
         video_tx: &flume::Sender<Packet>,
         sid:u8,
         dbg_count: &mut u32,
-        payload:&mut Vec<u8>,
     ) ->Result<()> {
         //Read video frames from SCRCPY server
         match read_scrcpy_packet(stream).await {
             Ok((pts, h264_data)) => {
-                //let mut payload: Vec<u8>=Vec::new();
-                payload.clear();
+                let mut payload: Vec<u8>=Vec::new();
                 let key_frame = (pts & 0x4000_0000_0000_0000u64) > 0;
                 let rec_ts = pts & 0x3FFF_FFFF_FFFF_FFFFu64;
                 let config_frame = (pts & 0x8000_0000_0000_0000u64) > 0;
@@ -609,11 +606,10 @@ async fn tsk_scrcpy_audio(
         error!("SCRCPY Invalid audio codec configuration");
         return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY Invalid audio codec configuration")));
     }
-    let mut payload: Vec<u8>=Vec::new();
     //drain all previous permits
     while let Ok(_) = ack_notify.try_recv() {}
     for _ in 0..max_unack {
-        match read_send_packet(&mut stream, &audio_tx, sid, &mut dbg_counter, &mut payload).await {
+        match read_send_packet(&mut stream, &audio_tx, sid, &mut dbg_counter).await {
             Ok(()) => {
             }
 
@@ -624,7 +620,7 @@ async fn tsk_scrcpy_audio(
         }
     }
     loop {
-        match read_send_packet(&mut stream, &audio_tx, sid, &mut dbg_counter, &mut payload).await {
+        match read_send_packet(&mut stream, &audio_tx, sid, &mut dbg_counter).await {
             Ok(()) => {}
 
             Err(e) => {
@@ -649,13 +645,11 @@ async fn tsk_scrcpy_audio(
         audio_tx: &flume::Sender<Packet>,
         sid:u8,
         dbg_count: &mut u32,
-        payload:&mut Vec<u8>,
     ) ->Result<()> {
         //Read video frames from SCRCPY server
         match read_scrcpy_packet(stream).await {
             Ok((pts, data)) => {
-                //let mut payload: Vec<u8>=Vec::new();
-                payload.clear();
+                let mut payload: Vec<u8>=Vec::new();
                 let rd_len = data.len();
                 let dbg_len = min(rd_len, 16);
                 let rec_ts = pts & 0x3FFF_FFFF_FFFF_FFFFu64;
