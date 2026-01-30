@@ -326,7 +326,7 @@ async fn flatten<T>(handle: &mut JoinHandle<Result<T>>, dbg_info:String) -> Resu
     match handle.await {
         Ok(Ok(result)) => Ok(result),
         Ok(Err(err)) => Err(err),
-        Err(er) => Err(format!("task handling failed for {}", dbg_info).into()),
+        Err(er) => Err(format!("task handling failed for {} with error: {:?}", dbg_info, err).into()),
     }
 }
 
@@ -467,7 +467,7 @@ async fn tsk_scrcpy_video(
         }
 
         match ack_notify.recv().await {
-            Some(frame) => {
+            Some(_) => {
                 continue;
             }
             None => {
@@ -619,8 +619,6 @@ async fn tsk_scrcpy_audio(
         error!("SCRCPY Invalid audio codec configuration");
         return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY Invalid audio codec configuration")));
     }
-    let mut i=0;
-    let timestamp: u64 = 0;//is not used by HU
     //drain all previous permits
     while let Ok(_) = ack_notify.try_recv() {}
     for _ in 0..max_unack {
@@ -644,7 +642,7 @@ async fn tsk_scrcpy_audio(
             }
         }
         match ack_notify.recv().await {
-            Some(frame) => {
+            Some(_) => {
                 continue;
             }
             None => {
