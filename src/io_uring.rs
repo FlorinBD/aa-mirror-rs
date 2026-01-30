@@ -485,7 +485,6 @@ async fn tsk_scrcpy_video(
         sid:u8,
         dbg_count: &mut u32,
     ) ->Result<()> {
-        let timestamp: u64 = 0;//is not used by HU
         //Read video frames from SCRCPY server
         match read_scrcpy_packet(stream).await {
             Ok((pts, h264_data)) => {
@@ -511,6 +510,7 @@ async fn tsk_scrcpy_video(
                     payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
                     payload.extend_from_slice(&h264_data);
                 } else {
+                    let timestamp=pts & 0x3FFF_FFFF_FFFF_FFFF;
                     payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
                     payload.extend_from_slice(&timestamp.to_be_bytes());
                     payload.extend_from_slice(&h264_data);
@@ -660,7 +660,6 @@ async fn tsk_scrcpy_audio(
         sid:u8,
         dbg_count: &mut u32,
     ) ->Result<()> {
-        let timestamp: u64 = 0;//is not used by HU
         //Read video frames from SCRCPY server
         match read_scrcpy_packet(stream).await {
             Ok((pts, data)) => {
@@ -678,7 +677,7 @@ async fn tsk_scrcpy_audio(
                     }
                     *dbg_count+=1;
                 }
-
+                let timestamp=pts & 0x3FFF_FFFF_FFFF_FFFF;
                 payload.extend_from_slice(&timestamp.to_be_bytes());
                 payload.extend_from_slice(&data);
                 payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) >> 8) as u8);
