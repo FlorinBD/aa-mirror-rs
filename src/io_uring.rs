@@ -323,7 +323,7 @@ async fn flatten<T>(handle: &mut JoinHandle<Result<T>>, dbg_info:String) -> Resu
     match handle.await {
         Ok(Ok(result)) => Ok(result),
         Ok(Err(err)) => Err(err),
-        Err(er) => Err(format!("task handling failed for {} with error: {:?}", dbg_info, err).into()),
+        Err(er) => Err(format!("task handling failed for {} with error: {:?}", dbg_info, er).into()),
     }
 }
 
