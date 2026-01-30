@@ -31,7 +31,7 @@ use protobuf::text_format::print_to_string_pretty;
 use protobuf::{Enum, Message, MessageDyn};
 use tokio::sync::{mpsc};
 use protos::ControlMessageType::{self, *};
-use crate::aa_services::{VideoCodecResolution::*, VideoFPS::*, AudioStream::*, AudioConfig, MediaCodec::*, ServiceType, CommandState, ServiceStatus, th_bluetooth, VideoStreamingParams, AudioStreamingParams};
+use crate::aa_services::{VideoCodecResolution::*, VideoFPS::*, AudioStream::*, AudioStream, AudioConfig, MediaCodec::*, ServiceType, CommandState, ServiceStatus, th_bluetooth, VideoStreamingParams, AudioStreamingParams};
 use crate::aa_services::{th_input_source, th_media_sink_audio_guidance, th_media_sink_audio_streaming, th_media_sink_video, th_media_source, th_sensor_source, th_vendor_extension};
 use crate::config::HU_CONFIG_DELAY_MS;
 use crate::config_types::HexdumpLevel;
