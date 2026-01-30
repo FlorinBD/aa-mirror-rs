@@ -224,19 +224,10 @@ pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, 
                             payload: payload,
                         };
                         //tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
-                        match  tx_srv.send(pkt_rsp).await {
-                            Ok(()) => {
-                                // sent successfully
-                            }
-                            Err(TrySendError::Full(val)) => {
-                                // channel is full — decide what to do with `val`
-                                error!("{}: channel full, dropping", get_name());
-                            }
-                            Err(TrySendError::Disconnected(val)) => {
-                                // receiver is gone
-                                error!("{}: receiver disconnected, dropping", get_name());
-                            }
-                        }
+                        if let Err(_) = tx_srv.send(pkt_rsp).await
+                        {
+                            error!( "{} mpsc send error", get_name());
+                        };
                     }
             }
             else {
@@ -979,19 +970,10 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                                 payload: payload,
                             };
                             //tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
-                            match  tx_srv.send(pkt_rsp).await {
-                                Ok(()) => {
-                                    // sent successfully
-                                }
-                                Err(TrySendError::Full(val)) => {
-                                    // channel is full — decide what to do with `val`
-                                    error!("{}: channel full, dropping", get_name());
-                                }
-                                Err(TrySendError::Disconnected(val)) => {
-                                    // receiver is gone
-                                    error!("{}: receiver disconnected, dropping", get_name());
-                                }
-                            }
+                            if let Err(_) = tx_srv.send(pkt_rsp).await
+                            {
+                                error!( "{} mpsc send error", get_name());
+                            };
                         }
                     }
                 }

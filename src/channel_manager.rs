@@ -9,7 +9,6 @@ use std::ffi::CString;
 use std::io::{Read, Write};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
-use std::sync::mpmc::TrySendError;
 use std::sync::Mutex;
 use std::time::Duration;
 use flume::TryRecvError;
