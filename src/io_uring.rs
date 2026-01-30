@@ -442,7 +442,7 @@ async fn tsk_scrcpy_video(
     //drain all previous permits
     while let Ok(_) = ack_notify.try_recv() {}
     //send first unacked packets
-    for _ in max_unack {
+    for i in 0..max_unack {
         match read_send_packet(&mut stream, &video_tx, sid, &mut i).await {
             Ok(()) => {
             }
@@ -484,7 +484,7 @@ async fn tsk_scrcpy_video(
         video_tx: &flume::Sender<Packet>,
         sid:u8,
         dbg_count: &mut i32,
-    ) -> () {
+    ) ->Result<()> {
         let timestamp: u64 = 0;//is not used by HU
         //Read video frames from SCRCPY server
         match read_scrcpy_packet(stream).await {
@@ -522,13 +522,15 @@ async fn tsk_scrcpy_video(
                     final_length: None,
                     payload,
                 };
-                video_tx.send_async(pkt_rsp).await.expect("TODO: panic message");
+                video_tx.send_async(pkt_rsp).await?;
             }
             Err(e) => {
-                error!("scrcpy video read failed: {}", e);
-                Err(e).expect("TODO: panic message");
+                error!("scrcpy video read packet failed: {}", e);
+                //Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY error reading packet")))
+                return Err(Box::from(e));
             }
         }
+        Ok(())
     }
     async fn read_exact(
         stream: &mut TcpStream,
@@ -621,7 +623,7 @@ async fn tsk_scrcpy_audio(
     let timestamp: u64 = 0;//is not used by HU
     //drain all previous permits
     while let Ok(_) = ack_notify.try_recv() {}
-    for _ in max_unack {
+    for _ in 0..max_unack {
         match read_scrcpy_packet(&mut stream).await {
             Ok((pts, h264_data)) => {
                 let mut payload: Vec<u8>=Vec::new();
