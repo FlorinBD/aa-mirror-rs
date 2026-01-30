@@ -3,17 +3,15 @@ use humantime::format_duration;
 use simplelog::*;
 use std::cell::RefCell;
 use std::fmt::Debug;
-use std::io::stderr;
 use std::io;
 use std::marker::PhantomData;
-use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use std::rc::Rc;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::broadcast::Sender as BroadcastSender;
 use tokio::sync::mpsc::{Receiver, Sender};
-use tokio::sync::{broadcast, mpsc, oneshot, Mutex, Notify};
+use tokio::sync::{mpsc, oneshot, Mutex};
 use tokio::task::JoinHandle;
 use tokio::time::{sleep, timeout};
 use tokio_uring::buf::BoundedBuf;
@@ -24,23 +22,16 @@ use tokio_uring::net::TcpListener;
 use tokio_uring::net::TcpStream;
 use tokio_uring::BufResult;
 use tokio_uring::UnsubmittedWrite;
-use port_check::is_port_reachable_with_timeout;
-use tokio::net::ToSocketAddrs;
 use crate::{adb};
 use tokio::process::Command;
-use tokio::net::TcpStream as TokioTcpStream;
-use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
-use tokio::sync::broadcast::error::TryRecvError;
-use std::str::FromStr;
-use tokio_util::bytes::{BufMut, BytesMut};
-use crate::aa_services::{VideoStreamingParams, AudioStreamingParams, CommandState, ServiceType};
+use tokio::io::{AsyncReadExt, BufReader};
+use tokio_util::bytes::{BytesMut};
+use crate::aa_services::{VideoStreamingParams, AudioStreamingParams};
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use protos::*;
 use protos::ControlMessageType::{self, *};
 use protobuf::{Message};
 use std::cmp::min;
-use std::sync::mpsc::TrySendError;
-use futures::future::err;
 use libc::sigdelset;
 use serde::{Deserialize, Serialize};
 use crate::h264_reader::NalReassembler;
@@ -60,7 +51,6 @@ use crate::config::{Action, AppConfig, SharedConfig, ADB_DEVICE_PORT, SCRCPY_VER
 use crate::config::{TCP_DHU_PORT, TCP_MD_SERVER_PORT};
 use crate::channel_manager::{endpoint_reader, ch_proxy, packet_tls_proxy, ENCRYPTED, FRAME_TYPE_CONTROL, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
 use crate::channel_manager::Packet;
-use crate::config_types::HexdumpLevel;
 use crate::usb_stream::{UsbStreamRead, UsbStreamWrite};
 
 // tokio_uring::fs::File and tokio_uring::net::TcpStream are using different
@@ -564,7 +554,7 @@ async fn tsk_scrcpy_video(
                 let pts = u64::from_be_bytes(metadata[0..8].try_into().unwrap());
                 let packet_size = u32::from_be_bytes(metadata[8..].try_into().unwrap()) as usize;
                 match read_exact(stream, packet_size).await {
-                    Ok((h264_data)) => {
+                    Ok(h264_data) => {
                         // Read full packet
                         if h264_data.len() != packet_size {
                             error!("read_scrcpy_packet data len error, wanted {} but got {} bytes", packet_size, h264_data.len());
@@ -725,7 +715,7 @@ async fn tsk_scrcpy_audio(
 
         match read_exact(stream, SCRCPY_METADATA_HEADER_LEN).await {
             // First 12 bytes = packet metadata
-            Ok((metadata)) => {
+            Ok(metadata) => {
                 //info!("SCRCPY video packet metadata: {:02x?}",&metadata);
                 if metadata.len() != SCRCPY_METADATA_HEADER_LEN {
                     error!("read_scrcpy_packet data len error, wanted {} but got {} bytes", SCRCPY_METADATA_HEADER_LEN, metadata.len());
@@ -733,7 +723,7 @@ async fn tsk_scrcpy_audio(
                 let pts = u64::from_be_bytes(metadata[0..8].try_into().unwrap());
                 let packet_size = u32::from_be_bytes(metadata[8..].try_into().unwrap()) as usize;
                 match read_exact(stream, packet_size).await {
-                    Ok((h264_data)) => {
+                    Ok(h264_data) => {
                         // Read full packet
                         if h264_data.len() != packet_size {
                             error!("read_scrcpy_packet data len error, wanted {} but got {} bytes", packet_size, h264_data.len());
@@ -783,8 +773,10 @@ async fn tsk_scrcpy_control(
                         let mut payload: Vec<u8> = Vec::new();
                         payload.push(ScrcpyControlMessageType::SetDisplayPower as u8);
                         payload.push(0);
-                        stream.write_all(payload).await;
-
+                        //stream.write_all(payload).await;
+                        if let Err(_) = stream.write_all(payload).await{
+                            error!( "tsk_scrcpy_control send error");
+                        };
                         screen_off_done=true;
                     }
                     let data = &pkt.payload[2..]; // start of message data, without message_id
@@ -822,7 +814,10 @@ async fn tsk_scrcpy_control(
                                 let mut payload: Vec<u8> = Vec::new();
                                 payload.push(ScrcpyControlMessageType::InjectTouchEvent as u8);
                                 payload.extend_from_slice(&ev_bytes);
-                                stream.write_all(payload).await;
+                                //stream.write_all(payload).await;
+                                if let Err(_) = stream.write_all(payload).await{
+                                    error!( "tsk_scrcpy_control send error");
+                                };
                             }
                         }
                         else if rsp.touchpad_event.is_some()
@@ -855,7 +850,10 @@ async fn tsk_scrcpy_control(
                                 let mut payload: Vec<u8> = Vec::new();
                                 payload.push(ScrcpyControlMessageType::InjectTouchEvent as u8);
                                 payload.extend_from_slice(&ev_bytes);
-                                stream.write_all(payload).await;
+                                //stream.write_all(payload).await;
+                                if let Err(_) = stream.write_all(payload).await{
+                                    error!( "tsk_scrcpy_control send error");
+                                };
                             }
                         }
                         else if rsp.key_event.is_some()
@@ -876,7 +874,10 @@ async fn tsk_scrcpy_control(
                                 let mut payload: Vec<u8> = Vec::new();
                                 payload.push(ScrcpyControlMessageType::InjectKeycode as u8);
                                 payload.extend_from_slice(&ev_bytes);
-                                stream.write_all(payload).await;
+                                //stream.write_all(payload).await;
+                                if let Err(_) = stream.write_all(payload).await{
+                                    error!( "tsk_scrcpy_control send error");
+                                };
                             }
                         }
                         else {

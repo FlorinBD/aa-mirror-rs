@@ -5,14 +5,11 @@ use simplelog::*;
 use std::collections::VecDeque;
 use std::{fmt};
 use std::cmp::PartialEq;
-use std::ffi::CString;
 use std::io::{Read, Write};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
-use flume::TryRecvError;
-use futures::future::err;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -25,13 +22,12 @@ use crate::channel_manager::protos::auth_response::Status::*;
 use crate::channel_manager::protos::*;
 use crate::channel_manager::protos::Config as ChConfig;
 use crate::channel_manager::AudioStreamType::*;
-use crate::channel_manager::ByeByeReason::USER_SELECTION;
 use crate::channel_manager::MessageStatus;
 use protobuf::text_format::print_to_string_pretty;
 use protobuf::{Enum, Message, MessageDyn};
 use tokio::sync::{mpsc};
 use protos::ControlMessageType::{self, *};
-use crate::aa_services::{VideoCodecResolution::*, VideoFPS::*, AudioStream::*, AudioStream, AudioConfig, MediaCodec::*, ServiceType, CommandState, ServiceStatus, th_bluetooth, VideoStreamingParams, AudioStreamingParams};
+use crate::aa_services::{VideoCodecResolution::*, VideoFPS::*, AudioStream, AudioConfig, MediaCodec::*, ServiceType, CommandState, ServiceStatus, th_bluetooth, VideoStreamingParams, AudioStreamingParams};
 use crate::aa_services::{th_input_source, th_media_sink_audio_guidance, th_media_sink_audio_streaming, th_media_sink_video, th_media_source, th_sensor_source, th_vendor_extension};
 use crate::config::HU_CONFIG_DELAY_MS;
 use crate::config_types::HexdumpLevel;
@@ -364,7 +360,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
     mut hu_rx: Receiver<Packet>,
     mut srv_rx: Receiver<Packet>,
     srv_tx: Sender<Packet>,
-    mut scrcpy_rx: flume::Receiver<Packet>,
+    scrcpy_rx: flume::Receiver<Packet>,
     r_statistics: Arc<AtomicUsize>,
     w_statistics: Arc<AtomicUsize>,
     dmp_level:HexdumpLevel,
