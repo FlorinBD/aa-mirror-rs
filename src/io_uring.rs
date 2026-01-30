@@ -526,7 +526,6 @@ async fn tsk_scrcpy_video(
             }
             Err(e) => {
                 error!("scrcpy video read packet failed: {}", e);
-                //Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY error reading packet")))
                 return Err(Box::from(e));
             }
         }
