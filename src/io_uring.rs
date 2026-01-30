@@ -483,7 +483,7 @@ async fn tsk_scrcpy_video(
         stream: &mut TcpStream,
         video_tx: &flume::Sender<Packet>,
         sid:u8,
-        dbg_count: &mut i32,
+        dbg_count: &mut u32,
     ) ->Result<()> {
         let timestamp: u64 = 0;//is not used by HU
         //Read video frames from SCRCPY server
