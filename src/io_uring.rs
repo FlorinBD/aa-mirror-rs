@@ -1124,8 +1124,6 @@ async fn tsk_adb_scrcpy(
                 let (done_th_tx_video, mut done_th_rx_video) = oneshot::channel();
                 let (done_th_tx_audio, mut done_th_rx_audio) = oneshot::channel();
                 let (done_th_tx_ctrl, mut done_th_rx_ctrl) = oneshot::channel();
-                let rx_cmd_video = srv_cmd_rx_scrcpy.clone();
-                let rx_cmd_audio = srv_cmd_rx_scrcpy.clone();
                 let rx_cmd_ctrl = rx_scrcpy_ctrl.clone();
                 //mpsc channels for ACK notification, to maintain frame window
                 let mut audio_max_unack_mpsc = 1usize;
@@ -1184,7 +1182,6 @@ async fn tsk_adb_scrcpy(
                             if message_id == MESSAGE_CUSTOM_CMD as i32
                             {
                                 let cmd_id: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
-                                let data = &pkt.payload[4..]; // start of message data, without message_id
                                 if cmd_id == CustomCommand::CMD_STOP_VIDEO_RECORDING as i32
                                 {
 
@@ -1206,7 +1203,7 @@ async fn tsk_adb_scrcpy(
                             {
                                 //info!("{} Received {} message", sid.to_string(), message_id);
                                 let data = &pkt.payload[2..]; // start of message data, without message_id
-                                if let Ok(rsp) = Ack::parse_from_bytes(&data)
+                                if let Ok(_) = Ack::parse_from_bytes(&data)
                                 {
                                     if pkt.channel == video_sid
                                     {
