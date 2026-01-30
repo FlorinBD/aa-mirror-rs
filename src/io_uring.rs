@@ -1077,6 +1077,7 @@ async fn tsk_adb_scrcpy(
             }
             //AVC base profile, no B frames, only I and P frames, low-latency is MANDATORY
             let video_codec_options=format!("profile:int=1,level:int=512,i-frame-interval:int={},low-latency:int=1,max-bframes:int=0",video_codec_params.fps);
+            let audio_codec_options="aac-profile:int=2";
             let mut cmd_shell:Vec<String> = vec![];
             cmd_shell.push("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar".to_string());
             cmd_shell.push("app_process".to_string());
@@ -1100,6 +1101,7 @@ async fn tsk_adb_scrcpy(
             cmd_shell.push(format!("audio_bit_rate={}", audio_codec_params.bitrate));
             cmd_shell.push(format!("max_size={}", video_codec_params.res_w));
             cmd_shell.push("video_codec=h264".to_string());
+            cmd_shell.push(format!("audio_codec_options={}", audio_codec_options.to_string()));
             cmd_shell.push(format!("video_codec_options={}", video_codec_options.to_string()));
             cmd_shell.push(format!("video_bit_rate={}", video_bitrate));//video_codec_params.bitrate
             cmd_shell.push(format!("new_display={}x{}/{}", video_codec_params.res_w, video_codec_params.res_h, video_codec_params.dpi));
