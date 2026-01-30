@@ -497,9 +497,8 @@ async fn tsk_scrcpy_video(
                     payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
                     payload.extend_from_slice(&h264_data);
                 } else {
-                    let timestamp=pts & 0x3FFF_FFFF_FFFF_FFFF;
                     payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
-                    payload.extend_from_slice(&timestamp.to_be_bytes());
+                    payload.extend_from_slice(&rec_ts.to_be_bytes());
                     payload.extend_from_slice(&h264_data);
                 }
 
@@ -651,6 +650,8 @@ async fn tsk_scrcpy_audio(
                 let mut payload: Vec<u8>=Vec::new();
                 let rd_len = data.len();
                 let dbg_len = min(rd_len, 16);
+                let rec_ts = pts & 0x3FFF_FFFF_FFFF_FFFFu64;
+                let config_frame = (pts & 0x8000_0000_0000_0000u64) > 0;
                 if dbg_count < &mut 10
                 {
                     if rd_len > dbg_len
@@ -662,11 +663,15 @@ async fn tsk_scrcpy_audio(
                     }
                     *dbg_count+=1;
                 }
-                let timestamp=pts & 0x3FFF_FFFF_FFFF_FFFF;//for audio we need timestamp
-                payload.extend_from_slice(&timestamp.to_be_bytes());
-                payload.extend_from_slice(&data);
-                payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) >> 8) as u8);
-                payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) & 0xff) as u8);
+                if config_frame
+                {
+                    payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
+                    payload.extend_from_slice(&data);
+                } else {
+                    payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
+                    payload.extend_from_slice(&rec_ts.to_be_bytes());
+                    payload.extend_from_slice(&data);
+                }
 
                 let pkt_rsp = Packet {
                     channel: sid,
