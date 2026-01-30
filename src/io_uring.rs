@@ -435,7 +435,6 @@ async fn tsk_scrcpy_video(
         return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY Invalid Video codec configuration")));
     }
     info!("SCRCPY Video entering main loop");
-    let timestamp: u64 = 0;//is not used by HU
     //let mut reassembler = NalReassembler::new();
     //drain all previous permits
     while let Ok(_) = ack_notify.try_recv() {}
@@ -765,7 +764,7 @@ async fn tsk_scrcpy_audio(
 }
 
 async fn tsk_scrcpy_control(
-    mut stream: TcpStream,
+    stream: TcpStream,
     cmd_rx: flume::Receiver<Packet>,
     screen_size:ScrcpySize,
 ) -> Result<()> {
@@ -904,7 +903,7 @@ async fn tsk_scrcpy_control(
 }
 async fn tsk_adb_scrcpy(
     media_tx: flume::Sender<Packet>,
-    mut srv_cmd_rx_scrcpy: flume::Receiver<Packet>,
+    srv_cmd_rx_scrcpy: flume::Receiver<Packet>,
     srv_cmd_tx: flume::Sender<Packet>,
     rx_scrcpy_ctrl: flume::Receiver<Packet>,
     config: AppConfig,
@@ -1107,13 +1106,13 @@ async fn tsk_adb_scrcpy(
             {
                 tokio::time::sleep(Duration::from_secs(1)).await;//give some time to start sockets
                 let addr = format!("127.0.0.1:{}", SCRCPY_PORT).parse().unwrap();
-                let mut video_stream = TcpStream::connect(addr).await?;
+                let video_stream = TcpStream::connect(addr).await?;
                 video_stream.set_nodelay(true)?;
                 let addr = format!("127.0.0.1:{}", SCRCPY_PORT).parse().unwrap();
-                let mut audio_stream = TcpStream::connect(addr).await?;
+                let audio_stream = TcpStream::connect(addr).await?;
                 audio_stream.set_nodelay(true)?;
                 let addr = format!("127.0.0.1:{}", SCRCPY_PORT).parse().unwrap();
-                let mut ctrl_stream = TcpStream::connect(addr).await?;
+                let ctrl_stream = TcpStream::connect(addr).await?;
                 ctrl_stream.set_nodelay(true)?;
                 info!("SCRCPY connected to all 3 sockets");
                 let hnd_scrcpy_video;

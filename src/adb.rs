@@ -6,7 +6,6 @@ use std::time::{Duration, Instant};
 use futures::TryStreamExt;
 use log::error;
 use port_check::is_port_reachable_with_timeout;
-use serde_json::Value;
 use simplelog::info;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 use tokio::process::Command;
