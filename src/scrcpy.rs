@@ -518,6 +518,7 @@ async fn tsk_scrcpy_control(
                 info!("tsk_scrcpy_control Received command id {:?}", message_id);
                 if message_id == InputMessageId::INPUT_MESSAGE_INPUT_REPORT  as i32
                 {
+                    //FIXME do it on first video frame, not on first touch event
                     if !screen_off_done {
 
                         let mut payload: Vec<u8> = Vec::new();
