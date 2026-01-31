@@ -796,7 +796,6 @@ pub async fn ch_proxy(
                         VideoCodecResolutionType::VIDEO_1080x1920=>{ video_codec_params.bitrate =16_000_000; video_codec_params.res_w=1920; video_codec_params.res_h=1080; Video_1080x1920},
                         _=>{ video_codec_params.bitrate =4_000_000; video_codec_params.res_w=800; video_codec_params.res_h=480; Video_800x480},
                     };
-
                     let _=match proto_srv.media_sink_service.video_configs[0].video_codec_type() {
                         MediaCodecType::MEDIA_CODEC_VIDEO_H264_BP=>VIDEO_H264_BP,
                         MediaCodecType::MEDIA_CODEC_VIDEO_H265=>VIDEO_H265,
