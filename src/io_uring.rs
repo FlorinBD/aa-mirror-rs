@@ -602,7 +602,7 @@ async fn tsk_scrcpy_audio(
         .filter(|c| c.is_ascii_graphic() || *c == ' ')
         .collect();
     info!("SCRCPY Audio codec id: {}", codec_id);
-    if codec_id != "aac".to_string() {
+    if codec_id != "raw".to_string() {
         error!("SCRCPY Invalid audio codec configuration");
         return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY Invalid audio codec configuration")));
     }
