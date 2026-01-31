@@ -1225,7 +1225,7 @@ async fn tsk_adb_scrcpy(
                                         info!("tsk_scrcpy: video ACK recived");
                                         if let Err(_) = tx_ack_video.try_send(1)
                                         {
-                                            error!( "tsk_scrcpy video ACK send error");
+                                            error!( "tsk_scrcpy video ACK send error, buffer full?");
                                         };
                                     }
                                     else if pkt.channel == audio_sid
@@ -1233,7 +1233,7 @@ async fn tsk_adb_scrcpy(
                                         info!("tsk_scrcpy: audio ACK recived");
                                         if let Err(_) = tx_ack_audio.try_send(1)
                                         {
-                                            error!( "tsk_scrcpy audio ACK send error");
+                                            error!( "tsk_scrcpy audio ACK send error, buffer full?");
                                         };
                                     }
                                     else
