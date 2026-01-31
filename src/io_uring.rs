@@ -411,97 +411,75 @@ async fn tsk_scrcpy_video(
     let mut dbg_counter=0;
 
     //codec metadata
-    let mut buf_metadata = Vec::with_capacity(12);
-    match read_exact(&mut stream, &mut buf_metadata, 12).await
-    {
-        Ok(_) => {
-            let metadata = std::mem::take(&mut buf_metadata);
-            info!("SCRCPY Video codec metadata: {:02x?}", &metadata);
-            let mut codec_id=String::from_utf8_lossy(&metadata[0..4]).to_string();
-            codec_id=codec_id.chars()
-                .filter(|c| c.is_ascii_graphic() || *c == ' ')
-                .collect();
-            let video_res_w = u32::from_be_bytes(metadata[4..8].try_into().unwrap());
-            let video_res_h = u32::from_be_bytes(metadata[8..12].try_into().unwrap());
-            info!("SCRCPY Video metadata decoded: id={}, res_w={}, res_h={}", codec_id, video_res_w, video_res_h);
-            if (codec_id != "h264".to_string()) || (video_res_w != 800) || (video_res_h != 480) {
-                error!("SCRCPY Invalid Video codec configuration");
-                return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY Invalid Video codec configuration")));
+    let metadata=read_exact(&mut stream, 12).await?;
+    info!("SCRCPY Video codec metadata: {:02x?}", &metadata);
+    let mut codec_id=String::from_utf8_lossy(&metadata[0..4]).to_string();
+    codec_id=codec_id.chars()
+        .filter(|c| c.is_ascii_graphic() || *c == ' ')
+        .collect();
+    let video_res_w = u32::from_be_bytes(metadata[4..8].try_into().unwrap());
+    let video_res_h = u32::from_be_bytes(metadata[8..12].try_into().unwrap());
+    info!("SCRCPY Video metadata decoded: id={}, res_w={}, res_h={}", codec_id, video_res_w, video_res_h);
+    if (codec_id != "h264".to_string()) || (video_res_w != 800) || (video_res_h != 480) {
+        error!("SCRCPY Invalid Video codec configuration");
+        return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY Invalid Video codec configuration")));
+    }
+    info!("SCRCPY Video entering main loop");
+    //let mut reassembler = NalReassembler::new();
+    //drain all previous permits
+    while let Ok(_) = ack_notify.try_recv() {}
+    //send first unacked packets
+    for _ in 0..max_unack {
+        match read_send_packet(&mut stream, &video_tx, sid, &mut dbg_counter).await {
+            Ok(()) => {
             }
-            info!("SCRCPY Video entering main loop");
-            //let mut reassembler = NalReassembler::new();
-            //allocate max size for read buffer
-            let mut buf_packet = Vec::with_capacity(0xffff);
-            //drain all previous permits
-            while let Ok(_) = ack_notify.try_recv() {}
-            //send first unacked packets
-            for _ in 0..max_unack {
-                match read_send_packet(&mut stream, &mut buf_packet, &video_tx, sid, &mut dbg_counter).await {
-                    Ok(()) => {
-                    }
 
-                    Err(e) => {
-                        error!("scrcpy video read failed: {}", e);
-                        return Err(e);
-                    }
-                }
+            Err(e) => {
+                error!("scrcpy video read failed: {}", e);
+                return Err(e);
             }
-            loop {
-
-                match read_send_packet(&mut stream, &mut buf_packet,  &video_tx, sid, &mut dbg_counter).await {
-                    Ok(()) => {
-                    }
-
-                    Err(e) => {
-                        error!("scrcpy video read failed: {}", e);
-                        break;
-                    }
-                }
-
-                match ack_notify.recv().await {
-                    Some(_) => {
-                        continue;
-                    }
-                    None => {
-                        error!("Video Channel closed, exiting");
-                        return Err(Box::new(io::Error::new(io::ErrorKind::Other, "channel closed")));
-                    }
-                }
-
-            }
-        }
-        Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
-            error!("scrcpy video stream ended");
-            return Err(Box::from(e));
-        }
-        Err(e) => {
-            error!("scrcpy video stream read failed: {}", e);
-            return Err(Box::from(e));
         }
     }
+    loop {
 
+        match read_send_packet(&mut stream, &video_tx, sid, &mut dbg_counter).await {
+            Ok(()) => {
+            }
+
+            Err(e) => {
+                error!("scrcpy video read failed: {}", e);
+                break;
+            }
+        }
+
+        match ack_notify.recv().await {
+            Some(_) => {
+                continue;
+            }
+            None => {
+                error!("Video Channel closed, exiting");
+                return Err(Box::new(io::Error::new(io::ErrorKind::Other, "channel closed")));
+            }
+        }
+
+    }
     //reassembler.flush();
     return Ok(());
 
     async fn read_send_packet(
         stream: &mut TcpStream,
-        buf: &mut Vec<u8>,
         video_tx: &flume::Sender<Packet>,
         sid:u8,
         dbg_count: &mut u32,
     ) ->Result<()> {
         //Read video frames from SCRCPY server
-        match read_scrcpy_packet(stream, buf).await {
-            Ok((pts, rd_len)) => {
+        match read_scrcpy_packet(stream).await {
+            Ok((pts, h264_data)) => {
                 let mut payload: Vec<u8>=Vec::new();
                 let key_frame = (pts & 0x4000_0000_0000_0000u64) > 0;
                 let rec_ts = pts & 0x3FFF_FFFF_FFFF_FFFFu64;
                 let config_frame = (pts & 0x8000_0000_0000_0000u64) > 0;
-                let h264_data = std::mem::take(buf);
-                if h264_data.len() != rd_len
-                {
-                    error!("read_scrcpy_packet data len error, wanted {} but got {} bytes", rd_len, h264_data.len());
-                }
+                let rd_len = h264_data.len();
                 let dbg_len = min(rd_len, 16);
                 if dbg_count < &mut 10
                 {
@@ -541,39 +519,7 @@ async fn tsk_scrcpy_video(
         }
         Ok(())
     }
-
     async fn read_exact(
-        stream: &TcpStream,
-        buf: &mut Vec<u8>,
-        size: usize,
-    ) -> io::Result<()> {
-        buf.clear();
-
-        while buf.len() < size {
-            let need = size - buf.len();
-            let start = buf.len();
-
-            // prepare space
-            buf.resize(start + need, 0);
-
-            // TEMPORARILY TAKE OWNERSHIP
-            let owned = std::mem::take(buf);
-
-            let (res, mut owned) = stream.read(owned).await;
-            let rd = res?;
-
-            if rd == 0 {
-                *buf = owned;
-                return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "EOF"));
-            }
-            // shrink to actual bytes read
-            owned.truncate(start + rd);
-            // GIVE OWNERSHIP BACK
-            *buf = owned;
-        }
-        Ok(())
-    }
-    async fn read_exact_old(
         stream: &mut TcpStream,
         size: usize,
     ) -> io::Result<Vec<u8>> {
@@ -597,29 +543,24 @@ async fn tsk_scrcpy_video(
         Ok(buf)
     }
     /// Read one scrcpy packet (with metadata)
-    async fn read_scrcpy_packet(stream: &mut TcpStream, buf: &mut Vec<u8>,) -> io::Result<(u64, usize)> {
+    async fn read_scrcpy_packet(stream: &mut TcpStream) -> io::Result<(u64, Vec<u8>)> {
 
-        match read_exact(stream, buf, SCRCPY_METADATA_HEADER_LEN).await {
+        match read_exact(stream, SCRCPY_METADATA_HEADER_LEN).await {
             // First 12 bytes = packet metadata
-            Ok(_) => {
-                let metadata = std::mem::take(buf);
+            Ok(metadata) => {
                 //info!("SCRCPY video packet metadata: {:02x?}",&metadata);
-                if metadata.len() != SCRCPY_METADATA_HEADER_LEN
-                {
+                if metadata.len() != SCRCPY_METADATA_HEADER_LEN {
                     error!("read_scrcpy_packet data len error, wanted {} but got {} bytes", SCRCPY_METADATA_HEADER_LEN, metadata.len());
                 }
                 let pts = u64::from_be_bytes(metadata[0..8].try_into().unwrap());
                 let packet_size = u32::from_be_bytes(metadata[8..].try_into().unwrap()) as usize;
-                match read_exact(stream, buf, packet_size).await {
-                    Ok(_) => {
-                        //let h264_data = std::mem::take(buf);
+                match read_exact(stream, packet_size).await {
+                    Ok(h264_data) => {
                         // Read full packet
-                        //if h264_data.len() != packet_size
-                        //{
-                            //error!("read_scrcpy_packet data len error, wanted {} but got {} bytes", packet_size, h264_data.len());
-                        //}
-                        //Ok((pts, h264_data))
-                        Ok((pts, packet_size))
+                        if h264_data.len() != packet_size {
+                            error!("read_scrcpy_packet data len error, wanted {} but got {} bytes", packet_size, h264_data.len());
+                        }
+                        Ok((pts, h264_data))
                     }
                     Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
                         error!("scrcpy stream ended");
@@ -632,7 +573,7 @@ async fn tsk_scrcpy_video(
                 }
             }
             Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
-                info!("scrcpy stream ended");
+                error!("scrcpy stream ended");
                 return Err(e);
             }
             Err(e) => {
