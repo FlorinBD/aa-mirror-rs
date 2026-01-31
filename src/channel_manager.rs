@@ -879,88 +879,94 @@ pub async fn ch_proxy(
     }
     info!( "{} ServiceDiscovery done, starting AA Mirror loop",get_name());
     loop {
-        let pkt = rx_srv.recv().await.ok_or("rx_srv channel hung up")?;
-        if pkt.channel !=0
-        {
-            let ch=pkt.channel;
-            let idx=get_service_index(&channel_status, ch as i32);
-            if idx !=255
-            {
-                //srv_senders[idx].send(pkt).await.expect("Error sending message to service");
-                if let Err(_) = srv_senders[idx].send(pkt).await{
-                    error!( "{} srv send error",get_name());
-                };
-            }
-            else {
-                error!( "{} Invalid channel {}",get_name(), ch);
-            }
-        }
-        else { //Default channel messages
-            let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-            let control = protos::ControlMessageType::from_i32(message_id);
-            match control.unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) {
-                ControlMessageType::MESSAGE_PING_REQUEST =>{
-                    let data = &pkt.payload[2..]; // start of message data, without message_id
-                    if let Ok(msg) = PingRequest::parse_from_bytes(&data) {
-                        let mut pingrsp= PingResponse::new();
-                        pingrsp.set_timestamp(msg.timestamp());
-                        let mut payload: Vec<u8>=pingrsp.write_to_bytes()?;
-                        payload.insert(0,((MESSAGE_PING_RESPONSE as u16) >> 8) as u8);
-                        payload.insert( 1,((MESSAGE_PING_RESPONSE as u16) & 0xff) as u8);
-                        let pkt_rsp = Packet {
-                            channel: 0,
-                            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                            final_length: None,
-                            payload: payload,
-                        };
-                        if let Err(_) = tx_srv.send(pkt_rsp).await{
-                            error!( "{} tls proxy send error",get_name());
+        //check service messages
+        match rx_srv.recv().await {
+            Ok(pkt)=>{
+                if pkt.channel !=0
+                {
+                    let ch=pkt.channel;
+                    let idx=get_service_index(&channel_status, ch as i32);
+                    if idx !=255
+                    {
+                        //srv_senders[idx].send(pkt).await.expect("Error sending message to service");
+                        if let Err(_) = srv_senders[idx].send(pkt).await{
+                            error!( "{} srv send error",get_name());
                         };
                     }
                     else {
-                        error!( "{} PingRequest couldn't be parsed",get_name());
+                        error!( "{} Invalid channel {}",get_name(), ch);
                     }
-
                 }
-                ControlMessageType::MESSAGE_AUDIO_FOCUS_NOTIFICATION =>{
-                    let data = &pkt.payload[2..]; // start of message data, without message_id
-                    if let Ok(msg) = AudioFocusNotification::parse_from_bytes(&data) {
-                        info!( "{} AUDIO_FOCUS_STATE received is: {:?}",get_name(), msg.focus_state());
-                        if msg.focus_state() == AudioFocusStateType::AUDIO_FOCUS_STATE_GAIN
-                        {
-                            info!( "{} CMD OPEN_CHANNEL will be done next",get_name());
-                            tokio::time::sleep(Duration::from_millis(HU_CONFIG_DELAY_MS)).await; //reconfiguration time for HU
-                            //Open CH for all
-                            for (idx, _) in srv_senders.iter().enumerate()
-                            {
-                                info!( "{} Send custom CMD_OPEN_CH for ch {}",get_name(), channel_status[idx].ch_id);
-
-                                let mut payload= Vec::new();
-                                payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
-                                payload.extend_from_slice(&(CustomCommand::CMD_OPEN_CH as u16).to_be_bytes());
+                else { //Default channel messages
+                    let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+                    let control = protos::ControlMessageType::from_i32(message_id);
+                    match control.unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) {
+                        ControlMessageType::MESSAGE_PING_REQUEST =>{
+                            let data = &pkt.payload[2..]; // start of message data, without message_id
+                            if let Ok(msg) = PingRequest::parse_from_bytes(&data) {
+                                let mut pingrsp= PingResponse::new();
+                                pingrsp.set_timestamp(msg.timestamp());
+                                let mut payload: Vec<u8>=pingrsp.write_to_bytes()?;
+                                payload.insert(0,((MESSAGE_PING_RESPONSE as u16) >> 8) as u8);
+                                payload.insert( 1,((MESSAGE_PING_RESPONSE as u16) & 0xff) as u8);
                                 let pkt_rsp = Packet {
-                                    channel: (channel_status[idx].ch_id) as u8,
-                                    flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                                    channel: 0,
+                                    flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                                     final_length: None,
-                                    payload: payload.clone(),
+                                    payload: payload,
                                 };
-                                channel_status[idx].open_ch_cmd = CommandState::InProgress;
-                                if let Err(_) = srv_senders[idx].send(pkt_rsp).await{
-                                    error!( "{} custom command send error",get_name());
+                                if let Err(_) = tx_srv.send(pkt_rsp).await{
+                                    error!( "{} tls proxy send error",get_name());
                                 };
                             }
+                            else {
+                                error!( "{} PingRequest couldn't be parsed",get_name());
+                            }
+
                         }
+                        ControlMessageType::MESSAGE_AUDIO_FOCUS_NOTIFICATION =>{
+                            let data = &pkt.payload[2..]; // start of message data, without message_id
+                            if let Ok(msg) = AudioFocusNotification::parse_from_bytes(&data) {
+                                info!( "{} AUDIO_FOCUS_STATE received is: {:?}",get_name(), msg.focus_state());
+                                if msg.focus_state() == AudioFocusStateType::AUDIO_FOCUS_STATE_GAIN
+                                {
+                                    info!( "{} CMD OPEN_CHANNEL will be done next",get_name());
+                                    tokio::time::sleep(Duration::from_millis(HU_CONFIG_DELAY_MS)).await; //reconfiguration time for HU
+                                    //Open CH for all
+                                    for (idx, _) in srv_senders.iter().enumerate()
+                                    {
+                                        info!( "{} Send custom CMD_OPEN_CH for ch {}",get_name(), channel_status[idx].ch_id);
 
-                    }
-                    else {
-                        error!( "{} AudioFocusNotification couldn't be parsed",get_name());
-                    }
+                                        let mut payload= Vec::new();
+                                        payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+                                        payload.extend_from_slice(&(CustomCommand::CMD_OPEN_CH as u16).to_be_bytes());
+                                        let pkt_rsp = Packet {
+                                            channel: (channel_status[idx].ch_id) as u8,
+                                            flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                                            final_length: None,
+                                            payload: payload.clone(),
+                                        };
+                                        channel_status[idx].open_ch_cmd = CommandState::InProgress;
+                                        if let Err(_) = srv_senders[idx].send(pkt_rsp).await{
+                                            error!( "{} custom command send error",get_name());
+                                        };
+                                    }
+                                }
 
+                            }
+                            else {
+                                error!( "{} AudioFocusNotification couldn't be parsed",get_name());
+                            }
+
+                        }
+                        _ =>{ info!( "{} Unknown message ID: {} received for default channel",get_name(), message_id);}
+                    };
                 }
-                _ =>{ info!( "{} Unknown message ID: {} received for default channel",get_name(), message_id);}
-            };
+            }
+            Err(_)=>{
+                error!("{}: rx_srv channel hung up, all senders are dropped?", get_name())
+            }
         }
-
         //check for SCRCPY CMDs
         match scrcpy_cmd_rx.try_recv() {
             Ok(pkt) => {

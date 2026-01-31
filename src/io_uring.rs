@@ -740,21 +740,21 @@ async fn tsk_scrcpy_audio(
                         Ok((pts, h264_data))
                     }
                     Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
-                        info!("scrcpy stream ended");
+                        error!("scrcpy audio stream ended");
                         return Err(e);
                     }
                     Err(e) => {
-                        error!("scrcpy read failed: {}", e);
+                        error!("scrcpy audio read failed: {}", e);
                         return Err(e);
                     }
                 }
             }
             Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
-                info!("scrcpy stream ended");
+                error!("scrcpy audio stream ended");
                 return Err(e);
             }
             Err(e) => {
-                error!("scrcpy read failed: {}", e);
+                error!("scrcpy audio read failed: {}", e);
                 return Err(e);
             }
         }
