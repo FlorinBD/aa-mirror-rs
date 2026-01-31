@@ -252,31 +252,6 @@ async fn tcp_wait_for_hu_connection(listener: & TcpListener) -> Result<TcpStream
     Ok(stream)
 }
 
-/// Asynchronously wait for an inbound TCP connection
-/// returning TcpStream of first client connected
-async fn tcp_wait_for_md_connection(listener: &mut TcpListener) -> Result<TcpStream> {
-    let retval = listener.accept();
-    let (stream, addr) = match timeout(TCP_CLIENT_TIMEOUT, retval)
-        .await
-        .map_err(|e| std::io::Error::other(e))
-    {
-        Ok(Ok((stream, addr))) => (stream, addr),
-        Err(e) | Ok(Err(e)) => {
-            error!("{} 📵 MD TCP server: {}, restarting...", NAME, e);
-            return Err(Box::new(e));
-        }
-    };
-    info!(
-        "{} 📳 MD TCP server: new client connected: <b>{:?}</b>",
-        NAME, addr
-    );
-
-    // disable Nagle algorithm, so segments are always sent as soon as possible,
-    // even if there is only a small amount of data
-    stream.set_nodelay(true)?;
-    Ok(stream)
-}
-
 pub async fn io_loop(
     need_restart: BroadcastSender<Option<Action>>,
     config: SharedConfig,
