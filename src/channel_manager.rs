@@ -964,7 +964,8 @@ pub async fn ch_proxy(
                 }
             }
             None()=>{
-                error!("{}: rx_srv channel hung up, all senders are dropped?", get_name())
+                error!("{}: rx_srv channel hung up, all senders are dropped?", get_name());
+                break;
             }
         }
         //check for SCRCPY CMDs
@@ -1069,5 +1070,5 @@ pub async fn ch_proxy(
             _ => {}
         }
     }
-    return Err(Box::new("proxy main loop ended ok")).expect("TODO");
+    return Err(Box::new("proxy main loop ended")).expect("TODO");
 }
