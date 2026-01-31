@@ -1106,7 +1106,7 @@ async fn tsk_adb_scrcpy(
             cmd_shell.push("cleanup=true".to_string());
             cmd_shell.push("display_ime_policy=local".to_string());
             cmd_shell.push("stay_awake=true".to_string());
-            cmd_shell.push("audio_codec=aac".to_string());
+            cmd_shell.push("audio_codec=raw".to_string());
             //cmd_shell.push("audio_source=playback".to_string());
             cmd_shell.push(format!("audio_bit_rate={}", audio_codec_params.bitrate));
             cmd_shell.push(format!("max_size={}", video_codec_params.res_w));
