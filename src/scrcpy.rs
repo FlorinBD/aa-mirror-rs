@@ -19,7 +19,7 @@ use protobuf::{Message};
 
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
-
+const NAME: &str = "<i><bright-black> scrcpy: </>";
 
 #[derive(Serialize, Deserialize, Copy, Clone, Debug)]
 pub enum AndroidTouchEvent
