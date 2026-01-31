@@ -653,7 +653,7 @@ async fn tsk_scrcpy_audio(
                 let rd_len = data.len();
                 let dbg_len = min(rd_len, 16);
                 let rec_ts = pts & 0x3FFF_FFFF_FFFF_FFFFu64;
-                let config_frame = (pts & 0x8000_0000_0000_0000u64) > 0;
+                let config_frame = (pts & 0x8000_0000_0000_0000u64) != 0;
                 if dbg_count < &mut 10
                 {
                     if rd_len > dbg_len
@@ -732,12 +732,12 @@ async fn tsk_scrcpy_audio(
                 let pts = u64::from_be_bytes(metadata[0..8].try_into().unwrap());
                 let packet_size = u32::from_be_bytes(metadata[8..].try_into().unwrap()) as usize;
                 match read_exact(stream, packet_size).await {
-                    Ok(h264_data) => {
+                    Ok(data) => {
                         // Read full packet
-                        if h264_data.len() != packet_size {
-                            error!("read_scrcpy_packet data len error, wanted {} but got {} bytes", packet_size, h264_data.len());
+                        if data.len() != packet_size {
+                            error!("read_scrcpy_packet data len error, wanted {} but got {} bytes", packet_size, data.len());
                         }
-                        Ok((pts, h264_data))
+                        Ok((pts, data))
                     }
                     Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
                         error!("scrcpy audio stream ended");
