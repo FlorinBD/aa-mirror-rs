@@ -1,32 +1,21 @@
 //! This crate provides service implementation for  [Android Open Accessory Protocol 1.0](https://source.android.com/devices/accessories/aoa)
 
-use std::error::Error;
 use simplelog::*;
 use std::fmt;
-use std::io::{Read};
-use std::net::{Ipv4Addr, SocketAddrV4};
 use std::time::{Duration, SystemTime};
 use tokio::sync::mpsc::{Receiver, Sender};
-use std::sync::mpsc as std_mpsc;
-use std::sync::mpsc::TrySendError;
-//use std::sync::mpsc::{Receiver as std_Receiver, Sender as std_Sender};
-use tokio::time::timeout;
-use tokio_uring::buf::BoundedBuf;
 use serde::{Serialize, Deserialize};
 
 // protobuf stuff:
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
-use crate::aa_services::protos::navigation_maneuver::NavigationType::*;
 use crate::aa_services::protos::Config as ChConfig;
 use crate::aa_services::protos::ConfigStatus;
 use crate::aa_services::protos::ConfigStatus::*;
 use crate::aa_services::sensor_source_service::Sensor;
-use crate::aa_services::AudioStreamType::*;
 use crate::aa_services::ByeByeReason::USER_SELECTION;
 use crate::aa_services::MessageStatus::*;
 use crate::aa_services::MediaMessageId::*;
 use crate::aa_services::InputMessageId::*;
-use crate::aa_services::GalVerificationVendorExtensionMessageId::*;
 use crate::aa_services::SensorMessageId::*;
 use crate::aa_services::SensorType::*;
 use crate::aa_services::MediaCodecType::*;
