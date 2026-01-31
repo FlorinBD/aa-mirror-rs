@@ -477,7 +477,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                     let _ = pkt_debug(HexdumpLevel::DecryptedInput, dmp_level, &msg, "HU".parse().unwrap()).await;
                     // message_id is the first 2 bytes of payload
                     let message_id: i32 = u16::from_be_bytes(msg.payload[0..=1].try_into()?).into();
-                    if !ssl_handshake_done && (protos::ControlMessageType::from_i32(message_id).unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) == MESSAGE_ENCAPSULATED_SSL)
+                    if !ssl_handshake_done && (message_id == MESSAGE_ENCAPSULATED_SSL as i32)
                     {
                         // doing SSL handshake
                             //Step1: parse client hello
