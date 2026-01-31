@@ -1273,6 +1273,7 @@ async fn tsk_adb_scrcpy(
                         }
                     }
                 }
+                //FIXME cancel all tasks
                 // When done, stop the shell
                 shell.kill().await?;
                 info!("Sending MD_DISCONNECTED to inform services");
