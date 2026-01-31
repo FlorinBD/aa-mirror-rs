@@ -757,7 +757,7 @@ pub async fn ch_proxy(
                         {
                             codec:acd,
                             stream_type: AudioStream::GUIDANCE,
-                            bitrate:proto_srv.media_sink_service.audio_configs[0].number_of_bits(),
+                            bitrate:proto_srv.media_sink_service.audio_configs[0].sampling_rate(),
                             channels:proto_srv.media_sink_service.audio_configs[0].number_of_channels(),
                             bitdepth:proto_srv.media_sink_service.audio_configs[0].number_of_bits(),
                         };
@@ -771,7 +771,7 @@ pub async fn ch_proxy(
                         {
                             codec:acd,
                             stream_type: AudioStream::MEDIA,
-                            bitrate:proto_srv.media_sink_service.audio_configs[0].number_of_bits(),
+                            bitrate:proto_srv.media_sink_service.audio_configs[0].sampling_rate(),
                             channels:proto_srv.media_sink_service.audio_configs[0].number_of_channels(),
                             bitdepth:proto_srv.media_sink_service.audio_configs[0].number_of_bits(),
                         };
