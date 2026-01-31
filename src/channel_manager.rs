@@ -963,7 +963,7 @@ pub async fn ch_proxy(
                     };
                 }
             }
-            None()=>{
+            None =>{
                 error!("{}: rx_srv channel hung up, all senders are dropped?", get_name());
                 //break;//FIXME break the loop
             }
