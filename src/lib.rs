@@ -13,3 +13,4 @@ pub mod usb_stream;
 pub mod web;
 mod adb;
 mod h264_reader;
+mod scrcpy;
