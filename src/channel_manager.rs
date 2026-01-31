@@ -781,7 +781,8 @@ pub async fn ch_proxy(
                         srv_senders.push(tx);
                         srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_audio_streaming(ch_id,true, tx_srv.clone(), rx, scrcpy_cmd_tx.clone(), audio_cfg, audio_codec_params.clone())));
                     }
-                    else {
+                    else
+                    {
                         error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);
                     }
                 }
