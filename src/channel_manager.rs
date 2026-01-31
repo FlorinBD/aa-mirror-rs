@@ -965,7 +965,7 @@ pub async fn ch_proxy(
             }
             None()=>{
                 error!("{}: rx_srv channel hung up, all senders are dropped?", get_name());
-                break;
+                //break;//FIXME break the loop
             }
         }
         //check for SCRCPY CMDs
