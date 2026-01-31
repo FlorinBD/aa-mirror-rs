@@ -396,7 +396,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                             // Increment byte counters for statistics
                             // fixme: compute final_len for precise stats
                             w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
-                            msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: transmit to HU failed", get_name()))?;
+                            msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: SCRCPY transmit to HU failed", get_name()))?;
                         }
                         Err(e) => {error!( "{} encrypt_payload error: {:?}", get_name(), e);},
                     }
@@ -422,7 +422,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                                 // Increment byte counters for statistics
                                 // fixme: compute final_len for precise stats
                                 w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
-                                msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: transmit to HU failed", get_name()))?;
+                                msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: Service transmit to HU failed", get_name()))?;
                             }
                             Err(e) => {error!( "{} encrypt_payload error: {:?}", get_name(), e);},
                         }
@@ -439,7 +439,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                     // Increment byte counters for statistics
                     // fixme: compute final_len for precise stats
                     w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
-                    msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: transmit to HU failed", get_name()))?;
+                    msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: Service transmit to HU failed", get_name()))?;
 
             }
         }
