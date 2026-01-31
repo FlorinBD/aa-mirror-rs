@@ -476,9 +476,9 @@ async fn tsk_scrcpy_video(
         match read_scrcpy_packet(stream).await {
             Ok((pts, h264_data)) => {
                 let mut payload: Vec<u8>=Vec::new();
-                let key_frame = (pts & 0x4000_0000_0000_0000u64) > 0;
+                let key_frame = (pts & 0x4000_0000_0000_0000u64) != 0;
                 let rec_ts = pts & 0x3FFF_FFFF_FFFF_FFFFu64;
-                let config_frame = (pts & 0x8000_0000_0000_0000u64) > 0;
+                let config_frame = (pts & 0x8000_0000_0000_0000u64) != 0;
                 let rd_len = h264_data.len();
                 let dbg_len = min(rd_len, 16);
                 if dbg_count < &mut 10
