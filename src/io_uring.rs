@@ -47,7 +47,7 @@ const USB_ACCESSORY_PATH: &str = "/dev/usb_accessory";
 pub const BUFFER_LEN: usize = 16 * 1024;
 pub const TCP_CLIENT_TIMEOUT: Duration = Duration::new(30, 0);
 
-use crate::config::{Action, AppConfig, SharedConfig, ADB_DEVICE_PORT, SCRCPY_VERSION, SCRCPY_PORT, SCRCPY_METADATA_HEADER_LEN, HU_CONFIG_DELAY_MS};
+use crate::config::{Action, AppConfig, SharedConfig, ADB_DEVICE_PORT, SCRCPY_VERSION, SCRCPY_PORT, SCRCPY_METADATA_HEADER_LEN, HU_CONFIG_DELAY_MS, SCRCPY_AUDIO_CODEC};
 use crate::config::{TCP_DHU_PORT, TCP_MD_SERVER_PORT};
 use crate::channel_manager::{endpoint_reader, ch_proxy, packet_tls_proxy, ENCRYPTED, FRAME_TYPE_CONTROL, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
 use crate::channel_manager::Packet;
@@ -602,7 +602,7 @@ async fn tsk_scrcpy_audio(
         .filter(|c| c.is_ascii_graphic() || *c == ' ')
         .collect();
     info!("SCRCPY Audio codec id: {}", codec_id);
-    if codec_id != "raw".to_string() {
+    if codec_id != SCRCPY_AUDIO_CODEC.to_string() {
         error!("SCRCPY Invalid audio codec configuration");
         return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY Invalid audio codec configuration")));
     }
@@ -1106,7 +1106,7 @@ async fn tsk_adb_scrcpy(
             cmd_shell.push("cleanup=true".to_string());
             cmd_shell.push("display_ime_policy=local".to_string());
             cmd_shell.push("stay_awake=true".to_string());
-            cmd_shell.push("audio_codec=raw".to_string());
+            cmd_shell.push(format!("audio_codec={}",SCRCPY_AUDIO_CODEC.to_string() ));
             //cmd_shell.push("audio_source=playback".to_string());
             cmd_shell.push(format!("audio_bit_rate={}", audio_codec_params.bitrate));
             cmd_shell.push(format!("max_size={}", video_codec_params.res_w));
