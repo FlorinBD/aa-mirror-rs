@@ -881,7 +881,7 @@ pub async fn ch_proxy(
     loop {
         //check service messages
         match rx_srv.recv().await {
-            Ok(pkt)=>{
+            Some(pkt)=>{
                 if pkt.channel !=0
                 {
                     let ch=pkt.channel;
@@ -963,7 +963,7 @@ pub async fn ch_proxy(
                     };
                 }
             }
-            Err(_)=>{
+            None()=>{
                 error!("{}: rx_srv channel hung up, all senders are dropped?", get_name())
             }
         }
