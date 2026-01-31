@@ -37,7 +37,7 @@ use protos::*;
 use protos::ControlMessageType::{self, *};
 use crate::channel_manager::{Packet, ENCRYPTED, FRAME_TYPE_CONTROL, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
 use crate::config::{SCRCPY_PORT};
-use crate::io_uring::ScrcpyControlMessageType;
+use crate::scrcpy::ScrcpyControlMessageType;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
