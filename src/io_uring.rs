@@ -659,9 +659,9 @@ async fn tsk_scrcpy_audio(
                     if rd_len > dbg_len
                     {
                         let end_offset = rd_len - dbg_len;
-                        info!("Audio task got packet, act size: {}, raw slice: {:02x?}...{:02x?}", rd_len, &data[..dbg_len], &data[end_offset..]);
+                        info!("Audio task got packet, ts={}, act size: {}, raw slice: {:02x?}...{:02x?}",rec_ts, rd_len, &data[..dbg_len], &data[end_offset..]);
                     } else {
-                        info!("Audio task got packet, act size: {}, raw bytes: {:02x?}", rd_len, &data[..dbg_len]);
+                        info!("Audio task got packet, ts={}, act size: {}, raw bytes: {:02x?}",rec_ts, rd_len, &data[..dbg_len]);
                     }
                     *dbg_count+=1;
                 }
