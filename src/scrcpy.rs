@@ -636,14 +636,15 @@ async fn tsk_scrcpy_control(
                                 }
                             }
                         }
-                        else {
+                        else
+                        {
                             error!( "tsk_scrcpy_control unmanaged key action");
                         }
                     }
-                    else {
+                    else
+                    {
                         error!( "tsk_scrcpy_control: Unable to parse received message");
                     }
-
                 }
                 else if message_id == ControlMessageType::MESSAGE_CUSTOM_CMD  as i32
                 {
@@ -654,11 +655,13 @@ async fn tsk_scrcpy_control(
                         info!("CustomCommand::CANCEL cmd received, tsk_scrcpy_control task stopped");
                         break;
                     }
-                    else {
+                    else
+                    {
                         error!("tsk_scrcpy_control unknown custom command received: {:?}", cmd_id);
                     }
                 }
-                else {
+                else
+                {
                     error!("tsk_scrcpy_control unknown message received: {:?}", message_id);
                 }
             }
@@ -894,7 +897,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                 let (done_th_tx_video, mut done_th_rx_video) = oneshot::channel();
                 let (done_th_tx_audio, mut done_th_rx_audio) = oneshot::channel();
                 let (done_th_tx_ctrl, mut done_th_rx_ctrl) = oneshot::channel();
-                
+
                 //mpsc channels for ACK notification, to maintain frame window
                 let mut audio_max_unack_mpsc = 1usize;
                 let mut video_max_unack_mpsc =1usize;
