@@ -1071,5 +1071,8 @@ pub async fn ch_proxy(
             _ => {}
         }
     }
-    return Err(Box::new("proxy main loop ended"));
+    //return Err(Box::new("proxy main loop ended"));
+    return Err(Box::<dyn std::error::Error>::from(
+        "proxy main loop ended".to_string(),
+    ));
 }
