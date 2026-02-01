@@ -1063,7 +1063,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                     payload: payload,
                 };
                 if let Err(_) = tx_ctrl.send_async(pkt_rsp).await{
-                    error!( "scrcpy send error");
+                    error!( "scrcpy CANCEL send error");
                 };
                 // When done, stop the shell
                 //drop(rx_scrcpy_ctrl);
@@ -1078,7 +1078,9 @@ pub(crate) async fn tsk_adb_scrcpy(
                     final_length: None,
                     payload: std::mem::take(&mut payload),
                 };
-                srv_cmd_tx.send_async(pkt_rsp).await?;
+                if let Err(_) = srv_cmd_tx.send_async(pkt_rsp).await{
+                    error!( "scrcpy MD_DISCONNECTED send error");
+                };
             }
             else {
                 error!("Invalid response for ADB shell");
