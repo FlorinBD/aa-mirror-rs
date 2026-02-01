@@ -645,6 +645,19 @@ async fn tsk_scrcpy_control(
                     }
 
                 }
+                else if message_id == ControlMessageType::MESSAGE_CUSTOM_CMD  as i32
+                {
+                    let cmd_id: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
+                    if cmd_id == CustomCommand::CANCEL as i32
+                    {
+
+                        info!("CustomCommand::CANCEL cmd received, tsk_scrcpy_control task stopped");
+                        break;
+                    }
+                    else {
+                        error!("tsk_scrcpy_control unknown custom command received: {:?}", cmd_id);
+                    }
+                }
                 else {
                     error!("tsk_scrcpy_control unknown message received: {:?}", message_id);
                 }
