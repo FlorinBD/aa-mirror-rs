@@ -352,7 +352,7 @@ pub async fn io_loop(
         let mut tsk_hu_read;
         let mut tsk_packet_proxy;
         // these will be used for cleanup
-        let mut hu_tcp_stream = None;
+        //let mut hu_tcp_stream = None;
 
 
         // selecting I/O device for reading and writing
@@ -371,7 +371,7 @@ pub async fn io_loop(
             let hu = Arc::new(hu_tcp.unwrap());
             hu_r = IoDevice::TcpStreamIo(hu.clone());
             hu_w = IoDevice::TcpStreamIo(hu.clone());
-            hu_tcp_stream = Some(hu.clone());
+            //hu_tcp_stream = Some(hu.clone());
         }
 
         //service packet proxy
@@ -421,12 +421,12 @@ pub async fn io_loop(
         tsk_adb.abort();
 
         // make sure TCP connections are closed before next connection attempts
-        if let Some(stream) = hu_tcp_stream {
+        /*if let Some(stream) = hu_tcp_stream {
             info!("{} 🛰️ DHU TCP server: closing client connection...", NAME );
             //let _ = stream.shutdown(std::net::Shutdown::Both);
             drop(stream);
 
-        }
+        }*/
 
         // set webserver context EV stuff to None
         let mut tx_lock = tx.lock().await;
