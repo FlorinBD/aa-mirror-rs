@@ -878,7 +878,8 @@ pub async fn ch_proxy(
         return Err(Box::new("ServiceDiscoveryResponse couldn't be parsed")).expect("ServiceDiscoveryResponse");
     }
     info!( "{} ServiceDiscovery done, starting AA Mirror loop",get_name());
-    loop {
+    loop
+    {
         //check service messages
         match rx_srv.recv().await {
             Some(pkt)=>{
