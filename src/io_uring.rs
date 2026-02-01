@@ -74,10 +74,10 @@ impl Endpoint<TcpStream> for TcpStream {
 }
 
 pub enum IoDevice<A: Endpoint<A>> {
-    UsbReader(Rc<RefCell<UsbStreamRead>>, PhantomData<A>),
-    UsbWriter(Rc<RefCell<UsbStreamWrite>>, PhantomData<A>),
-    EndpointIo(Rc<A>),
-    TcpStreamIo(Rc<TcpStream>),
+    UsbReader(Arc<RefCell<UsbStreamRead>>, PhantomData<A>),
+    UsbWriter(Arc<RefCell<UsbStreamWrite>>, PhantomData<A>),
+    EndpointIo(Arc<A>),
+    TcpStreamIo(Arc<TcpStream>),
 }
 async fn transfer_monitor(
     stats_interval: Option<Duration>,
@@ -363,12 +363,12 @@ pub async fn io_loop(
         // HU transfer device
         if let Some(hu) = hu_usb {
             // HU connected directly via USB
-            let hu = Rc::new(hu);
+            let hu = Arc::new(hu);
             hu_r = IoDevice::EndpointIo(hu.clone());
             hu_w = IoDevice::EndpointIo(hu.clone());
         } else {
             // Head Unit Emulator via TCP
-            let hu = Rc::new(hu_tcp.unwrap());
+            let hu = Arc::new(hu_tcp.unwrap());
             hu_r = IoDevice::TcpStreamIo(hu.clone());
             hu_w = IoDevice::TcpStreamIo(hu.clone());
             hu_tcp_stream = Some(hu.clone());
