@@ -1052,6 +1052,19 @@ pub(crate) async fn tsk_adb_scrcpy(
                     }
                 }
                 //FIXME cancel all tasks
+                //Stop CONTROL task as well
+                let mut payload: Vec<u8>=Vec::new();
+                payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+                payload.extend_from_slice(&(CustomCommand::CANCEL as u16).to_be_bytes());
+                let pkt_rsp = Packet {
+                    channel: 0,
+                    flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                    final_length: None,
+                    payload: payload,
+                };
+                if let Err(_) = tx_ctrl.send_async(pkt_rsp).await{
+                    error!( "scrcpy send error");
+                };
                 // When done, stop the shell
                 //drop(rx_scrcpy_ctrl);
                 shell.kill().await?;
