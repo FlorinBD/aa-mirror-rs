@@ -423,7 +423,8 @@ pub async fn io_loop(
         // make sure TCP connections are closed before next connection attempts
         if let Some(stream) = hu_tcp_stream {
             info!("{} 🛰️ DHU TCP server: closing client connection...", NAME );
-            let _ = stream.shutdown(std::net::Shutdown::Both);
+            //let _ = stream.shutdown(std::net::Shutdown::Both);
+            drop(stream);
 
         }
 
