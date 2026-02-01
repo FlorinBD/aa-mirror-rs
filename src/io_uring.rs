@@ -411,7 +411,7 @@ pub async fn io_loop(
         }
         //Stop SCRCPY task as well
         let mut payload: Vec<u8>=Vec::new();
-        payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+        payload.extend_from_slice(&(ControlMessageType::MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
         payload.extend_from_slice(&(CustomCommand::CANCEL as u16).to_be_bytes());
         let pkt_rsp = Packet {
             channel: 0,
