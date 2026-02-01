@@ -1070,5 +1070,5 @@ pub async fn ch_proxy(
             _ => {}
         }
     }
-    return Err(Box::new("proxy main loop ended")).expect("TODO");
+    return Err(Box::new("proxy main loop ended"));
 }

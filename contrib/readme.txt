@@ -4,7 +4,7 @@ sdr>audio focus>wait 600>open all ch>setup all works
 sdr>audio focus>wait 600>open & setup all at once works
 
 problems:
-adb_client is 1.18 ATM because 1.19 requires rustc 1.91 and is not working with buildroot due to a libm.so.6 error
+hu listener works only at first connection, after that it will close any attempt, why?
 for scrcpy  we need a single thread, spawn only TcpStream's for reading
 
 versions:
