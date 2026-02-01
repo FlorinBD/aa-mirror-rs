@@ -22,6 +22,8 @@ use tokio_uring::BufResult;
 use tokio_uring::UnsubmittedWrite;
 use crate::{scrcpy};
 use crate::aa_services::{VideoStreamingParams, AudioStreamingParams};
+include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
+use protos::*;
 
 // module name for logging engine
 const NAME: &str = "<i><bright-black> io_uring: </>";
@@ -35,7 +37,7 @@ pub const BUFFER_LEN: usize = 16 * 1024;
 pub const TCP_CLIENT_TIMEOUT: Duration = Duration::new(30, 0);
 
 use crate::config::{Action, SharedConfig, TCP_DHU_PORT};
-use crate::channel_manager::{endpoint_reader, ch_proxy, packet_tls_proxy};
+use crate::channel_manager::{endpoint_reader, ch_proxy, packet_tls_proxy, ENCRYPTED, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
 use crate::channel_manager::Packet;
 use crate::usb_stream::{UsbStreamRead, UsbStreamWrite};
 
@@ -268,14 +270,13 @@ pub async fn io_loop(
     //cmd scrcpy>srv channel
     let (tx_scrcpy_srv_cmd, rx_scrcpy_srv_cmd)=flume::bounded::<Packet>(5);
     //scrcpy control channel HU>MD
-    let (tx_scrcpy_control, rx_scrcpy_control)=flume::bounded::<Packet>(5);
+    //let (tx_scrcpy_control, rx_scrcpy_control)=flume::bounded::<Packet>(5);
 
     let mut tsk_adb;
     tsk_adb = tokio_uring::spawn(scrcpy::tsk_adb_scrcpy(
         tx_scrcpy,
         rx_scrcpy_cmd,
         tx_scrcpy_srv_cmd,
-        rx_scrcpy_control,
         cfg,
     ));
     loop {
@@ -386,7 +387,6 @@ pub async fn io_loop(
             txr_srv,
             tx_scrcpy_cmd.clone(),
             rx_scrcpy_srv_cmd.clone(),
-            tx_scrcpy_control.clone(),
         ));
         
         // Thread for monitoring transfer
@@ -404,13 +404,23 @@ pub async fn io_loop(
             flatten(&mut tsk_ch_manager, "tsk_ch_manager".into()),
             flatten(&mut tsk_monitor,"tsk_monitor".into()),
             flatten(&mut tsk_packet_proxy,"tsk_pkt_proxy".into()),
-            flatten(&mut tsk_adb,"tsk_adb_scrcpy".into())
         );
 
         if let Err(e) = res {
             error!("{} 🔴 Connection error: {}", NAME, e);
         }
-
+        //Stop SCRCPY task as well
+        let mut payload: Vec<u8>=Vec::new();
+        payload.extend_from_slice(&(CustomCommand::CANCEL as u16).to_be_bytes());
+        let pkt_rsp = Packet {
+            channel: 0,
+            flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+            final_length: None,
+            payload: payload,
+        };
+        if let Err(_) = tx_scrcpy_cmd.send_async(pkt_rsp).await{
+            error!( "io_uring.io_loop() send error");
+        };
         // Make sure the reference count drops to zero and the socket is
         // freed by aborting both tasks (which both hold a `Rc<TcpStream>`
         // for each direction)

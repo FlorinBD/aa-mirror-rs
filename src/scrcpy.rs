@@ -663,7 +663,6 @@ pub(crate) async fn tsk_adb_scrcpy(
     media_tx: flume::Sender<Packet>,
     srv_cmd_rx_scrcpy: flume::Receiver<Packet>,
     srv_cmd_tx: flume::Sender<Packet>,
-    rx_scrcpy_ctrl: flume::Receiver<Packet>,
     config: AppConfig,
 ) -> Result<()> {
     info!("{}: ADB task started",NAME);
@@ -882,7 +881,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                 let (done_th_tx_video, mut done_th_rx_video) = oneshot::channel();
                 let (done_th_tx_audio, mut done_th_rx_audio) = oneshot::channel();
                 let (done_th_tx_ctrl, mut done_th_rx_ctrl) = oneshot::channel();
-                let rx_cmd_ctrl = rx_scrcpy_ctrl.clone();
+                
                 //mpsc channels for ACK notification, to maintain frame window
                 let mut audio_max_unack_mpsc = 1usize;
                 let mut video_max_unack_mpsc =1usize;
@@ -896,6 +895,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                 }
                 let (tx_ack_audio, rx_ack_audio) = mpsc::channel::<u32>(audio_max_unack_mpsc);
                 let (tx_ack_video, rx_ack_video) = mpsc::channel::<u32>(video_max_unack_mpsc);
+                let (tx_ctrl, rx_ctrl)=flume::bounded::<Packet>(5);
                 hnd_scrcpy_video = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_video(
                         video_stream,
@@ -922,7 +922,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                 hnd_scrcpy_ctrl = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_control(
                         ctrl_stream,
-                        rx_cmd_ctrl,
+                        rx_ctrl,
                         screen_size,
                     ).await;
                     let _ = done_th_tx_ctrl.send(res);
@@ -954,6 +954,18 @@ pub(crate) async fn tsk_adb_scrcpy(
                                     info!("tsk_scrcpy_video Audio streaming stopped");
                                     drop(tx_ack_audio);
                                     //FIXME close the stream
+                                    break;
+                                }
+                                else if cmd_id == CustomCommand::CANCEL as i32
+                                {
+
+                                    info!("tsk_scrcpy CANCEL CMD received, stopping all tasks");
+                                    drop(tx_ack_audio);
+                                    drop(tx_ack_video);
+                                    if let Err(_) = tx_ctrl.send_async(pkt).await
+                                    {
+                                        error!( "tsk_scrcpy control proxy send error, buffer full?");
+                                    };
                                     break;
                                 }
                             }
@@ -988,6 +1000,13 @@ pub(crate) async fn tsk_adb_scrcpy(
                                 {
                                     error!( "tsk_scrcpy Unable to parse MEDIA_MESSAGE_ACK message");
                                 }
+                            }
+                            else if message_id == InputMessageId::INPUT_MESSAGE_INPUT_REPORT  as i32
+                            {
+                                if let Err(_) = tx_ctrl.send_async(pkt).await
+                                {
+                                    error!( "tsk_scrcpy control proxy send error, buffer full?");
+                                };
                             }
                             else
                             {

@@ -640,7 +640,6 @@ pub async fn ch_proxy(
     tx_srv: Sender<Packet>,
     scrcpy_cmd_tx: flume::Sender<Packet>,
     scrcpy_cmd_rx: flume::Receiver<Packet>,
-    scrcpy_ctrl_tx: flume::Sender<Packet>,
 ) -> Result<()> {
     info!( "{} Entering channel manager",get_name());
    // waiting for initial version frame (HU is starting transmission)
@@ -841,7 +840,7 @@ pub async fn ch_proxy(
                 let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                 srv_senders.push(tx);
                 let keys: Vec<i32>=proto_srv.input_source_service.keycodes_supported.iter().cloned().collect();
-                srv_tsk_handles.push(tokio_uring::spawn(th_input_source(ch_id,false, tx_srv.clone(), rx, scrcpy_ctrl_tx.clone(), keys)));
+                srv_tsk_handles.push(tokio_uring::spawn(th_input_source(ch_id,false, tx_srv.clone(), rx, scrcpy_cmd_tx.clone(), keys)));
             }
             else if proto_srv.vendor_extension_service.is_some()
             {
