@@ -658,6 +658,7 @@ async fn tsk_scrcpy_control(
     }
     Err(Box::new(flume::RecvError::Disconnected))
 }
+///This task is not meant to be closed, it will always run
 pub(crate) async fn tsk_adb_scrcpy(
     media_tx: flume::Sender<Packet>,
     srv_cmd_rx_scrcpy: flume::Receiver<Packet>,
