@@ -1017,7 +1017,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                 }
                 //FIXME cancel all tasks
                 // When done, stop the shell
-                drop(rx_scrcpy_ctrl);
+                //drop(rx_scrcpy_ctrl);
                 shell.kill().await?;
                 info!("Sending MD_DISCONNECTED to inform services");
                 let mut payload: Vec<u8>=Vec::new();

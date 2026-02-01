@@ -1,4 +1,4 @@
-use anyhow::Context;
+use anyhow::{anyhow, Context};
 use log::log_enabled;
 use openssl::ssl::{ErrorCode, Ssl, SslContextBuilder, SslFiletype, SslMethod};
 use simplelog::*;
@@ -1072,7 +1072,7 @@ pub async fn ch_proxy(
         }
     }
     //return Err(Box::new("proxy main loop ended"));
-    return Err(Box::<dyn std::error::Error>::from(
-        "proxy main loop ended".to_string(),
+    return Err(Box::<dyn std::error::Error + Send + Sync>::from(
+        anyhow!("proxy main loop ended")
     ));
 }
