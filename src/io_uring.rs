@@ -269,8 +269,6 @@ pub async fn io_loop(
     let (tx_scrcpy_cmd, rx_scrcpy_cmd)=flume::bounded::<Packet>(5);
     //cmd scrcpy>srv channel
     let (tx_scrcpy_srv_cmd, rx_scrcpy_srv_cmd)=flume::bounded::<Packet>(5);
-    //scrcpy control channel HU>MD
-    //let (tx_scrcpy_control, rx_scrcpy_control)=flume::bounded::<Packet>(5);
 
     let mut tsk_adb;
     tsk_adb = tokio_uring::spawn(scrcpy::tsk_adb_scrcpy(
