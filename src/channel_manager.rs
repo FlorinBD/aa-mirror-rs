@@ -401,7 +401,8 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                                 error!("SCRCPY>HU Transmission error: {:?}", e);
                             }
                             // yield so other tasks can run to release backpressure on TCP
-                            tokio::task::yield_now().await;
+                            //tokio::task::yield_now().await;
+                            tokio::time::sleep(Duration::from_millis(5)).await;
                         }
                         Err(e) => {error!( "{} encrypt_payload error: {:?}", get_name(), e);},
                     }
