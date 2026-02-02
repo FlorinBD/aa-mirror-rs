@@ -232,7 +232,7 @@ impl fmt::Display for ServiceType {
         // fmt::Debug::fmt(self, f)
     }
 }
-pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, sensors: Result<Vec<SensorType>>) -> Result<()> {
+pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, sensors: Vec<SensorType>) -> Result<()> {
     info!( "{}: Starting...", get_name());
     let mut md_connected=false;
     loop {
