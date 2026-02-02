@@ -255,24 +255,28 @@ pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, 
                     }
                     else
                     {
-                        info!("{} send SENSOR_MESSAGE_REQUEST",get_name());
-                        let mut req = SensorRequest::new();
-                        req.set_type(protos::SensorType::SENSOR_NIGHT_MODE);
-                        req.set_min_update_period(1000);
-                        let mut payload: Vec<u8>=Vec::new();
-                        payload.extend_from_slice(&(SensorMessageId::SENSOR_MESSAGE_REQUEST as u16).to_be_bytes());
-                        payload.extend_from_slice(&(req.write_to_bytes()?));
 
-                        let pkt_rsp = Packet {
-                            channel: ch_id as u8,
-                            flags: ENCRYPTED | FRAME_TYPE_CONTROL | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                            final_length: None,
-                            payload: payload,
-                        };
-                        if let Err(_) = tx_srv.send(pkt_rsp).await
-                        {
-                            error!( "{} mpsc send error", get_name());
-                        };
+                        if sensors.contains(&SensorType::SENSOR_NIGHT_MODE) {
+                            info!("{} send SENSOR_MESSAGE_REQUEST",get_name());
+                            let mut req = SensorRequest::new();
+                            req.set_type(protos::SensorType::SENSOR_NIGHT_MODE);
+                            req.set_min_update_period(1000);
+                            let mut payload: Vec<u8>=Vec::new();
+                            payload.extend_from_slice(&(SensorMessageId::SENSOR_MESSAGE_REQUEST as u16).to_be_bytes());
+                            payload.extend_from_slice(&(req.write_to_bytes()?));
+
+                            let pkt_rsp = Packet {
+                                channel: ch_id as u8,
+                                flags: ENCRYPTED | FRAME_TYPE_CONTROL | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                                final_length: None,
+                                payload: payload,
+                            };
+                            if let Err(_) = tx_srv.send(pkt_rsp).await
+                            {
+                                error!( "{} mpsc send error", get_name());
+                            };
+                        }
+
                     }
                 }
                 else {
