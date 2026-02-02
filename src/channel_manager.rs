@@ -833,11 +833,14 @@ pub async fn ch_proxy(
                 srv_senders.push(tx);
                 let mut sensors=Vec::new();
                 for s in proto_srv.sensor_source_service.sensors {
-                    let sensor_type = SensorType::try_from(s.sensor_type as i32).ok();
-                    sensors.push(sensor_type);
+                    if let Ok(st) = SensorType::try_from(s.sensor_type() as i32)
+                    {
+                        sensors.push(st);
+                    }
+
                 }
                 //let sensors: Result<Vec<SensorType>> = proto_srv.sensor_source_service.sensors.iter().filter_map(|s| SensorType::try_from(s.sensor_type).ok()).collect();
-                srv_tsk_handles.push(tokio_uring::spawn(th_sensor_source(ch_id,false, tx_srv.clone(), rx, sensors?)));
+                srv_tsk_handles.push(tokio_uring::spawn(th_sensor_source(ch_id,false, tx_srv.clone(), rx, sensors)));
             }
             else if proto_srv.input_source_service.is_some()
             {
