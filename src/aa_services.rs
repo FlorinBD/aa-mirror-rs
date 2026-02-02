@@ -108,6 +108,7 @@ impl Default for AudioStreamingParams {
     }
 }
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[repr(i32)]
 pub enum SensorType {
     SENSOR_LOCATION = 1,
     SENSOR_COMPASS = 2,
