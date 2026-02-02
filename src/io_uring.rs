@@ -427,7 +427,7 @@ pub async fn io_loop(
         tsk_hu_read.abort();
         tsk_ch_manager.abort();
         tsk_monitor.abort();
-        tsk_adb.abort();
+
 
         // make sure TCP connections are closed before next connection attempts
         /*if let Some(stream) = hu_tcp_stream {
