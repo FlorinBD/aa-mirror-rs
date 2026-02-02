@@ -832,7 +832,7 @@ pub async fn ch_proxy(
                 let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                 srv_senders.push(tx);
                 let mut sensors=Vec::new();
-                for s in proto_srv.sensor_source_service.sensors {
+                for s in proto_srv.sensor_source_service.sensors.clone() {
                     if let Ok(st) = SensorType::try_from(s.sensor_type() as i32)
                     {
                         sensors.push(st);
