@@ -507,9 +507,20 @@ async fn tsk_scrcpy_control(
     stream: TcpStream,
     cmd_rx: flume::Receiver<Packet>,
     screen_size:ScrcpySize,
+    cfg_screen_off:bool,
 ) -> Result<()> {
+    
     info!("Starting control server!");
-    let mut screen_off_done=false;
+    if cfg_screen_off {
+        let mut payload: Vec<u8> = Vec::new();
+        payload.push(ScrcpyControlMessageType::SetDisplayPower as u8);
+        payload.push(0);
+        //stream.write_all(payload).await;
+        let (res, _) = stream.write_all(payload).await;
+        if let Err(e) = res {
+            error!("tsk_scrcpy_control send error: {}", e);
+        }
+    }
     loop {
         match cmd_rx.recv_async().await {
             Ok(pkt) => {
@@ -518,20 +529,6 @@ async fn tsk_scrcpy_control(
                 info!("tsk_scrcpy_control Received command id {:?}", message_id);
                 if message_id == InputMessageId::INPUT_MESSAGE_INPUT_REPORT  as i32
                 {
-                    //FIXME do it on first video frame, not on first touch event
-                    if !screen_off_done {
-
-                        let mut payload: Vec<u8> = Vec::new();
-                        payload.push(ScrcpyControlMessageType::SetDisplayPower as u8);
-                        payload.push(0);
-                        //stream.write_all(payload).await;
-                        let (res, _) = stream.write_all(payload).await;
-                        if let Err(e) = res {
-                            error!("tsk_scrcpy_control send error: {}", e);
-                        }
-
-                        screen_off_done=true;
-                    }
                     let data = &pkt.payload[2..]; // start of message data, without message_id
                     if  let Ok(rsp) = InputReport::parse_from_bytes(&data) {
                         //info!( "tsk_scrcpy_control InputReport received: {:?}", rsp);
@@ -940,6 +937,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                         ctrl_stream,
                         rx_ctrl,
                         screen_size,
+                        config.scrcpy_screen_off.clone(),
                     ).await;
                     let _ = done_th_tx_ctrl.send(res);
                 });
