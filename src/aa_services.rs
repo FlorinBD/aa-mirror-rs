@@ -17,7 +17,7 @@ use crate::aa_services::MessageStatus::*;
 use crate::aa_services::MediaMessageId::*;
 use crate::aa_services::InputMessageId::*;
 use crate::aa_services::SensorMessageId::*;
-use crate::aa_services::SensorType::*;
+//use crate::aa_services::SensorType::*;
 use crate::aa_services::MediaCodecType::*;
 use protobuf::{Message};
 //use tokio::sync::broadcast;
@@ -107,6 +107,67 @@ impl Default for AudioStreamingParams {
         }
     }
 }
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum SensorType {
+    SENSOR_LOCATION = 1,
+    SENSOR_COMPASS = 2,
+    SENSOR_SPEED = 3,
+    SENSOR_RPM = 4,
+    SENSOR_ODOMETER = 5,
+    SENSOR_FUEL = 6,
+    SENSOR_PARKING_BRAKE = 7,
+    SENSOR_GEAR = 8,
+    SENSOR_OBDII_DIAGNOSTIC_CODE = 9,
+    SENSOR_NIGHT_MODE = 10,
+    SENSOR_ENVIRONMENT_DATA = 11,
+    SENSOR_HVAC_DATA = 12,
+    SENSOR_DRIVING_STATUS_DATA = 13,
+    SENSOR_DEAD_RECKONING_DATA = 14,
+    SENSOR_PASSENGER_DATA = 15,
+    SENSOR_DOOR_DATA = 16,
+    SENSOR_LIGHT_DATA = 17,
+    SENSOR_TIRE_PRESSURE_DATA = 18,
+    SENSOR_ACCELEROMETER_DATA = 19,
+    SENSOR_GYROSCOPE_DATA = 20,
+    SENSOR_GPS_SATELLITE_DATA = 21,
+    SENSOR_TOLL_CARD = 22,
+    SENSOR_VEHICLE_ENERGY_MODEL_DATA = 23,
+    SENSOR_TRAILER_DATA = 24,
+}
+
+impl TryFrom<i32> for SensorType {
+    type Error = ();
+
+    fn try_from(v: i32) -> std::result::Result<Self, Self::Error> {
+        match v {
+            1 => Ok(SensorType::SENSOR_LOCATION),
+            2 => Ok(SensorType::SENSOR_COMPASS),
+            3 => Ok(SensorType::SENSOR_SPEED),
+            4 => Ok(SensorType::SENSOR_RPM),
+            5 => Ok(SensorType::SENSOR_ODOMETER),
+            6 => Ok(SensorType::SENSOR_FUEL),
+            7 => Ok(SensorType::SENSOR_PARKING_BRAKE),
+            8 => Ok(SensorType::SENSOR_GEAR),
+            9 => Ok(SensorType::SENSOR_OBDII_DIAGNOSTIC_CODE),
+            10 => Ok(SensorType::SENSOR_NIGHT_MODE),
+            11 => Ok(SensorType::SENSOR_ENVIRONMENT_DATA),
+            12 => Ok(SensorType::SENSOR_HVAC_DATA),
+            13 => Ok(SensorType::SENSOR_DRIVING_STATUS_DATA),
+            14 => Ok(SensorType::SENSOR_DEAD_RECKONING_DATA),
+            15 => Ok(SensorType::SENSOR_PASSENGER_DATA),
+            16 => Ok(SensorType::SENSOR_DOOR_DATA),
+            17 => Ok(SensorType::SENSOR_LIGHT_DATA),
+            18 => Ok(SensorType::SENSOR_TIRE_PRESSURE_DATA),
+            19 => Ok(SensorType::SENSOR_ACCELEROMETER_DATA),
+            20 => Ok(SensorType::SENSOR_GYROSCOPE_DATA),
+            21 => Ok(SensorType::SENSOR_GPS_SATELLITE_DATA),
+            22 => Ok(SensorType::SENSOR_TOLL_CARD),
+            23 => Ok(SensorType::SENSOR_VEHICLE_ENERGY_MODEL_DATA),
+            24 => Ok(SensorType::SENSOR_TRAILER_DATA),
+            _ => Err(()),
+        }
+    }
+}
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum VideoCodecResolution {
@@ -170,8 +231,9 @@ impl fmt::Display for ServiceType {
         // fmt::Debug::fmt(self, f)
     }
 }
-pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>) -> Result<()> {
+pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, sensors: Result<Vec<SensorType>>) -> Result<()> {
     info!( "{}: Starting...", get_name());
+    let mut md_connected=false;
     loop {
         let pkt = rx_srv.recv().await.ok_or("service reader channel hung up")?;
         if pkt.channel != ch_id as u8
@@ -188,6 +250,10 @@ pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, 
                     {
                         error!( "{}, channel {:?}: Wrong message status received", get_name(), pkt.channel);
                     }
+                    else
+                    {
+
+                    }
                 }
                 else {
                     error!( "{}, channel {:?}: Unable to parse received message", get_name(), pkt.channel);
@@ -197,29 +263,40 @@ pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, 
             {
                 info!("{} Received {} message", ch_id.to_string(), message_id);
                 let cmd: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
-                    if cmd == CustomCommand::CMD_OPEN_CH as i32
-                    {
-                        let mut open_req = ChannelOpenRequest::new();
-                        open_req.set_priority(0);
-                        open_req.set_service_id(ch_id);
-                        let mut payload: Vec<u8> = open_req.write_to_bytes().expect("serialization failed");
-                        payload.insert(0, ((MESSAGE_CHANNEL_OPEN_REQUEST as u16) >> 8) as u8);
-                        payload.insert(1, ((MESSAGE_CHANNEL_OPEN_REQUEST as u16) & 0xff) as u8);
+                if cmd == CustomCommand::CMD_OPEN_CH as i32
+                {
+                    let mut open_req = ChannelOpenRequest::new();
+                    open_req.set_priority(0);
+                    open_req.set_service_id(ch_id);
+                    let mut payload: Vec<u8> = open_req.write_to_bytes().expect("serialization failed");
+                    payload.insert(0, ((MESSAGE_CHANNEL_OPEN_REQUEST as u16) >> 8) as u8);
+                    payload.insert(1, ((MESSAGE_CHANNEL_OPEN_REQUEST as u16) & 0xff) as u8);
 
-                        let pkt_rsp = Packet {
-                            channel: ch_id as u8,
-                            flags: ENCRYPTED | FRAME_TYPE_CONTROL | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                            final_length: None,
-                            payload: payload,
-                        };
-                        //tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
-                        if let Err(_) = tx_srv.send(pkt_rsp).await
-                        {
-                            error!( "{} mpsc send error", get_name());
-                        };
-                    }
+                    let pkt_rsp = Packet {
+                        channel: ch_id as u8,
+                        flags: ENCRYPTED | FRAME_TYPE_CONTROL | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                        final_length: None,
+                        payload: payload,
+                    };
+                    //tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+                    if let Err(_) = tx_srv.send(pkt_rsp).await
+                    {
+                        error!( "{} mpsc send error", get_name());
+                    };
+                }
+                else if cmd == CustomCommand::MD_CONNECTED as i32
+                {
+                    info!( "{} MD_CONNECTED received", get_name());
+                    md_connected=true;
+                }
+                else if cmd == CustomCommand::MD_DISCONNECTED as i32
+                {
+                    info!( "{} MD_DISCONNECTED received", get_name());
+                    md_connected=false;
+                }
             }
-            else {
+            else
+            {
                 info!( "{} Unknown message ID: {} received", get_name(), message_id);
             }
         }

@@ -27,7 +27,7 @@ use protobuf::text_format::print_to_string_pretty;
 use protobuf::{Enum, Message, MessageDyn};
 use tokio::sync::{mpsc};
 use protos::ControlMessageType::{self, *};
-use crate::aa_services::{VideoCodecResolution::*, VideoFPS::*, AudioStream, AudioConfig, MediaCodec::*, ServiceType, CommandState, ServiceStatus, th_bluetooth, VideoStreamingParams, AudioStreamingParams};
+use crate::aa_services::{VideoCodecResolution::*, VideoFPS::*, AudioStream, AudioConfig, MediaCodec::*, ServiceType, CommandState, ServiceStatus, th_bluetooth, VideoStreamingParams, AudioStreamingParams, SensorType};
 use crate::aa_services::{th_input_source, th_media_sink_audio_guidance, th_media_sink_audio_streaming, th_media_sink_video, th_media_source, th_sensor_source, th_vendor_extension};
 use crate::config::HU_CONFIG_DELAY_MS;
 use crate::config_types::HexdumpLevel;
@@ -831,7 +831,8 @@ pub async fn ch_proxy(
                 channel_status.push( ServiceStatus{service_type:ServiceType::SensorSource,ch_id, enabled:false, open_ch_cmd: CommandState::NotDone});
                 let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                 srv_senders.push(tx);
-                srv_tsk_handles.push(tokio_uring::spawn(th_sensor_source(ch_id,false, tx_srv.clone(), rx)));
+                let sensors: Result<Vec<SensorType>> = proto_srv.sensor_source_service.sensors.iter().copied().map(SensorType::try_from).collect();
+                srv_tsk_handles.push(tokio_uring::spawn(th_sensor_source(ch_id,false, tx_srv.clone(), rx, sensors)));
             }
             else if proto_srv.input_source_service.is_some()
             {
