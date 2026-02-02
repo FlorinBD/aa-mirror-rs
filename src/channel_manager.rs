@@ -839,7 +839,6 @@ pub async fn ch_proxy(
                     }
 
                 }
-                //let sensors: Result<Vec<SensorType>> = proto_srv.sensor_source_service.sensors.iter().filter_map(|s| SensorType::try_from(s.sensor_type).ok()).collect();
                 srv_tsk_handles.push(tokio_uring::spawn(th_sensor_source(ch_id,false, tx_srv.clone(), rx, sensors)));
             }
             else if proto_srv.input_source_service.is_some()

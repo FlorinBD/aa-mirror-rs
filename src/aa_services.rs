@@ -253,11 +253,39 @@ pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, 
                     }
                     else
                     {
+                        info!("{} send SENSOR_MESSAGE_REQUEST",get_name());
+                        let mut req = SensorRequest::new();
+                        req.set_type(SensorType::SENSOR_NIGHT_MODE);
+                        req.set_min_update_period(1000);
+                        let mut payload: Vec<u8>=Vec::new();
+                        payload.extend_from_slice((SensorMessageId::SENSOR_MESSAGE_REQUEST as u16).to_be_bytes());
+                        payload.extend_from_slice(&(req.write_to_bytes()?));
 
+                        let pkt_rsp = Packet {
+                            channel: ch_id as u8,
+                            flags: ENCRYPTED | FRAME_TYPE_CONTROL | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                            final_length: None,
+                            payload: payload,
+                        };
+                        if let Err(_) = tx_srv.send(pkt_rsp).await
+                        {
+                            error!( "{} mpsc send error", get_name());
+                        };
                     }
                 }
                 else {
                     error!( "{}, channel {:?}: Unable to parse received message", get_name(), pkt.channel);
+                }
+            }
+            else if message_id == SENSOR_MESSAGE_RESPONSE  as i32
+            {
+                info!("Ch {} Received message SENSOR_MESSAGE_RESPONSE", ch_id.to_string());
+                let data = &pkt.payload[2..]; // start of message data, without message_id
+                if  let Ok(rsp) = SensorResponse::parse_from_bytes(&data) {
+                    if rsp.status() != STATUS_SUCCESS
+                    {
+                        error!( "{}, channel {:?}: Wrong message status received", get_name(), pkt.channel);
+                    }
                 }
             }
             else if message_id == MESSAGE_CUSTOM_CMD  as i32
