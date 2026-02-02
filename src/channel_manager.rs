@@ -831,7 +831,7 @@ pub async fn ch_proxy(
                 channel_status.push( ServiceStatus{service_type:ServiceType::SensorSource,ch_id, enabled:false, open_ch_cmd: CommandState::NotDone});
                 let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                 srv_senders.push(tx);
-                let sensors: Result<Vec<SensorType>> = proto_srv.sensor_source_service.sensors.iter().map(|s| {SensorType::try_from(s.sensor_type).ok() }).collect();
+                let sensors: Result<Vec<SensorType, std::io::Error>> = proto_srv.sensor_source_service.sensors.iter().map(|s| {SensorType::try_from(s.sensor_type).ok() }).collect();
                 srv_tsk_handles.push(tokio_uring::spawn(th_sensor_source(ch_id,false, tx_srv.clone(), rx, sensors)));
             }
             else if proto_srv.input_source_service.is_some()
