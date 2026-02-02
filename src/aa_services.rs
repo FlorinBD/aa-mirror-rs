@@ -295,7 +295,7 @@ pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, 
                 info!("{} Received message SENSOR_MESSAGE_BATCH", get_name());
                 let data = &pkt.payload[2..]; // start of message data, without message_id
                 if  let Ok(rsp) = SensorBatch::parse_from_bytes(&data) {
-                    if rsp.night_mode_data.is_some()
+                    if rsp.night_mode_data.len()>0
                     {
                         let nt=rsp.night_mode_data[0].night_mode() as bool;
                         if nt != prev_nt_mode
