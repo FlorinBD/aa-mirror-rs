@@ -314,7 +314,7 @@ pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, 
                                 cmd_shell.push("night".to_string());
                                 cmd_shell.push(format!("{}",mode.to_string() ));
                                 let (mut shell, mut sh_reader,line)=adb::shell_cmd(cmd_shell).await?;
-                                info!("ADB cmd shell response: {:?}", line);
+                                info!("{} ADB cmd shell response: {:?}",get_name(), line);
                                 if !line.contains("Night mode:") && shell.id().is_some()
                                 {
                                     error!( "{} error switching MD theme", get_name());
