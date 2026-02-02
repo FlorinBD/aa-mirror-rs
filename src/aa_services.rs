@@ -303,7 +303,7 @@ pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, 
                             prev_nt_mode=nt;
                             if md_connected
                             {
-                                info!("{} Switching theme for MD", get_name());
+                                info!("{} Switching theme for MD, night: {}", get_name(), nt);
                                 let mut mode="yes";
                                 if !nt{
                                     mode="no";
