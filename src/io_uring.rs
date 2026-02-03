@@ -416,7 +416,6 @@ pub async fn io_loop(
             flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
             final_length: None,
             payload: payload,
-            encrypted_chunks: Vec::new()
         };
         if let Err(_) = tx_scrcpy_cmd.send_async(pkt_rsp).await{
             error!( "io_uring.io_loop() send error");

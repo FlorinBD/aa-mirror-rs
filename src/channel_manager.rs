@@ -114,7 +114,6 @@ pub struct Packet {
     pub flags: u8,
     pub final_length: Option<u32>,
     pub payload: Vec<u8>,
-    pub encrypted_chunks: Vec<Vec<u8>>,
 }
 
 impl Packet {
@@ -153,7 +152,7 @@ impl Packet {
                     // read encrypted data
                     let mut res: Vec<u8> = Vec::new();
                     mem_buf.read_to(&mut res)?;
-                    self.encrypted_chunks.push(res);
+                    //self.encrypted_chunks.push(res);
 
                 }
             }
@@ -164,12 +163,50 @@ impl Packet {
                 // read encrypted data
                 let mut res: Vec<u8> = Vec::new();
                 mem_buf.read_to(&mut res)?;
-                self.encrypted_chunks.push(res);
+                //self.encrypted_chunks.push(res);
 
             }
         }
 
         Ok(())
+    }
+
+    ///payload encryption into chunks of max size
+    async fn encrypt_payload_v2(
+        &self,
+        mem_buf: &mut SslMemBuf,
+        server: &mut openssl::ssl::SslStream<SslMemBuf>,
+    ) -> Result<(Vec<Vec<u8>>)> {
+        //FIXME do chunks also for unencrypted
+        let mut retval:Vec<Vec<u8>>;
+        if (self.flags & ENCRYPTED) == ENCRYPTED {
+            //self.encrypted_chunks=Vec::new();
+            if self.payload.len()> MAX_DATA_LEN
+            {
+                for chunk in self.payload.chunks(MAX_DATA_LEN)
+                {
+                    // save plain data for encryption
+                    server.ssl_write(&chunk)?;
+                    // read encrypted data
+                    let mut res: Vec<u8> = Vec::new();
+                    mem_buf.read_to(&mut res)?;
+                    retval.push(res);
+
+                }
+            }
+            else
+            {
+                // save plain data for encryption
+                server.ssl_write(&self.payload)?;
+                // read encrypted data
+                let mut res: Vec<u8> = Vec::new();
+                mem_buf.read_to(&mut res)?;
+                retval.push(res);
+
+            }
+        }
+
+        Ok(retval)
     }
 
     /// payload decryption if needed
@@ -226,17 +263,20 @@ impl Packet {
         }
     }
 
-    /// composes a final frame and transmits it to endpoint device (HU/MD)
+    /// composes a final frame, encrypt if necessary and transmits it to endpoint device (HU/MD)
     async fn transmit<A: Endpoint<A>>(
         &self,
         device: &mut IoDevice<A>,
+        mem_buf: &mut SslMemBuf,
+        server: &mut openssl::ssl::SslStream<SslMemBuf>,
     ) -> std::result::Result<usize, std::io::Error> {
         if self.flags & ENCRYPTED == ENCRYPTED {
-            if self.encrypted_chunks.len() > 1
+            let chunks=self.encrypt_payload_v2(mem_buf, server).await?;
+            if chunks.len() > 1
             {
                 //segmented data
                 let mut total_size = 0;
-                for (i, mut chunk) in self.encrypted_chunks.iter().enumerate() {
+                for (i, mut chunk) in chunks.iter().enumerate() {
                     let mut frame: Vec<u8> = vec![];
                     let len = chunk.len()as  u16;
                     frame.push(self.channel);
@@ -253,7 +293,7 @@ impl Packet {
                         frame.push((final_len >> 8) as u8);
                         frame.push((final_len & 0xff) as u8);
                     }
-                    else if i== self.encrypted_chunks.len() - 1
+                    else if i== chunks.len() - 1
                     {
                         //last frame
                         frame.push((self.flags & 0xFC) | FRAME_TYPE_LAST);
@@ -277,7 +317,7 @@ impl Packet {
             else
             {
                 //whole data
-                let len = self.encrypted_chunks[0].len()as  u16;
+                let len = chunks[0].len()as  u16;
                 let mut frame: Vec<u8> = vec![];
                 frame.push(self.channel);
                 frame.push(self.flags);
@@ -290,7 +330,7 @@ impl Packet {
                     frame.push((final_len >> 8) as u8);
                     frame.push((final_len & 0xff) as u8);
                 }
-                frame.extend_from_slice(&self.encrypted_chunks[0]);
+                frame.extend_from_slice(&chunks[0]);
                 return self.ep_send(frame,device).await;
             }
         }
@@ -483,7 +523,6 @@ pub async fn endpoint_reader<A: Endpoint<A>>(
                         flags,
                         final_length,
                         payload: frame,
-                        encrypted_chunks: Vec::new()
                     };
                     info!("Channel {} received {} bytes from HU", channel ,payload_size);
                     // send packet to main thread for further process
@@ -535,19 +574,12 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                         &msg,
                         "SCRCPY".parse().unwrap()
                     ).await;*/
-                    match msg.encrypt_payload(&mut mem_buf, &mut server).await {
-                        Ok(_) => {
-                            // Increment byte counters for statistics
-                            // fixme: compute final_len for precise stats
-                            w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
+                    // Increment byte counters for statistics
+                    // fixme: compute final_len for precise stats
+                    w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
                             //msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: SCRCPY transmit to HU failed", get_name()))?;
-                            if let Err(e) = msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: SCRCPY transmit to HU failed", get_name())) {
-                                error!("SCRCPY>HU Transmission error: {:?}", e);
-                            }
-                            // yield so other tasks can run to release backpressure on TCP
-                            //tokio::task::yield_now().await;
-                        }
-                        Err(e) => {error!( "{} encrypt_payload error: {:?}", get_name(), e);},
+                    if let Err(e) = msg.transmit(&mut hu_wr, &mut mem_buf, &mut server).await.with_context(|| format!("{}: SCRCPY transmit to HU failed", get_name())) {
+                        error!("SCRCPY>HU Transmission error: {:?}", e);
                     }
                 }
         }
@@ -566,15 +598,13 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                             &msg,
                             "MD".parse().unwrap()
                         ).await;
-                        match msg.encrypt_payload(&mut mem_buf, &mut server).await {
-                            Ok(_) => {
-                                // Increment byte counters for statistics
-                                // fixme: compute final_len for precise stats
-                                w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
-                                msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: Service transmit to HU failed", get_name()))?;
-                            }
-                            Err(e) => {error!( "{} encrypt_payload error: {:?}", get_name(), e);},
-                        }
+                         // Increment byte counters for statistics
+                    // fixme: compute final_len for precise stats
+                    w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
+                            //msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: SCRCPY transmit to HU failed", get_name()))?;
+                    if let Err(e) = msg.transmit(&mut hu_wr, &mut mem_buf, &mut server).await.with_context(|| format!("{}: SCRCPY transmit to HU failed", get_name())) {
+                        error!("SCRCPY>HU Transmission error: {:?}", e);
+                    }
                 }
             }
             else
@@ -740,7 +770,6 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
             flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
             final_length: None,
             payload: res,
-            encrypted_chunks: Vec::new()
         })
     }
 }
@@ -813,7 +842,6 @@ pub async fn ch_proxy(
         flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
         final_length: None,
         payload: payload,
-        encrypted_chunks: Vec::new()
     };
     if let Err(_) = tx_srv.send(pkt_rsp).await{
         error!( "{} tls proxy send error",get_name());
@@ -858,7 +886,6 @@ pub async fn ch_proxy(
         flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
         final_length: None,
         payload: payload,
-        encrypted_chunks: Vec::new()
     };
     if let Err(_) = tx_srv.send(pkt_rsp).await{
         error!( "{} tls proxy send error",get_name());
@@ -1031,7 +1058,6 @@ pub async fn ch_proxy(
             flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
             final_length: None,
             payload: payload,
-            encrypted_chunks: Vec::new()
         };
         if let Err(_) = tx_srv.send(pkt_rsp).await{
             error!( "{} tls proxy send error",get_name());
@@ -1079,7 +1105,6 @@ pub async fn ch_proxy(
                                     flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                                     final_length: None,
                                     payload: payload,
-                                    encrypted_chunks: Vec::new()
                                 };
                                 if let Err(_) = tx_srv.send(pkt_rsp).await{
                                     error!( "{} tls proxy send error",get_name());
@@ -1111,7 +1136,6 @@ pub async fn ch_proxy(
                                             flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                                             final_length: None,
                                             payload: payload.clone(),
-                                            encrypted_chunks: Vec::new()
                                         };
                                         channel_status[idx].open_ch_cmd = CommandState::InProgress;
                                         if let Err(_) = srv_senders[idx].send(pkt_rsp).await{
@@ -1157,7 +1181,6 @@ pub async fn ch_proxy(
                                 flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                                 final_length: None,
                                 payload: std::mem::take(&mut payload),
-                                encrypted_chunks: Vec::new()
                             };
                             //srv_senders[idx].send(pkt_rsp).await.expect("Error sending message to service");
                             if let Err(_) = srv_senders[idx].send(pkt_rsp).await{
@@ -1178,7 +1201,6 @@ pub async fn ch_proxy(
                                 flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                                 final_length: None,
                                 payload: std::mem::take(&mut payload),
-                                encrypted_chunks: Vec::new()
                             };
                             //srv_senders[idx].send(pkt_rsp).await.expect("Error sending message to service");
                             if let Err(_) = srv_senders[idx].send(pkt_rsp).await{
@@ -1204,7 +1226,6 @@ pub async fn ch_proxy(
                                 flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                                 final_length: None,
                                 payload: std::mem::take(&mut payload),
-                                encrypted_chunks: Vec::new()
                             };
                             //srv_senders[idx].send(pkt_rsp).await.expect("Error sending message to service");
                             if let Err(_) = srv_senders[idx].send(pkt_rsp).await{
@@ -1225,7 +1246,6 @@ pub async fn ch_proxy(
                                 flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                                 final_length: None,
                                 payload: std::mem::take(&mut payload),
-                                encrypted_chunks: Vec::new()
                             };
                             //srv_senders[idx].send(pkt_rsp).await.expect("Error sending message to service");
                             if let Err(_) = srv_senders[idx].send(pkt_rsp).await{
