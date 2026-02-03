@@ -618,7 +618,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                     // Increment byte counters for statistics
                     // fixme: compute final_len for precise stats
                     w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
-                    msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: Service transmit to HU failed", get_name()))?;
+                    msg.transmit(&mut hu_wr, &mut mem_buf, &mut server).await.with_context(|| format!("{}: Service transmit to HU failed", get_name()))?;
 
             }
         }
@@ -673,7 +673,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                             // Step2: send server hello
                             let pkt = ssl_encapsulate(mem_buf.clone()).await?;
                             let _ = pkt_debug(HexdumpLevel::RawOutput, dmp_level, &pkt,"MD".parse().unwrap()).await;
-                            pkt.transmit(&mut hu_wr).await.with_context(|| format!("{}: transmit failed", get_name()))?;
+                            pkt.transmit(&mut hu_wr, &mut mem_buf, &mut server).await.with_context(|| format!("{}: transmit failed", get_name()))?;
 
                             //Step3: ClientKeyExchange
                             let pkt = hu_rx.recv().await.ok_or("hu reader channel hung up")?;
@@ -698,7 +698,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                             //Step4: Change Cipher spec finished
                             let pkt = ssl_encapsulate(mem_buf.clone()).await?;
                             let _ = pkt_debug(HexdumpLevel::RawOutput, dmp_level, &pkt, "MD".parse().unwrap()).await;
-                            pkt.transmit(&mut hu_wr).await.with_context(|| format!("{}: transmit failed", get_name()))?;
+                            pkt.transmit(&mut hu_wr, &mut mem_buf, &mut server).await.with_context(|| format!("{}: transmit failed", get_name()))?;
                     }
                     else {
                         if let Err(_) = srv_tx.send(msg).await{
