@@ -11,7 +11,7 @@ use tokio_util::bytes::BytesMut;
 use crate::aa_services::{AudioStreamingParams, VideoStreamingParams};
 use crate::adb;
 use crate::channel_manager::{Packet, ENCRYPTED, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
-use crate::config::{AppConfig, MAX_DATA_LEN, SCRCPY_AUDIO_CODEC, SCRCPY_METADATA_HEADER_LEN, SCRCPY_PORT, SCRCPY_VERSION};
+use crate::config::{AppConfig, SCRCPY_AUDIO_CODEC, SCRCPY_METADATA_HEADER_LEN, SCRCPY_PORT, SCRCPY_VERSION};
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use protos::*;
 use protos::ControlMessageType::{self, *};
