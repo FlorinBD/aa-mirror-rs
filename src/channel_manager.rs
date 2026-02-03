@@ -118,6 +118,15 @@ pub struct Packet {
 }
 
 impl Packet {
+    pub fn new(ch:u8,fl:u8, len:Option<u32>, data: Vec<u8>) -> Self {
+        Self {
+            channel:ch,
+            flags:fl,
+            payload:data,
+            final_length:len,
+            encrypted_chunks: Vec::new(),
+        }
+    }
     /// payload encryption if needed
     async fn encrypt_payload_old(
         &mut self,
