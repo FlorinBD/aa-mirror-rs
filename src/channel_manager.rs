@@ -135,7 +135,7 @@ impl Packet {
         Ok(())
     }
 ///payload encryption into chunks of max size
-    async fn encrypt_payload(
+    async fn encrypt_payload_old2(
         &mut self,
         mem_buf: &mut SslMemBuf,
         server: &mut openssl::ssl::SslStream<SslMemBuf>,
@@ -172,7 +172,7 @@ impl Packet {
     }
 
     ///payload encryption into chunks of max size
-    async fn encrypt_payload_v2(
+    async fn encrypt_payload(
         &self,
         mem_buf: &mut SslMemBuf,
         server: &mut openssl::ssl::SslStream<SslMemBuf>,
@@ -271,7 +271,7 @@ impl Packet {
         server: &mut openssl::ssl::SslStream<SslMemBuf>,
     ) -> std::result::Result<usize, std::io::Error> {
         if self.flags & ENCRYPTED == ENCRYPTED {
-            let chunks=self.encrypt_payload_v2(mem_buf, server).await?;
+            let chunks=self.encrypt_payload(mem_buf, server).await?;
             if chunks.len() > 1
             {
                 //segmented data
