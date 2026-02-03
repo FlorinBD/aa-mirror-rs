@@ -250,6 +250,7 @@ async fn tsk_scrcpy_video(
                         flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                         final_length: None,
                         payload: chunk.to_vec(),
+                        encrypted_chunks: Vec::new()
                     };
                     video_tx.send_async(pkt_rsp).await?;
                 }
@@ -736,6 +737,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                 flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                 final_length: None,
                 payload: std::mem::take(&mut payload),
+                encrypted_chunks: Vec::new()
             };
             srv_cmd_tx.send_async(pkt_rsp).await?;
             let mut start_audio_recived=false;
@@ -832,6 +834,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                     flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                     final_length: None,
                     payload: std::mem::take(&mut payload),
+                    encrypted_chunks: Vec::new()
                 };
                 srv_cmd_tx.send_async(pkt_rsp).await?;
                 continue;
@@ -1096,6 +1099,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                     flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                     final_length: None,
                     payload: std::mem::take(&mut payload),
+                    encrypted_chunks: Vec::new()
                 };
                 srv_cmd_tx.send_async(pkt_rsp).await?;
                 continue;
