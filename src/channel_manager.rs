@@ -180,7 +180,6 @@ impl Packet {
         //FIXME do chunks also for unencrypted
         let mut retval:Vec<Vec<u8>>;
         if (self.flags & ENCRYPTED) == ENCRYPTED {
-            //self.encrypted_chunks=Vec::new();
             if self.payload.len()> MAX_DATA_LEN
             {
                 for chunk in self.payload.chunks(MAX_DATA_LEN)
