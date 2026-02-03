@@ -1157,6 +1157,7 @@ pub async fn ch_proxy(
                                 flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                                 final_length: None,
                                 payload: std::mem::take(&mut payload),
+                                encrypted_chunks: Vec::new()
                             };
                             //srv_senders[idx].send(pkt_rsp).await.expect("Error sending message to service");
                             if let Err(_) = srv_senders[idx].send(pkt_rsp).await{
@@ -1177,6 +1178,7 @@ pub async fn ch_proxy(
                                 flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                                 final_length: None,
                                 payload: std::mem::take(&mut payload),
+                                encrypted_chunks: Vec::new()
                             };
                             //srv_senders[idx].send(pkt_rsp).await.expect("Error sending message to service");
                             if let Err(_) = srv_senders[idx].send(pkt_rsp).await{
@@ -1202,6 +1204,7 @@ pub async fn ch_proxy(
                                 flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                                 final_length: None,
                                 payload: std::mem::take(&mut payload),
+                                encrypted_chunks: Vec::new()
                             };
                             //srv_senders[idx].send(pkt_rsp).await.expect("Error sending message to service");
                             if let Err(_) = srv_senders[idx].send(pkt_rsp).await{
@@ -1222,6 +1225,7 @@ pub async fn ch_proxy(
                                 flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                                 final_length: None,
                                 payload: std::mem::take(&mut payload),
+                                encrypted_chunks: Vec::new()
                             };
                             //srv_senders[idx].send(pkt_rsp).await.expect("Error sending message to service");
                             if let Err(_) = srv_senders[idx].send(pkt_rsp).await{
