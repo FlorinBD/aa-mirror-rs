@@ -143,7 +143,7 @@ impl Packet {
     ) -> Result<()> {
         //FIXME do chunks also for unencrypted
         if (self.flags & ENCRYPTED) == ENCRYPTED {
-            self.encrypted_chunks=Vec::new();
+            //self.encrypted_chunks=Vec::new();
             if self.payload.len()> MAX_DATA_LEN
             {
                 for chunk in self.payload.chunks(MAX_DATA_LEN)
