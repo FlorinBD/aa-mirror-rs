@@ -176,9 +176,9 @@ impl Packet {
         &self,
         mem_buf: &mut SslMemBuf,
         server: &mut openssl::ssl::SslStream<SslMemBuf>,
-    ) -> Result<(Vec<Vec<u8>>)> {
+    ) -> anyhow::Result<(Vec<Vec<u8>>)> {
         //FIXME do chunks also for unencrypted
-        let mut retval:Vec<Vec<u8>>;
+        let mut retval:Vec<Vec<u8>> = vec![];
         if (self.flags & ENCRYPTED) == ENCRYPTED {
             if self.payload.len()> MAX_DATA_LEN
             {
@@ -271,6 +271,7 @@ impl Packet {
     ) -> std::result::Result<usize, std::io::Error> {
         if self.flags & ENCRYPTED == ENCRYPTED {
             let chunks=self.encrypt_payload(mem_buf, server).await?;
+
             if chunks.len() > 1
             {
                 //segmented data
