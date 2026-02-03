@@ -290,7 +290,7 @@ impl Packet {
                     frame.push((final_len >> 8) as u8);
                     frame.push((final_len & 0xff) as u8);
                 }
-                frame.extend_from_slice(&mut self.encrypted_chunks[0]);
+                frame.extend_from_slice(&self.encrypted_chunks[0]);
                 return self.ep_send(frame,device).await;
             }
         }

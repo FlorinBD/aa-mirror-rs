@@ -426,7 +426,8 @@ async fn tsk_scrcpy_audio(
                     channel: sid,
                     flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                     final_length: None,
-                    payload,
+                    payload: payload,
+                    encrypted_chunks: Vec::new()
                 };
                 audio_tx.send_async(pkt_rsp).await?;
             }
