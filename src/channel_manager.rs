@@ -270,8 +270,7 @@ impl Packet {
         server: &mut openssl::ssl::SslStream<SslMemBuf>,
     ) -> std::result::Result<usize, std::io::Error> {
         if self.flags & ENCRYPTED == ENCRYPTED {
-            let chunks=self.encrypt_payload(mem_buf, server).await?;
-
+            let chunks=self.encrypt_payload(mem_buf, server).awaitmap_err(|e| anyhow::Error::new(e))?;
             if chunks.len() > 1
             {
                 //segmented data
