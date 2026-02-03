@@ -216,7 +216,7 @@ async fn tsk_scrcpy_video(
         //Read video frames from SCRCPY server
         match read_scrcpy_packet(stream).await {
             Ok((pts, h264_data)) => {
-
+                let mut payload: Vec<u8>=Vec::new();
                 let key_frame = (pts & 0x4000_0000_0000_0000u64) != 0;
                 let rec_ts = pts & 0x3FFF_FFFF_FFFF_FFFFu64;
                 let config_frame = (pts & 0x8000_0000_0000_0000u64) != 0;
@@ -233,28 +233,25 @@ async fn tsk_scrcpy_video(
                     }
                     *dbg_count += 1;
                 }
-                let mut first_chunk=true;
-                for chunk in h264_data.chunks(MAX_DATA_LEN) {
-                    let mut payload: Vec<u8>=Vec::new();
-                    if config_frame && first_chunk
-                    {
-                        payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
-                        payload.extend_from_slice(&chunk);
-                    }
-                    else
-                    {
-                        payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
-                        payload.extend_from_slice(&rec_ts.to_be_bytes());
-                        payload.extend_from_slice(&chunk);
-                    }
+                if config_frame
+                {
+                    payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
+                    payload.extend_from_slice(&h264_data);
+                }
+                else
+                {
+                    payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
+                    payload.extend_from_slice(&rec_ts.to_be_bytes());
+                    payload.extend_from_slice(&h264_data);
+                }
+                for chunk in payload.chunks(MAX_DATA_LEN) {
                     let pkt_rsp = Packet {
                         channel: sid,
                         flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                         final_length: None,
-                        payload: payload,
+                        payload: chunk.to_vec(),
                     };
                     video_tx.send_async(pkt_rsp).await?;
-                    first_chunk = false;
                 }
 
 
@@ -396,7 +393,7 @@ async fn tsk_scrcpy_audio(
         //Read video frames from SCRCPY server
         match read_scrcpy_packet(stream).await {
             Ok((pts, data)) => {
-
+                let mut payload: Vec<u8>=Vec::new();
                 let rd_len = data.len();
                 let dbg_len = min(rd_len, 16);
                 let rec_ts = pts & 0x3FFF_FFFF_FFFF_FFFFu64;
@@ -412,30 +409,25 @@ async fn tsk_scrcpy_audio(
                     }
                     *dbg_count+=1;
                 }
-
-                let mut first_chunk=true;
-                for chunk in data.chunks(MAX_DATA_LEN) {
-                    let mut payload: Vec<u8>=Vec::new();
-                    if config_frame && first_chunk
-                    {
-                        payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
-                        payload.extend_from_slice(&chunk);
-                    }
-                    else
-                    {
-                        payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
-                        payload.extend_from_slice(&rec_ts.to_be_bytes());
-                        payload.extend_from_slice(&chunk);
-                    }
-                    let pkt_rsp = Packet {
-                        channel: sid,
-                        flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                        final_length: None,
-                        payload: payload,
-                    };
-                    audio_tx.send_async(pkt_rsp).await?;
-                    first_chunk = false;
+                if config_frame
+                {
+                    payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
+                    payload.extend_from_slice(&data);
                 }
+                else
+                {
+                    payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
+                    payload.extend_from_slice(&rec_ts.to_be_bytes());
+                    payload.extend_from_slice(&data);
+                }
+
+                let pkt_rsp = Packet {
+                    channel: sid,
+                    flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                    final_length: None,
+                    payload,
+                };
+                audio_tx.send_async(pkt_rsp).await?;
             }
             Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
                 error!("scrcpy audio stream ended");
