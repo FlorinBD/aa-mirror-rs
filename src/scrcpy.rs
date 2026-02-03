@@ -244,18 +244,14 @@ async fn tsk_scrcpy_video(
                     payload.extend_from_slice(&rec_ts.to_be_bytes());
                     payload.extend_from_slice(&h264_data);
                 }
-                for chunk in payload.chunks(MAX_DATA_LEN) {
-                    let pkt_rsp = Packet {
-                        channel: sid,
-                        flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                        final_length: None,
-                        payload: chunk.to_vec(),
-                        encrypted_chunks: Vec::new()
-                    };
-                    video_tx.send_async(pkt_rsp).await?;
-                }
-
-
+                let pkt_rsp = Packet {
+                    channel: sid,
+                    flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                    final_length: None,
+                    payload: payload,
+                    encrypted_chunks: Vec::new()
+                };
+                video_tx.send_async(pkt_rsp).await?;
             }
             Err(e) => {
                 error!("scrcpy video read packet failed: {}", e);
