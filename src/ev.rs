@@ -114,6 +114,7 @@ pub async fn send_ev_data(tx: Sender<Packet>, sensor_ch: u8, batt: BatteryData) 
         flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
         final_length: None,
         payload: payload,
+        encrypted_chunks: Vec::new()
     };
     tx.send(pkt).await?;
     info!("{} injecting ENERGY_MODEL_DATA packet...", NAME);
