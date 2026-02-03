@@ -11,7 +11,7 @@ use tokio_util::bytes::BytesMut;
 use crate::aa_services::{AudioStreamingParams, VideoStreamingParams};
 use crate::adb;
 use crate::channel_manager::{Packet, ENCRYPTED, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
-use crate::config::{AppConfig, SCRCPY_AUDIO_CODEC, SCRCPY_METADATA_HEADER_LEN, SCRCPY_PORT, SCRCPY_VERSION};
+use crate::config::{AppConfig, MAX_DATA_LEN, SCRCPY_AUDIO_CODEC, SCRCPY_METADATA_HEADER_LEN, SCRCPY_PORT, SCRCPY_VERSION};
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use protos::*;
 use protos::ControlMessageType::{self, *};
@@ -244,14 +244,17 @@ async fn tsk_scrcpy_video(
                     payload.extend_from_slice(&rec_ts.to_be_bytes());
                     payload.extend_from_slice(&h264_data);
                 }
+                for chunk in payload.chunks(MAX_DATA_LEN) {
+                    let pkt_rsp = Packet {
+                        channel: sid,
+                        flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                        final_length: None,
+                        payload: chunk.to_vec(),
+                    };
+                    video_tx.send_async(pkt_rsp).await?;
+                }
 
-                let pkt_rsp = Packet {
-                    channel: sid,
-                    flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                    final_length: None,
-                    payload,
-                };
-                video_tx.send_async(pkt_rsp).await?;
+
             }
             Err(e) => {
                 error!("scrcpy video read packet failed: {}", e);
@@ -418,13 +421,15 @@ async fn tsk_scrcpy_audio(
                     payload.extend_from_slice(&data);
                 }
 
-                let pkt_rsp = Packet {
-                    channel: sid,
-                    flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                    final_length: None,
-                    payload,
-                };
-                audio_tx.send_async(pkt_rsp).await?;
+                for chunk in payload.chunks(MAX_DATA_LEN) {
+                    let pkt_rsp = Packet {
+                        channel: sid,
+                        flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                        final_length: None,
+                        payload: chunk.to_vec(),
+                    };
+                    audio_tx.send_async(pkt_rsp).await?;
+                }
             }
             Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
                 error!("scrcpy audio stream ended");
@@ -509,7 +514,7 @@ async fn tsk_scrcpy_control(
     screen_size:ScrcpySize,
     cfg_screen_off:bool,
 ) -> Result<()> {
-    
+
     info!("Starting control server!");
     if cfg_screen_off {
         let mut payload: Vec<u8> = Vec::new();

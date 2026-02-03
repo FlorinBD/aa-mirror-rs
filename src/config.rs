@@ -25,6 +25,10 @@ pub const SCRCPY_VERSION: &str = "3.3.4";
 pub const SCRCPY_AUDIO_CODEC: &str = "raw";
 ///Delay after SDR to allow HU to configure its AV system, codecs, etc
 pub const HU_CONFIG_DELAY_MS: u64 = 600;
+///Max encrypted len including SSL and AA headers
+pub const MAX_PACKET_LEN: usize = 0x4000;
+///Max unencrypted data len, we have around 50bytes overhead for TLS header and 4 bytes for AA packet
+pub const MAX_DATA_LEN: usize = MAX_PACKET_LEN-100;
 
 pub type SharedConfig = Arc<RwLock<AppConfig>>;
 pub type SharedConfigJson = Arc<RwLock<ConfigJson>>;
