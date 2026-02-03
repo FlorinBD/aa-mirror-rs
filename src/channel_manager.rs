@@ -237,12 +237,12 @@ impl Packet {
                 //segmented data
                 let mut total_size = 0;
                 for (i, mut chunk) in self.encrypted_chunks.iter().enumerate() {
+                    let mut frame: Vec<u8> = vec![];
+                    let len = chunk.len()as  u16;
+                    frame.push(self.channel);
                     if i==0
                     {
                         //first frame
-                        let len = chunk.len()as  u16;
-                        let mut frame: Vec<u8> = vec![];
-                        frame.push(self.channel);
                         frame.push((self.flags & 0xFC) | FRAME_TYPE_FIRST);
                         frame.push((len >> 8) as u8);
                         frame.push((len & 0xff) as u8);
@@ -252,37 +252,24 @@ impl Packet {
                         frame.push((final_len >> 16) as u8);
                         frame.push((final_len >> 8) as u8);
                         frame.push((final_len & 0xff) as u8);
-
-                        frame.extend_from_slice(&mut chunk);
-                        total_size+=frame.len();
-                        self.ep_send(frame,device).await;
                     }
                     else if i== self.encrypted_chunks.len() - 1
                     {
                         //last frame
-                        let len = chunk.len()as  u16;
-                        let mut frame: Vec<u8> = vec![];
-                        frame.push(self.channel);
                         frame.push((self.flags & 0xFC) | FRAME_TYPE_LAST);
                         frame.push((len >> 8) as u8);
                         frame.push((len & 0xff) as u8);
-                        frame.extend_from_slice(&mut chunk);
-                        total_size+=frame.len();
-                        self.ep_send(frame,device).await;
                     }
                     else
                     {
                         //consecutive frame
-                        let len = chunk.len()as  u16;
-                        let mut frame: Vec<u8> = vec![];
-                        frame.push(self.channel);
                         frame.push(self.flags & 0xFC);
                         frame.push((len >> 8) as u8);
                         frame.push((len & 0xff) as u8);
-                        frame.extend_from_slice(&mut chunk);
-                        total_size+=frame.len();
-                        self.ep_send(frame,device).await;
                     }
+                    frame.extend_from_slice(&mut chunk);
+                    total_size+=frame.len();
+                    self.ep_send(frame,device).await;
 
                 }
                 Ok(total_size)
