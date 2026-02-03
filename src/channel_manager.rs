@@ -483,6 +483,7 @@ pub async fn endpoint_reader<A: Endpoint<A>>(
                         flags,
                         final_length,
                         payload: frame,
+                        encrypted_chunks: Vec::new()
                     };
                     info!("Channel {} received {} bytes from HU", channel ,payload_size);
                     // send packet to main thread for further process
@@ -739,6 +740,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
             flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
             final_length: None,
             payload: res,
+            encrypted_chunks: Vec::new()
         })
     }
 }
