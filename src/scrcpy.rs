@@ -1062,6 +1062,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                     flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                     final_length: None,
                     payload: payload,
+                    encrypted_chunks: Vec::new()
                 };
                 if let Err(_) = tx_ctrl.send_async(pkt_rsp).await{
                     error!( "scrcpy CANCEL send error");
@@ -1078,6 +1079,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                     flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                     final_length: None,
                     payload: std::mem::take(&mut payload),
+                    encrypted_chunks: Vec::new()
                 };
                 if let Err(_) = srv_cmd_tx.send_async(pkt_rsp).await{
                     error!( "scrcpy MD_DISCONNECTED send error");

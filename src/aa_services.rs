@@ -270,6 +270,7 @@ pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, 
                                 flags: ENCRYPTED | FRAME_TYPE_CONTROL | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                                 final_length: None,
                                 payload: payload,
+                                encrypted_chunks: Vec::new(),
                             };
                             if let Err(_) = tx_srv.send(pkt_rsp).await
                             {
@@ -347,6 +348,7 @@ pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, 
                         flags: ENCRYPTED | FRAME_TYPE_CONTROL | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                         final_length: None,
                         payload: payload,
+                        encrypted_chunks: Vec::new()
                     };
                     //tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
                     if let Err(_) = tx_srv.send(pkt_rsp).await
@@ -1104,6 +1106,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                                 flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                                 final_length: None,
                                 payload: payload,
+                                encrypted_chunks: Vec::new()
                             };
                             //tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
                             if let Err(_) = tx_srv.send(pkt_rsp).await
@@ -1135,6 +1138,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                             flags: ENCRYPTED | FRAME_TYPE_CONTROL | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                             final_length: None,
                             payload: payload,
+                            encrypted_chunks: Vec::new()
                         };
                         if let Err(_) = tx_srv.send(pkt_rsp).await{
                             error!( "{} response send error",get_name());
@@ -1182,6 +1186,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                             flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                             final_length: None,
                             payload: payload,
+                            encrypted_chunks: Vec::new()
                         };
                         if let Err(_) = tx_srv.send(pkt_rsp).await{
                             error!( "{} response send error",get_name());
@@ -1216,6 +1221,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                                 flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                                 final_length: None,
                                 payload: payload,
+                                encrypted_chunks: Vec::new()
                             };
                             //tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
                             if let Err(_) = tx_srv.send(pkt_rsp).await{
@@ -1238,6 +1244,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                                 flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                                 final_length: None,
                                 payload: payload,
+                                encrypted_chunks: Vec::new()
                             };
                             //tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
                             if let Err(_) = tx_srv.send(pkt_rsp).await{
@@ -1261,6 +1268,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                                     flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                                     final_length: None,
                                     payload: payload.clone(),
+                                    encrypted_chunks: Vec::new()
                                 };
                                 //scrcpy_cmd.send_async(pkt_rsp).await?;
                                 if let Err(_) = scrcpy_cmd.send_async(pkt_rsp).await{
@@ -1297,6 +1305,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                         final_length: None,
                         payload: payload,
+                        encrypted_chunks: Vec::new()
                     };
                     //tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
                     if let Err(_) = tx_srv.send(pkt_rsp).await{
@@ -1319,6 +1328,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                         final_length: None,
                         payload: payload,
+                        encrypted_chunks: Vec::new()
                     };
                     //tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
                     if let Err(_) = tx_srv.send(pkt_rsp).await{
@@ -1342,6 +1352,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                             flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                             final_length: None,
                             payload: payload.clone(),
+                            encrypted_chunks: Vec::new()
                         };
                         //scrcpy_cmd.send_async(pkt_rsp).await?;
                         if let Err(_) = scrcpy_cmd.send_async(pkt_rsp).await{
@@ -1387,6 +1398,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
             flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
             final_length: None,
             payload: payload,
+            encrypted_chunks: Vec::new()
         };
         if let Err(_) = tx.send(pkt_rsp).await{
             error!( "{} send error",get_name());
@@ -1405,6 +1417,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
             flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
             final_length: None,
             payload: payload,
+            encrypted_chunks: Vec::new()
         };
         if let Err(_) = tx.send(pkt_rsp).await{
             error!( "{} response send error",get_name());
@@ -1447,7 +1460,8 @@ pub async fn th_media_sink_audio_guidance(ch_id: i32, enabled:bool, tx_srv: Send
                                 channel: ch_id as u8,
                                 flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                                 final_length: None,
-                                payload: payload,
+                                payload: payload,					
+                                encrypted_chunks: Vec::new()
                             };
                             //tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
                             if let Err(_) = tx_srv.send(pkt_rsp).await{
@@ -1478,6 +1492,7 @@ pub async fn th_media_sink_audio_guidance(ch_id: i32, enabled:bool, tx_srv: Send
                             flags: ENCRYPTED | FRAME_TYPE_CONTROL | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                             final_length: None,
                             payload: payload,
+                            encrypted_chunks: Vec::new()
                         };
                         if let Err(_) = tx_srv.send(pkt_rsp).await {
                             error!( "{} response send error",get_name());
@@ -1580,6 +1595,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                                 flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                                 final_length: None,
                                 payload: payload,
+                                encrypted_chunks: Vec::new()
                             };
                             //tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
                             if let Err(_) = tx_srv.send(pkt_rsp).await{
@@ -1611,6 +1627,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                             flags: ENCRYPTED | FRAME_TYPE_CONTROL | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                             final_length: None,
                             payload: payload,
+                            encrypted_chunks: Vec::new()
                         };
                         if let Err(_) = tx_srv.send(pkt_rsp).await{
                             error!( "{} response send error",get_name());
@@ -1636,6 +1653,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                                 flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                                 final_length: None,
                                 payload: payload.clone(),
+                                encrypted_chunks: Vec::new()
                             };
                             scrcpy_cmd.send_async(pkt_rsp).await?;
                             audio_stream_started =true;
@@ -1687,6 +1705,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                                     flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                                     final_length: None,
                                     payload: payload.clone(),
+                                    encrypted_chunks: Vec::new()
                                 };
                                 scrcpy_cmd.send_async(pkt_rsp).await?;
                             }
@@ -1741,6 +1760,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
             flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
             final_length: None,
             payload: payload,
+            encrypted_chunks: Vec::new()
         };
         if let Err(_) = tx.send(pkt_rsp).await{
             error!( "{} send error",get_name());
@@ -1761,6 +1781,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
             flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
             final_length: None,
             payload: payload,
+            encrypted_chunks: Vec::new()
         };
         if let Err(_) = tx.send(pkt_rsp).await{
             error!( "{} response send error",get_name());
@@ -1813,6 +1834,7 @@ pub async fn th_media_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, m
                             flags: ENCRYPTED | FRAME_TYPE_CONTROL | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                             final_length: None,
                             payload: payload,
+                            encrypted_chunks: Vec::new()
                         };
                         if let Err(_) = tx_srv.send(pkt_rsp).await{
                             error!( "{} response send error",get_name());
@@ -1863,6 +1885,7 @@ pub async fn th_input_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, m
                             flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                             final_length: None,
                             payload: payload,
+                            encrypted_chunks: Vec::new()
                         };
                         if let Err(_) = tx_srv.send(pkt_rsp).await{
                             error!( "{} response send error",get_name());
@@ -1891,6 +1914,7 @@ pub async fn th_input_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, m
                             flags: ENCRYPTED | FRAME_TYPE_CONTROL | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                             final_length: None,
                             payload: payload,
+                            encrypted_chunks: Vec::new()
                         };
                         if let Err(_) = tx_srv.send(pkt_rsp).await{
                             error!( "{} response send error",get_name());
@@ -1965,6 +1989,7 @@ pub async fn th_vendor_extension(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                             flags: ENCRYPTED | FRAME_TYPE_CONTROL | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                             final_length: None,
                             payload: payload,
+                            encrypted_chunks: Vec::new()
                         };
                         if let Err(_) = tx_srv.send(pkt_rsp).await{
                             error!( "{} response send error",get_name());
@@ -2022,6 +2047,7 @@ pub async fn th_bluetooth(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut 
                             flags: ENCRYPTED | FRAME_TYPE_CONTROL | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                             final_length: None,
                             payload: payload,
+                            encrypted_chunks: Vec::new()
                         };
                         if let Err(_) = tx_srv.send(pkt_rsp).await{
                             error!( "{} response send error",get_name());

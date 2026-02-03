@@ -114,19 +114,10 @@ pub struct Packet {
     pub flags: u8,
     pub final_length: Option<u32>,
     pub payload: Vec<u8>,
-    encrypted_chunks: Vec<Vec<u8>>,
+    pub encrypted_chunks: Vec<Vec<u8>>,
 }
 
 impl Packet {
-    pub fn new(ch:u8,fl:u8, len:Option<u32>, data: Vec<u8>) -> Self {
-        Self {
-            channel:ch,
-            flags:fl,
-            payload:data,
-            final_length:len,
-            encrypted_chunks: Vec::new(),
-        }
-    }
     /// payload encryption if needed
     async fn encrypt_payload_old(
         &mut self,
@@ -820,6 +811,7 @@ pub async fn ch_proxy(
         flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
         final_length: None,
         payload: payload,
+        encrypted_chunks: Vec::new()
     };
     if let Err(_) = tx_srv.send(pkt_rsp).await{
         error!( "{} tls proxy send error",get_name());
@@ -864,6 +856,7 @@ pub async fn ch_proxy(
         flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
         final_length: None,
         payload: payload,
+        encrypted_chunks: Vec::new()
     };
     if let Err(_) = tx_srv.send(pkt_rsp).await{
         error!( "{} tls proxy send error",get_name());
@@ -1036,6 +1029,7 @@ pub async fn ch_proxy(
             flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
             final_length: None,
             payload: payload,
+            encrypted_chunks: Vec::new()
         };
         if let Err(_) = tx_srv.send(pkt_rsp).await{
             error!( "{} tls proxy send error",get_name());
@@ -1083,6 +1077,7 @@ pub async fn ch_proxy(
                                     flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                                     final_length: None,
                                     payload: payload,
+                                    encrypted_chunks: Vec::new()
                                 };
                                 if let Err(_) = tx_srv.send(pkt_rsp).await{
                                     error!( "{} tls proxy send error",get_name());
@@ -1114,6 +1109,7 @@ pub async fn ch_proxy(
                                             flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                                             final_length: None,
                                             payload: payload.clone(),
+                                            encrypted_chunks: Vec::new()
                                         };
                                         channel_status[idx].open_ch_cmd = CommandState::InProgress;
                                         if let Err(_) = srv_senders[idx].send(pkt_rsp).await{
