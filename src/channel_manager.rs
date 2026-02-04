@@ -504,7 +504,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                             //msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: SCRCPY transmit to HU failed", get_name()))?;
                     if let Err(e) = msg.transmit(&mut hu_wr, &mut mem_buf, &mut server).await.with_context(|| format!("{}: SCRCPY transmit to HU failed", get_name())) {
                         error!("SCRCPY>HU Transmission error: {:?}", e);
-                     return Err(Box::new(e));
+                     return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other,"SCRCPY>HU Transmission error")));
                     }
                 }
         }
@@ -528,8 +528,8 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                     w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
                             //msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: SCRCPY transmit to HU failed", get_name()))?;
                     if let Err(e) = msg.transmit(&mut hu_wr, &mut mem_buf, &mut server).await.with_context(|| format!("{}: SCRCPY transmit to HU failed", get_name())) {
-                        error!("SCRCPY>HU Transmission error: {:?}", e);
-                        return Err(Box::new(e));
+                        error!("srv>HU Transmission error: {:?}", e);
+                        return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other,"srv>HU Transmission error")));
                     }
                 }
             }
@@ -637,7 +637,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
         else => {
             // all channels closed
             tokio::time::sleep(Duration::from_secs(1)).await;
-                error!("packet_tls_proxy ALL CHANNELS CLOSED! handle app restart needed")
+                error!("packet_tls_proxy ALL CHANNELS CLOSED! handle app restart needed");
                 return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other,"all tls channels closed")));
         }
         }
