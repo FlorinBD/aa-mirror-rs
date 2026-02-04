@@ -359,6 +359,7 @@ impl Packet {
                 frame.push((final_len >> 8) as u8);
                 frame.push((final_len & 0xff) as u8);
             }
+            frame.extend_from_slice(&self.payload);
             return self.ep_send(frame,device).await;
         }
     }
