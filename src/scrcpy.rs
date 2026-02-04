@@ -859,8 +859,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                 let (done_th_tx_audio, mut done_th_rx_audio) = oneshot::channel();
                 let (done_th_tx_ctrl, mut done_th_rx_ctrl) = oneshot::channel();
 
-                //mpsc channels for ACK notification, to maintain frame window
-
+                //mpsc channels for task cancellation
                 let (tx_cancel_audio, rx_cancel_audio) = flume::bounded::<u32>(1);
                 let (tx_cancel_video, rx_cancel_video) = flume::bounded::<u32>(1);
                 let (tx_ctrl, rx_ctrl)=flume::bounded::<Packet>(5);
