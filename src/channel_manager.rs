@@ -29,7 +29,7 @@ use tokio::sync::{mpsc};
 use protos::ControlMessageType::{self, *};
 use crate::aa_services::{VideoCodecResolution::*, VideoFPS::*, AudioStream, AudioConfig, MediaCodec::*, ServiceType, CommandState, ServiceStatus, th_bluetooth, VideoStreamingParams, AudioStreamingParams, SensorType};
 use crate::aa_services::{th_input_source, th_media_sink_audio_guidance, th_media_sink_audio_streaming, th_media_sink_video, th_media_source, th_sensor_source, th_vendor_extension};
-use crate::config::{HU_CONFIG_DELAY_MS, MAX_DATA_LEN};
+use crate::config::{HU_CONFIG_DELAY_MS, MAX_DATA_LEN, MAX_PACKET_LEN};
 use crate::config_types::HexdumpLevel;
 use crate::io_uring::Endpoint;
 use crate::io_uring::IoDevice;
@@ -277,7 +277,10 @@ impl Packet {
 
     async fn ep_send<A: Endpoint<A>>(&self, data:Vec<u8>, device: &mut IoDevice<A>,) -> anyhow::Result<usize, std::io::Error>
     {
-
+        if data.len() > MAX_PACKET_LEN
+        {
+            error!("{}: data too large, got {}, wanted {}", get_name(), data.len(), MAX_PACKET_LEN);
+        }
         match device {
             IoDevice::UsbWriter(device, _) => {
                 let mut dev = device.borrow_mut();
