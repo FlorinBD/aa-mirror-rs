@@ -346,6 +346,8 @@ pub async fn io_loop(
         let (txr_hu, rxr_hu):       (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
         let (tx_srv, rx_srv):   (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
         let (txr_srv, rxr_srv): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(20);
+        let (tx_ack_video, rx_ack_video)=  flume::bounded::<u32>(1);
+        let (tx_ack_audio, rx_ack_audio)= flume::bounded::<u32>(1);
 
         let mut tsk_ch_manager;
         let mut tsk_hu_read;
@@ -374,7 +376,7 @@ pub async fn io_loop(
         }
 
         //service packet proxy
-        tsk_packet_proxy = tokio_uring::spawn(packet_tls_proxy(hu_w, rxr_hu, rxr_srv, tx_srv, rx_scrcpy.clone(), stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested));
+        tsk_packet_proxy = tokio_uring::spawn(packet_tls_proxy(hu_w, rxr_hu, rxr_srv, tx_srv, rx_scrcpy.clone(), stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested, rx_ack_audio, rx_ack_video));
 
         // dedicated reading threads:
         tsk_hu_read = tokio_uring::spawn(endpoint_reader(hu_r, txr_hu));
@@ -385,6 +387,8 @@ pub async fn io_loop(
             txr_srv,
             tx_scrcpy_cmd.clone(),
             rx_scrcpy_srv_cmd.clone(),
+            tx_ack_audio,
+            tx_ack_video,
         ));
         
         // Thread for monitoring transfer

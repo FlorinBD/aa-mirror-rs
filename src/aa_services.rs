@@ -1542,7 +1542,16 @@ pub async fn th_media_sink_audio_guidance(ch_id: i32, enabled:bool, tx_srv: Send
         format!("<i><bright-black> aa-mirror/{}: </>", dev)
     }
 }
-pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, scrcpy_cmd: flume::Sender<Packet>, acfg:AudioConfig, mut audio_params:AudioStreamingParams) -> Result<()>{
+pub async fn th_media_sink_audio_streaming(
+    ch_id: i32, 
+    enabled:bool, 
+    tx_srv: Sender<Packet>, 
+    mut rx_srv: Receiver<Packet>, 
+    scrcpy_cmd: flume::Sender<Packet>, 
+    acfg:AudioConfig, 
+    mut audio_params:AudioStreamingParams,
+    media_ack: flume::Sender<u32>,
+) -> Result<()>{
     info!( "{}: Starting...", get_name());
     let mut audio_stream_started:bool=false;
     let mut md_connected=false;
@@ -1708,7 +1717,8 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                 if audio_stream_started
                 {
                     info!("{} Received {} message, proxy to SCRCPY", ch_id.to_string(), message_id);
-                    scrcpy_cmd.send_async(pkt).await?;
+                    //scrcpy_cmd.send_async(pkt).await?;
+                    media_ack.send_async(1).await?;
                 }
             }
             else if message_id == MediaMessageId::MEDIA_MESSAGE_AUDIO_UNDERFLOW_NOTIFICATION  as i32

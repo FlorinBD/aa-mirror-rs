@@ -955,6 +955,8 @@ pub async fn ch_proxy(
     tx_srv: Sender<Packet>,
     scrcpy_cmd_tx: flume::Sender<Packet>,
     scrcpy_cmd_rx: flume::Receiver<Packet>,
+    ack_audio: flume::Sender<u32>,
+    ack_video: flume::Sender<u32>,
 ) -> Result<()> {
     info!( "{} Entering channel manager",get_name());
    // waiting for initial version frame (HU is starting transmission)
