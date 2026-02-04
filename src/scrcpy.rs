@@ -143,7 +143,7 @@ impl ScrcpySize {
 }
 async fn tsk_scrcpy_video(
     mut stream: TcpStream,
-    mut ack_notify:Receiver<u32>,
+    mut ack_notify:flume::Receiver<u32>,
     video_tx: flume::Sender<Packet>,
     max_unack:u32,
     sid:u8,
@@ -167,42 +167,32 @@ async fn tsk_scrcpy_video(
     }
     info!("SCRCPY Video entering main loop");
     //let mut reassembler = NalReassembler::new();
-    //drain all previous permits
-    while let Ok(_) = ack_notify.try_recv() {}
-    //send first unacked packets
-    for _ in 0..max_unack {
-        match read_send_packet(&mut stream, &video_tx, sid, &mut dbg_counter).await {
-            Ok(()) => {
-            }
-
-            Err(e) => {
-                error!("scrcpy video read failed: {}", e);
-                return Err(e);
-            }
-        }
-    }
+    let mut act_ack=0;
     loop {
+        if act_ack < max_unack {
+            match read_send_packet(&mut stream, &video_tx, sid, &mut dbg_counter).await {
+                Ok(()) => {
+                }
 
-        match read_send_packet(&mut stream, &video_tx, sid, &mut dbg_counter).await {
-            Ok(()) => {
-            }
-
-            Err(e) => {
-                error!("scrcpy video read failed: {}", e);
-                break;
-            }
-        }
-
-        match ack_notify.recv().await {
-            Some(_) => {
-                continue;
-            }
-            None => {
-                error!("Video Channel closed, exiting");
-                return Err(Box::new(io::Error::new(io::ErrorKind::Other, "channel closed")));
+                Err(e) => {
+                    error!("scrcpy video read failed: {}", e);
+                    return Err(e);
+                }
             }
         }
-
+        else {
+            match ack_notify.recv_async().await {
+                Some(_) => {
+                    act_ack=0;
+                    continue;
+                }
+                None => {
+                    error!("Video Channel closed, exiting");
+                    return Err(Box::new(io::Error::new(io::ErrorKind::Other, "channel closed")));
+                }
+            } 
+        }
+        
     }
     //reassembler.flush();
     return Ok(());
@@ -327,7 +317,7 @@ async fn tsk_scrcpy_video(
 
 async fn tsk_scrcpy_audio(
     mut stream: TcpStream,
-    mut ack_notify:Receiver<u32>,
+    mut ack_notify:flume::Receiver<u32>,
     audio_tx: flume::Sender<Packet>,
     max_unack:u32,
     sid:u8
@@ -346,37 +336,32 @@ async fn tsk_scrcpy_audio(
         error!("SCRCPY Invalid audio codec configuration");
         return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY Invalid audio codec configuration")));
     }
-    //drain all previous permits
-    while let Ok(_) = ack_notify.try_recv() {}
-    for _ in 0..max_unack {
-        match read_send_packet(&mut stream, &audio_tx, sid, &mut dbg_counter).await {
-            Ok(()) => {
-            }
-
-            Err(e) => {
-                error!("scrcpy audio read failed: {}", e);
-                return Err(e);
-            }
-        }
-    }
+    let mut act_ack=0;
     loop {
-        match read_send_packet(&mut stream, &audio_tx, sid, &mut dbg_counter).await {
-            Ok(()) => {}
+        if act_ack < max_unack {
+            match read_send_packet(&mut stream, &audio_tx, sid, &mut dbg_counter).await {
+                Ok(()) => {
+                }
 
-            Err(e) => {
-                error!("scrcpy audio read failed: {}", e);
-                return Err(e);
+                Err(e) => {
+                    error!("scrcpy audio read failed: {}", e);
+                    return Err(e);
+                }
             }
         }
-        match ack_notify.recv().await {
-            Some(_) => {
-                continue;
-            }
-            None => {
-                error!("Audio Channel closed, exiting");
-                return Err(Box::new(io::Error::new(io::ErrorKind::Other, "channel closed")));
+        else {
+            match ack_notify.recv_async().await {
+                Some(_) => {
+                    act_ack=0;
+                    continue;
+                }
+                None => {
+                    error!("Audio Channel closed, exiting");
+                    return Err(Box::new(io::Error::new(io::ErrorKind::Other, "channel closed")));
+                }
             }
         }
+        
     }
     return Ok(());
 
@@ -895,18 +880,9 @@ pub(crate) async fn tsk_adb_scrcpy(
                 let (done_th_tx_ctrl, mut done_th_rx_ctrl) = oneshot::channel();
 
                 //mpsc channels for ACK notification, to maintain frame window
-                let mut audio_max_unack_mpsc = 1usize;
-                let mut video_max_unack_mpsc =1usize;
-                if audio_codec_params.max_unack > 0
-                {
-                    audio_max_unack_mpsc =audio_codec_params.max_unack as usize;
-                }
-                if video_codec_params.max_unack > 0
-                {
-                    video_max_unack_mpsc =video_codec_params.max_unack as usize;
-                }
-                let (tx_ack_audio, rx_ack_audio) = mpsc::channel::<u32>(audio_max_unack_mpsc);
-                let (tx_ack_video, rx_ack_video) = mpsc::channel::<u32>(video_max_unack_mpsc);
+                
+                let (tx_ack_audio, rx_ack_audio) = flume::bounded::<u32>(1);
+                let (tx_ack_video, rx_ack_video) = flume::bounded::<u32>(1);
                 let (tx_ctrl, rx_ctrl)=flume::bounded::<Packet>(5);
                 hnd_scrcpy_video = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_video(
