@@ -117,60 +117,6 @@ pub struct Packet {
 }
 
 impl Packet {
-    /// payload encryption if needed
-    async fn encrypt_payload_old(
-        &mut self,
-        mem_buf: &mut SslMemBuf,
-        server: &mut openssl::ssl::SslStream<SslMemBuf>,
-    ) -> Result<()> {
-        if (self.flags & ENCRYPTED) == ENCRYPTED {
-            // save plain data for encryption
-            server.ssl_write(&self.payload)?;
-            // read encrypted data
-            let mut res: Vec<u8> = Vec::new();
-            mem_buf.read_to(&mut res)?;
-            self.payload = res;
-        }
-
-        Ok(())
-    }
-///payload encryption into chunks of max size
-    async fn encrypt_payload_old2(
-        &mut self,
-        mem_buf: &mut SslMemBuf,
-        server: &mut openssl::ssl::SslStream<SslMemBuf>,
-    ) -> Result<()> {
-        //FIXME do chunks also for unencrypted
-        if (self.flags & ENCRYPTED) == ENCRYPTED {
-            //self.encrypted_chunks=Vec::new();
-            if self.payload.len()> MAX_DATA_LEN
-            {
-                for chunk in self.payload.chunks(MAX_DATA_LEN)
-                {
-                    // save plain data for encryption
-                    server.ssl_write(&chunk)?;
-                    // read encrypted data
-                    let mut res: Vec<u8> = Vec::new();
-                    mem_buf.read_to(&mut res)?;
-                    //self.encrypted_chunks.push(res);
-
-                }
-            }
-            else
-            {
-                // save plain data for encryption
-                server.ssl_write(&self.payload)?;
-                // read encrypted data
-                let mut res: Vec<u8> = Vec::new();
-                mem_buf.read_to(&mut res)?;
-                //self.encrypted_chunks.push(res);
-
-            }
-        }
-
-        Ok(())
-    }
-
     ///payload encryption into chunks of max size
     async fn encrypt_payload(
         &self,
@@ -226,41 +172,6 @@ impl Packet {
         Ok(())
     }
 
-    /// composes a final frame and transmits it to endpoint device (HU/MD)
-    async fn transmit_old<A: Endpoint<A>>(
-        &self,
-        device: &mut IoDevice<A>,
-    ) -> std::result::Result<usize, std::io::Error> {
-        let len = self.payload.len() as u16;
-        let mut frame: Vec<u8> = vec![];
-        frame.push(self.channel);
-        frame.push(self.flags);
-        frame.push((len >> 8) as u8);
-        frame.push((len & 0xff) as u8);
-        if let Some(final_len) = self.final_length {
-            // adding addional 4-bytes of final_len header
-            frame.push((final_len >> 24) as u8);
-            frame.push((final_len >> 16) as u8);
-            frame.push((final_len >> 8) as u8);
-            frame.push((final_len & 0xff) as u8);
-        }
-        match device {
-            IoDevice::UsbWriter(device, _) => {
-                frame.append(&mut self.payload.clone());
-                let mut dev = device.borrow_mut();
-                dev.write(&frame).await
-            }
-            IoDevice::EndpointIo(device) => {
-                frame.append(&mut self.payload.clone());
-                device.write(frame).submit().await.0
-            }
-            IoDevice::TcpStreamIo(device) => {
-                frame.append(&mut self.payload.clone());
-                device.write(frame).submit().await.0
-            }
-            _ => todo!(),
-        }
-    }
 
     /// composes a final frame, encrypt if necessary and transmits it to endpoint device (HU/MD)
     async fn transmit<A: Endpoint<A>>(
@@ -590,6 +501,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                             //msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: SCRCPY transmit to HU failed", get_name()))?;
                     if let Err(e) = msg.transmit(&mut hu_wr, &mut mem_buf, &mut server).await.with_context(|| format!("{}: SCRCPY transmit to HU failed", get_name())) {
                         error!("SCRCPY>HU Transmission error: {:?}", e);
+                     return Err(Box::new(e));
                     }
                 }
         }
@@ -614,6 +526,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                             //msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: SCRCPY transmit to HU failed", get_name()))?;
                     if let Err(e) = msg.transmit(&mut hu_wr, &mut mem_buf, &mut server).await.with_context(|| format!("{}: SCRCPY transmit to HU failed", get_name())) {
                         error!("SCRCPY>HU Transmission error: {:?}", e);
+                        return Err(Box::new(e));
                     }
                 }
             }
@@ -722,6 +635,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
             // all channels closed
             tokio::time::sleep(Duration::from_secs(1)).await;
                 error!("packet_tls_proxy ALL CHANNELS CLOSED! handle app restart needed")
+                return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other,"all tls channels closed")));
         }
         }
     }
