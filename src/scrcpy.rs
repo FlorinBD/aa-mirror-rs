@@ -909,7 +909,6 @@ pub(crate) async fn tsk_adb_scrcpy(
                                 let cmd_id: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
                                 if cmd_id == CustomCommand::CMD_STOP_VIDEO_RECORDING as i32
                                 {
-
                                     info!("tsk_scrcpy_video Video streaming stopped");
                                     tx_cancel_video.send_async(1).await?;
                                     //FIXME close the stream
@@ -917,7 +916,6 @@ pub(crate) async fn tsk_adb_scrcpy(
                                 }
                                 else if cmd_id == CustomCommand::CMD_STOP_AUDIO_RECORDING as i32
                                 {
-
                                     info!("tsk_scrcpy_video Audio streaming stopped");
                                     tx_cancel_audio.send_async(1).await?;
                                     //FIXME close the stream
@@ -925,7 +923,6 @@ pub(crate) async fn tsk_adb_scrcpy(
                                 }
                                 else if cmd_id == CustomCommand::CANCEL as i32
                                 {
-
                                     info!("tsk_scrcpy CANCEL CMD received, stopping all tasks");
                                    tx_cancel_audio.send_async(1).await?;
                                    tx_cancel_video.send_async(1).await?;
