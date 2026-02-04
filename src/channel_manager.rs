@@ -5,7 +5,7 @@ use simplelog::*;
 use std::collections::VecDeque;
 use std::{fmt};
 use std::cmp::PartialEq;
-use std::io::{Read, Write};
+use std::io::{ErrorKind, Read, Write};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -268,70 +268,80 @@ impl Packet {
         device: &mut IoDevice<A>,
         mem_buf: &mut SslMemBuf,
         server: &mut openssl::ssl::SslStream<SslMemBuf>,
-    ) -> std::result::Result<usize, std::io::Error> {
+    ) -> anyhow::Result<usize, std::io::Error> {
         if self.flags & ENCRYPTED == ENCRYPTED {
-            let chunks=self.encrypt_payload(mem_buf, server).awaitmap_err(|e| anyhow::Error::new(e))?;
-            if chunks.len() > 1
-            {
-                //segmented data
-                let mut total_size = 0;
-                for (i, mut chunk) in chunks.iter().enumerate() {
-                    let mut frame: Vec<u8> = vec![];
-                    let len = chunk.len()as  u16;
-                    frame.push(self.channel);
-                    if i==0
+            //let chunks=self.encrypt_payload(mem_buf, server).await;
+            match self.encrypt_payload(mem_buf, server).await {
+                Ok(chunks) => {
+                    if chunks.len() > 1
                     {
-                        //first frame
-                        frame.push((self.flags & 0xFC) | FRAME_TYPE_FIRST);
-                        frame.push((len >> 8) as u8);
-                        frame.push((len & 0xff) as u8);
-                        let final_len = self.payload.len();
-                        // adding addional 4-bytes of final_len header
-                        frame.push((final_len >> 24) as u8);
-                        frame.push((final_len >> 16) as u8);
-                        frame.push((final_len >> 8) as u8);
-                        frame.push((final_len & 0xff) as u8);
-                    }
-                    else if i== chunks.len() - 1
-                    {
-                        //last frame
-                        frame.push((self.flags & 0xFC) | FRAME_TYPE_LAST);
-                        frame.push((len >> 8) as u8);
-                        frame.push((len & 0xff) as u8);
+                        //segmented data
+                        let mut total_size = 0;
+                        for (i, mut chunk) in chunks.iter().enumerate() {
+                            let mut frame: Vec<u8> = vec![];
+                            let len = chunk.len()as  u16;
+                            frame.push(self.channel);
+                            if i==0
+                            {
+                                //first frame
+                                frame.push((self.flags & 0xFC) | FRAME_TYPE_FIRST);
+                                frame.push((len >> 8) as u8);
+                                frame.push((len & 0xff) as u8);
+                                let final_len = self.payload.len();
+                                // adding addional 4-bytes of final_len header
+                                frame.push((final_len >> 24) as u8);
+                                frame.push((final_len >> 16) as u8);
+                                frame.push((final_len >> 8) as u8);
+                                frame.push((final_len & 0xff) as u8);
+                            }
+                            else if i== chunks.len() - 1
+                            {
+                                //last frame
+                                frame.push((self.flags & 0xFC) | FRAME_TYPE_LAST);
+                                frame.push((len >> 8) as u8);
+                                frame.push((len & 0xff) as u8);
+                            }
+                            else
+                            {
+                                //consecutive frame
+                                frame.push(self.flags & 0xFC);
+                                frame.push((len >> 8) as u8);
+                                frame.push((len & 0xff) as u8);
+                            }
+                            frame.extend_from_slice(&mut chunk);
+                            total_size+=frame.len();
+                            self.ep_send(frame,device).await?;
+
+                        }
+                        Ok(total_size)
                     }
                     else
                     {
-                        //consecutive frame
-                        frame.push(self.flags & 0xFC);
+                        //whole data
+                        let len = chunks[0].len()as  u16;
+                        let mut frame: Vec<u8> = vec![];
+                        frame.push(self.channel);
+                        frame.push(self.flags);
                         frame.push((len >> 8) as u8);
                         frame.push((len & 0xff) as u8);
+                        if let Some(final_len) = self.final_length {
+                            // adding addional 4-bytes of final_len header
+                            frame.push((final_len >> 24) as u8);
+                            frame.push((final_len >> 16) as u8);
+                            frame.push((final_len >> 8) as u8);
+                            frame.push((final_len & 0xff) as u8);
+                        }
+                        frame.extend_from_slice(&chunks[0]);
+                        return self.ep_send(frame,device).await;
                     }
-                    frame.extend_from_slice(&mut chunk);
-                    total_size+=frame.len();
-                    self.ep_send(frame,device).await;
+                }
 
+                Err(e) => {
+                    error!("{}: Encrypting error", get_name());
+                    Err(std::io::Error::new(ErrorKind::Other, "Encrypting error"))
                 }
-                Ok(total_size)
             }
-            else
-            {
-                //whole data
-                let len = chunks[0].len()as  u16;
-                let mut frame: Vec<u8> = vec![];
-                frame.push(self.channel);
-                frame.push(self.flags);
-                frame.push((len >> 8) as u8);
-                frame.push((len & 0xff) as u8);
-                if let Some(final_len) = self.final_length {
-                    // adding addional 4-bytes of final_len header
-                    frame.push((final_len >> 24) as u8);
-                    frame.push((final_len >> 16) as u8);
-                    frame.push((final_len >> 8) as u8);
-                    frame.push((final_len & 0xff) as u8);
-                }
-                frame.extend_from_slice(&chunks[0]);
-                return self.ep_send(frame,device).await;
-            }
+
         }
         else
         {
@@ -353,7 +363,7 @@ impl Packet {
         }
     }
 
-    async fn ep_send<A: Endpoint<A>>(&self, data:Vec<u8>, device: &mut IoDevice<A>,) -> std::result::Result<usize, std::io::Error>
+    async fn ep_send<A: Endpoint<A>>(&self, data:Vec<u8>, device: &mut IoDevice<A>,) -> anyhow::Result<usize, std::io::Error>
     {
 
         match device {
