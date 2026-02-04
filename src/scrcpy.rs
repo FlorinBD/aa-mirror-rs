@@ -832,12 +832,12 @@ pub(crate) async fn tsk_adb_scrcpy(
                 srv_cmd_tx.send_async(pkt_rsp).await?;
                 continue;
             }
-            let mut video_bitrate=video_codec_params.bitrate;
+            /*let mut video_bitrate=video_codec_params.bitrate;
             if config.dhu
             {
                 //limit video bitrate for DHU to keep connection open
                 video_bitrate=500_000;
-            }
+            }*/
             //AVC base profile, no B frames, only I and P frames, low-latency is MANDATORY
             let video_codec_options=format!("profile:int=1,level:int=512,i-frame-interval:int={},low-latency:int=1,max-bframes:int=0",video_codec_params.fps);
             let audio_codec_options="aac-profile:int=2";
@@ -867,7 +867,7 @@ pub(crate) async fn tsk_adb_scrcpy(
             cmd_shell.push("video_codec=h264".to_string());
             //cmd_shell.push(format!("audio_codec_options={}", audio_codec_options.to_string()));
             cmd_shell.push(format!("video_codec_options={}", video_codec_options.to_string()));
-            cmd_shell.push(format!("video_bit_rate={}", video_bitrate));//video_codec_params.bitrate
+            cmd_shell.push(format!("video_bit_rate={}", video_codec_params.bitrate));//video_codec_params.bitrate
             cmd_shell.push(format!("new_display={}x{}/{}", video_codec_params.res_w, video_codec_params.res_h, video_codec_params.dpi));
             cmd_shell.push(format!("max_fps={}", video_codec_params.fps));
             let (mut shell, mut sh_reader,line)=adb::shell_cmd(cmd_shell).await?;
