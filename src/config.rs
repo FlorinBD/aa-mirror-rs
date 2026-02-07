@@ -333,7 +333,7 @@ impl AppConfig {
         doc["hexdump_level"] = value(format!("{:?}", self.hexdump_level));
         doc["disable_console_debug"] = value(self.disable_console_debug);
         doc["legacy"] = value(self.legacy);
-        doc["screen_off"] = value(self.scrcpy_screen_off);
+        doc["scrcpy_screen_off"] = value(self.scrcpy_screen_off);
         doc["quick_reconnect"] = value(self.quick_reconnect);
         doc["connect"] = value(self.connect.to_string());
         doc["logfile"] = value(self.logfile.display().to_string());

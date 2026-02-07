@@ -60,7 +60,7 @@
           "typ": "boolean",
           "description": "Enable legacy USB mode (some HeadUnits/cars needs this enabled for compatibility)"
         },
-        "screen_off": {
+        "scrcpy_screen_off": {
           "typ": "boolean",
           "description": "Turn off screen after SCRCPY server starts"
         },
