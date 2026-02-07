@@ -1144,7 +1144,10 @@ pub(crate) async fn tsk_adb_scrcpy(
                             }
                         }
                         Ok(n) = sh_reader.read(&mut buf) => {
-                            info!("shell stdout: {}", String::from_utf8_lossy(&buf[..n]));
+                            if(n>2)
+                            {
+                                info!("shell stdout: {}", String::from_utf8_lossy(&buf[..n]));
+                            }
                         }
                         Ok(..) = &mut done_th_rx_video => {
                             error!("SCRCPY Video Task finished");
