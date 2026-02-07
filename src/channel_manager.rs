@@ -170,7 +170,7 @@ impl Packet {
                 if i==0
                 {
                     //first frame
-                    let mut frame = Packet {
+                    let frame = Packet {
                         channel: self.channel,
                         flags: (self.flags & 0xFC) | FRAME_TYPE_FIRST,
                         final_length: Some(self.payload.len() as u32),
@@ -181,10 +181,10 @@ impl Packet {
                 else if i== chunks.len() - 1
                 {
                     //last frame
-                    let mut frame = Packet {
+                    let frame = Packet {
                         channel: self.channel,
                         flags: (self.flags & 0xFC) | FRAME_TYPE_LAST,
-                        final_length: Some(self.payload.len() as u32),
+                        final_length: None,
                         payload: *chunk,
                     };
                     packets.push(frame);
@@ -192,10 +192,10 @@ impl Packet {
                 else
                 {
                     //consecutive frame
-                    let mut frame = Packet {
+                    let frame = Packet {
                         channel: self.channel,
                         flags: self.flags & 0xFC,
-                        final_length: Some(self.payload.len() as u32),
+                        final_length: None,
                         payload: *chunk,
                     };
                     packets.push(frame);
@@ -205,10 +205,13 @@ impl Packet {
         else
         {
             //whole data
-            let mut frame: Packet;
-            frame.channel=self.channel;
-            frame.flags = self.flags;
-            frame.payload = chunks[0];
+            let frame= Packet
+            {
+                channel : self.channel,
+                flags : self.flags,
+                final_length: None,
+                payload : chunks[0],
+            };
             packets.push(frame);
         }
 
