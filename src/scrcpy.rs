@@ -965,7 +965,8 @@ pub(crate) async fn tsk_adb_scrcpy(
                                 {
 
                                     info!("tsk_scrcpy_video Video streaming stopped");
-                                    drop(tx_ack_video);
+                                    //drop(tx_ack_video);
+                                    hnd_scrcpy_video.abort();
                                     //FIXME close the stream
                                     break;
                                 }
@@ -973,7 +974,8 @@ pub(crate) async fn tsk_adb_scrcpy(
                                 {
 
                                     info!("tsk_scrcpy_video Audio streaming stopped");
-                                    drop(tx_ack_audio);
+                                    //drop(tx_ack_audio);
+                                    hnd_scrcpy_audio.abort();
                                     //FIXME close the stream
                                     break;
                                 }
@@ -981,8 +983,10 @@ pub(crate) async fn tsk_adb_scrcpy(
                                 {
 
                                     info!("tsk_scrcpy CANCEL CMD received, stopping all tasks");
-                                    drop(tx_ack_audio);
-                                    drop(tx_ack_video);
+                                    hnd_scrcpy_audio.abort();
+                                    hnd_scrcpy_video.abort();
+                                    //drop(tx_ack_audio);
+                                    //drop(tx_ack_video);
                                     if let Err(_) = tx_ctrl.send_async(pkt).await
                                     {
                                         error!( "tsk_scrcpy control proxy send error, buffer full?");
