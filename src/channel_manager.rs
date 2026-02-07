@@ -161,12 +161,9 @@ impl Packet {
         let mut packets:Vec<Packet> = vec![];
         if self.payload.len()>MAX_DATA_LEN
         {
+            let num_iterations = (self.payload.len() + MAX_DATA_LEN - 1) / MAX_DATA_LEN;
             //segmented data
-            for chunk in self.payload.chunks(MAX_DATA_LEN)
-            {
-                chunks.push(chunk.to_vec());
-            }
-            for (i, chunk) in chunks.enumerate() {
+            for (i, chunk) in self.payload.chunks(MAX_DATA_LEN).enumerate() {
                 if i==0
                 {
                     //first frame
@@ -178,7 +175,7 @@ impl Packet {
                     };
                     packets.push(frame);
                 }
-                else if i== chunks.len() - 1
+                else if i== num_iterations - 1
                 {
                     //last frame
                     let frame = Packet {
