@@ -29,7 +29,7 @@ use tokio::sync::{mpsc};
 use protos::ControlMessageType::{self, *};
 use crate::aa_services::{VideoCodecResolution::*, VideoFPS::*, AudioStream, AudioConfig, MediaCodec::*, ServiceType, CommandState, ServiceStatus, th_bluetooth, VideoStreamingParams, AudioStreamingParams, SensorType};
 use crate::aa_services::{th_input_source, th_media_sink_audio_guidance, th_media_sink_audio_streaming, th_media_sink_video, th_media_source, th_sensor_source, th_vendor_extension};
-use crate::config::{HU_CONFIG_DELAY_MS, MAX_DATA_LEN};
+use crate::config::{HU_CONFIG_DELAY_MS, MAX_DATA_LEN, MAX_PACKET_LEN};
 use crate::config_types::HexdumpLevel;
 use crate::io_uring::Endpoint;
 use crate::io_uring::IoDevice;
@@ -458,7 +458,9 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                             // Increment byte counters for statistics
                             // fixme: compute final_len for precise stats
                             w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
-                            //msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: SCRCPY transmit to HU failed", get_name()))?;
+                            if msg.payload.len() > MAX_PACKET_LEN {
+                                error!("tls_proxy SCRCPY>HU packet payload too big, got {}",msg.payload.len());
+                            }
                             if let Err(e) = msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: SCRCPY transmit to HU failed", get_name())) {
                                 error!("SCRCPY>HU Transmission error: {:?}", e);
                             }
