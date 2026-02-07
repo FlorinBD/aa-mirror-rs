@@ -1,13 +1,14 @@
 use std::cmp::min;
 use std::future::Future;
 use std::io;
+use std::sync::Arc;
 use std::time::Duration;
 use flume::SendError;
 use serde::{Deserialize, Serialize};
 use simplelog::{error, info};
 use tokio::process::Command;
 use tokio::sync::mpsc::Receiver;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::{mpsc, oneshot, Notify};
 use tokio_uring::net::TcpStream;
 use tokio_util::bytes::BytesMut;
 use crate::aa_services::{AudioStreamingParams, VideoStreamingParams};
@@ -145,7 +146,7 @@ impl ScrcpySize {
 }
 async fn tsk_scrcpy_video(
     mut stream: TcpStream,
-    mut ack_notify:flume::Receiver<u32>,
+    ack_notify:Arc<Notify>,
     video_tx: flume::Sender<Packet>,
     max_unack:u32,
     sid:u8,
@@ -234,16 +235,9 @@ async fn tsk_scrcpy_video(
                                     else
                                     {
                                         info!("Video ACK limit hit, waiting new ACK");
-                                        match ack_notify.recv_async().await {
-                                            Ok(_) => {
-                                                act_unack=0;
-                                                continue;
-                                            }
-                                            Err(e) => {
-                                                error!("Video Channel closed, exiting, error: {:?}",e);
-                                                return Err(Box::new(io::Error::new(io::ErrorKind::Other, "channel closed")));
-                                            }
-                                        }
+                                        ack_notify.notified().await;
+                                        act_unack=0;
+                                        continue;
                                     }
                                 }
                             }
@@ -336,7 +330,7 @@ async fn tsk_scrcpy_video(
 
 async fn tsk_scrcpy_audio(
     mut stream: TcpStream,
-    mut ack_notify:flume::Receiver<u32>,
+    mut ack_notify:Arc<Notify>,
     audio_tx: flume::Sender<Packet>,
     max_unack:u32,
     sid:u8
@@ -420,16 +414,9 @@ async fn tsk_scrcpy_audio(
                                     else
                                     {
                                         info!("Audio ACK limit hit, waiting new ACK");
-                                        match ack_notify.recv_async().await {
-                                            Ok(_) => {
-                                                act_unack=0;
-                                                continue;
-                                            }
-                                            Err(e) => {
-                                                error!("Audio Channel closed, exiting, error: {:?}",e);
-                                                return Err(Box::new(io::Error::new(io::ErrorKind::Other, "channel closed")));
-                                            }
-                                        }
+                                        ack_notify.notified().await;
+                                        act_unack=0;
+                                        continue;
                                     }
                                 }
                             }
@@ -913,13 +900,18 @@ pub(crate) async fn tsk_adb_scrcpy(
                 {
                     video_max_unack_mpsc =video_codec_params.max_unack as usize;
                 }
-                let (tx_ack_audio, rx_ack_audio) = flume::bounded::<u32>(1);
-                let (tx_ack_video, rx_ack_video) = flume::bounded::<u32>(1);
+                //let (tx_ack_audio, rx_ack_audio) = flume::bounded::<u32>(1);
+                //let (tx_ack_video, rx_ack_video) = flume::bounded::<u32>(1);
+
+                let notify_audio = Arc::new(Notify::new());
+                let notify_video = Arc::new(Notify::new());
+                let ack_audio=notify_audio.clone();
+                let ack_video=notify_video.clone();
                 let (tx_ctrl, rx_ctrl)=flume::bounded::<Packet>(5);
                 hnd_scrcpy_video = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_video(
                         video_stream,
-                        rx_ack_video,
+                        notify_video.clone(),
                         video_tx,
                         video_codec_params.max_unack,
                         video_codec_params.sid
@@ -930,7 +922,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                 hnd_scrcpy_audio = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_audio(
                         audio_stream,
-                        rx_ack_audio,
+                        notify_audio.clone(),
                         audio_tx,
                         audio_codec_params.max_unack,
                         audio_codec_params.sid,
@@ -1003,18 +995,12 @@ pub(crate) async fn tsk_adb_scrcpy(
                                     if pkt.channel == video_sid
                                     {
                                         info!("tsk_scrcpy: video ACK recived");
-                                        if let Err(_) = tx_ack_video.try_send(1)
-                                        {
-                                            info!( "tsk_scrcpy video ACK send error, buffer full?");
-                                        };
+                                        ack_video.notify_one();
                                     }
                                     else if pkt.channel == audio_sid
                                     {
                                         info!("tsk_scrcpy: audio ACK recived");
-                                        if let Err(_) = tx_ack_audio.try_send(1)
-                                        {
-                                            info!( "tsk_scrcpy audio ACK send error, buffer full?");
-                                        };
+                                        ack_audio.notify_one();
                                     }
                                     else
                                     {
