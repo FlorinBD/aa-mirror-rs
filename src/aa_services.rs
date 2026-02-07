@@ -1357,7 +1357,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
             {
                 if video_stream_started
                 {
-                    info!( "{}, channel {:?}: video ACK received, proxy to SCRCPY", get_name(), pkt.channel);
+                    //info!( "{}, channel {:?}: video ACK received, proxy to SCRCPY", get_name(), pkt.channel);
                     //scrcpy_cmd.send_async(pkt).await?;
                     if let Err(_) = scrcpy_cmd.send_async(pkt).await{
                         error!( "{} mpsc send error",get_name());
@@ -1707,7 +1707,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
             {
                 if audio_stream_started
                 {
-                    info!("{} Received {} message, proxy to SCRCPY", ch_id.to_string(), message_id);
+                    //info!("{} Received {} message, proxy to SCRCPY", ch_id.to_string(), message_id);
                     scrcpy_cmd.send_async(pkt).await?;
                 }
             }
