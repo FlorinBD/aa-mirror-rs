@@ -225,15 +225,15 @@ async fn tsk_scrcpy_video(
                                     else
                                     {
                                         match ack_notify.recv_async().await {
-                                            Some(_) => {
+                                            Ok(_) => {
                                                 if act_unack>0
                                                 {
                                                     act_unack-=1;
                                                 }
                                                 continue;
                                             }
-                                            None => {
-                                                error!("Video Channel closed, exiting");
+                                            Err(e) => {
+                                                error!("Video Channel closed, exiting, error: {:?}",e);
                                                 return Err(Box::new(io::Error::new(io::ErrorKind::Other, "channel closed")));
                                             }
                                         }
@@ -457,15 +457,15 @@ async fn tsk_scrcpy_audio(
                                     else
                                     {
                                         match ack_notify.recv_async().await {
-                                            Some(_) => {
+                                            Ok(_) => {
                                                 if act_unack>0
                                                 {
                                                     act_unack-=1;
                                                 }
                                                 continue;
                                             }
-                                            None => {
-                                                error!("Audio Channel closed, exiting");
+                                            Err(e) => {
+                                                error!("Audio Channel closed, exiting, error: {:?}",e);
                                                 return Err(Box::new(io::Error::new(io::ErrorKind::Other, "channel closed")));
                                             }
                                         }
