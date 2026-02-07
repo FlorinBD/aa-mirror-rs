@@ -207,7 +207,7 @@ impl Packet {
                 channel : self.channel,
                 flags : self.flags,
                 final_length: None,
-                payload : self.payload,
+                payload : self.payload.clone(),
             };
             packets.push(frame);
         }
