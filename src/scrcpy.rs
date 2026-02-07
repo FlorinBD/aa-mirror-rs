@@ -225,8 +225,8 @@ async fn tsk_scrcpy_video(
                                                 act_unack+=1;
                                                 break;
                                             }
-                                            Err(_) => {
-                                                error!("Error sending video chunk");
+                                            Err(e) => {
+                                                error!("Error sending video chunk: {:?}",e);
                                                 return Err(Box::new(io::Error::new(io::ErrorKind::Other, "Error sending video chunk")));
                                             }
                                         }
@@ -463,8 +463,8 @@ async fn tsk_scrcpy_audio(
                                                 act_unack+=1;
                                                 break;
                                             }
-                                            Err(_) => {
-                                                error!("Error sending audio chunk");
+                                            Err(e) => {
+                                                error!("Error sending audio chunk: {:?}", e);
                                                 return Err(Box::new(io::Error::new(io::ErrorKind::Other, "Error sending audio chunk")));
                                             }
                                         }
