@@ -209,7 +209,7 @@ async fn tsk_scrcpy_video(
                     final_length: None,
                     payload,
                 };
-                match pkt_rsp.split()
+                match pkt_rsp.split().await
                 {
                     Ok(chunks)=>
                         {
@@ -441,7 +441,7 @@ async fn tsk_scrcpy_audio(
                     final_length: None,
                     payload,
                 };
-                match pkt_rsp.split()
+                match pkt_rsp.split().await
                 {
                     Ok(chunks)=>
                         {
