@@ -217,30 +217,18 @@ async fn tsk_scrcpy_video(
                         {
                             for chunk in chunks
                             {
-                                loop {
-                                    if act_unack <max_unack
-                                    {
-                                        match video_tx.send_async(chunk).await
-                                        {
-                                            Ok(_) => {
-                                                act_unack+=1;
-                                                break;
-                                            }
-                                            Err(e) => {
-                                                error!("Error sending video chunk: {:?}",e);
-                                                return Err(Box::new(io::Error::new(io::ErrorKind::Other, "Error sending video chunk")));
-                                            }
-                                        }
+                                match video_tx.send_async(chunk).await
+                                {
+                                    Ok(_) => {
+
                                     }
-                                    else
-                                    {
-                                        info!("Video ACK limit hit, waiting new ACK");
-                                        ack_notify.notified().await;
-                                        act_unack=0;
-                                        continue;
+                                    Err(e) => {
+                                        error!("Error sending video chunk: {:?}",e);
+                                        return Err(Box::new(io::Error::new(io::ErrorKind::Other, "Error sending video chunk")));
                                     }
                                 }
                             }
+                            act_unack+=1;
                         }
                     _ =>
                         {
@@ -257,6 +245,12 @@ async fn tsk_scrcpy_video(
                 error!("scrcpy video read failed: {}", e);
                 return Err(Box::from(e));
             }
+        }
+        if act_unack >= max_unack
+        {
+            info!("Video ACK limit hit, waiting new ACK");
+            ack_notify.notified().await;
+            act_unack=0;
         }
     }
     //reassembler.flush();
@@ -395,31 +389,17 @@ async fn tsk_scrcpy_audio(
                         {
                             for chunk in chunks
                             {
-                                loop {
-                                    if act_unack <max_unack
-                                    {
-                                        match audio_tx.send_async(chunk).await
-                                        {
-                                            Ok(_) => {
-                                                act_unack+=1;
-                                                break;
-                                            }
-                                            Err(e) => {
-                                                error!("Error sending audio chunk: {:?}", e);
-                                                return Err(Box::new(io::Error::new(io::ErrorKind::Other, "Error sending audio chunk")));
-                                            }
-                                        }
-
+                                match audio_tx.send_async(chunk).await
+                                {
+                                    Ok(_) => {
                                     }
-                                    else
-                                    {
-                                        info!("Audio ACK limit hit, waiting new ACK");
-                                        ack_notify.notified().await;
-                                        act_unack=0;
-                                        continue;
+                                    Err(e) => {
+                                        error!("Error sending audio chunk: {:?}", e);
+                                        return Err(Box::new(io::Error::new(io::ErrorKind::Other, "Error sending audio chunk")));
                                     }
                                 }
                             }
+                            act_unack+=1;
                         }
                     _ =>
                         {
@@ -435,6 +415,12 @@ async fn tsk_scrcpy_audio(
                 error!("scrcpy audio read failed: {}", e);
                 return Err(Box::from(e));
             }
+        }
+        if act_unack >= max_unack
+        {
+            info!("Audio ACK limit hit, waiting new ACK");
+            ack_notify.notified().await;
+            act_unack=0;
         }
     }
     return Ok(());
