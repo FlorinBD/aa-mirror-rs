@@ -228,7 +228,7 @@ async fn tsk_scrcpy_video(
                                             Ok(_) => {
                                                 if act_unack>0
                                                 {
-                                                    act_unack-=1;
+                                                    act_unack=0;
                                                 }
                                                 continue;
                                             }
@@ -460,7 +460,7 @@ async fn tsk_scrcpy_audio(
                                             Ok(_) => {
                                                 if act_unack>0
                                                 {
-                                                    act_unack-=1;
+                                                    act_unack=0;
                                                 }
                                                 continue;
                                             }
