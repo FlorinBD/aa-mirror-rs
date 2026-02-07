@@ -2,6 +2,7 @@ use std::cmp::min;
 use std::future::Future;
 use std::io;
 use std::time::Duration;
+use flume::SendError;
 use serde::{Deserialize, Serialize};
 use simplelog::{error, info};
 use tokio::process::Command;
@@ -218,9 +219,18 @@ async fn tsk_scrcpy_video(
                                 loop {
                                     if act_unack <max_unack
                                     {
-                                        video_tx.send_async(chunk).await?;
-                                        act_unack+=1;
-                                        break;
+                                        match video_tx.send_async(chunk).await
+                                        {
+                                            Ok(_) => {
+                                                act_unack+=1;
+                                                break;
+                                            }
+                                            Err(_) => {
+                                                error!("Error sending video chunk");
+                                                return Err(Box::new(io::Error::new(io::ErrorKind::Other, "Error sending video chunk")));
+                                            }
+                                        }
+
                                     }
                                     else
                                     {
@@ -447,9 +457,18 @@ async fn tsk_scrcpy_audio(
                                 loop {
                                     if act_unack <max_unack
                                     {
-                                        audio_tx.send_async(chunk).await?;
-                                        act_unack+=1;
-                                        break;
+                                        match audio_tx.send_async(chunk).await
+                                        {
+                                            Ok(_) => {
+                                                act_unack+=1;
+                                                break;
+                                            }
+                                            Err(_) => {
+                                                error!("Error sending audio chunk");
+                                                return Err(Box::new(io::Error::new(io::ErrorKind::Other, "Error sending audio chunk")));
+                                            }
+                                        }
+
                                     }
                                     else
                                     {
