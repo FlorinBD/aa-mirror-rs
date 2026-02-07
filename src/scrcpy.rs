@@ -1,4 +1,5 @@
 use std::cmp::min;
+use std::future::Future;
 use std::io;
 use std::time::Duration;
 use serde::{Deserialize, Serialize};
@@ -143,7 +144,7 @@ impl ScrcpySize {
 }
 async fn tsk_scrcpy_video(
     mut stream: TcpStream,
-    mut ack_notify:Receiver<u32>,
+    mut ack_notify:flume::Receiver<u32>,
     video_tx: flume::Sender<Packet>,
     max_unack:u32,
     sid:u8,
@@ -167,42 +168,95 @@ async fn tsk_scrcpy_video(
     }
     info!("SCRCPY Video entering main loop");
     //let mut reassembler = NalReassembler::new();
-    //drain all previous permits
-    while let Ok(_) = ack_notify.try_recv() {}
-    //send first unacked packets
-    for _ in 0..max_unack {
-        match read_send_packet(&mut stream, &video_tx, sid, &mut dbg_counter).await {
-            Ok(()) => {
-            }
-
-            Err(e) => {
-                error!("scrcpy video read failed: {}", e);
-                return Err(e);
-            }
-        }
-    }
+    let mut act_unack =0;
+    let mut dbg_count=0;
     loop {
+        //Read video frames from SCRCPY server
+        match read_scrcpy_packet(&mut stream).await {
+            Ok((pts, h264_data)) => {
+                let mut payload: Vec<u8>=Vec::new();
+                let key_frame = (pts & 0x4000_0000_0000_0000u64) != 0;
+                let rec_ts = pts & 0x3FFF_FFFF_FFFF_FFFFu64;
+                let config_frame = (pts & 0x8000_0000_0000_0000u64) != 0;
+                let rd_len = h264_data.len();
+                let dbg_len = min(rd_len, 16);
+                if dbg_count <  10
+                {
+                    if rd_len > dbg_len
+                    {
+                        let end_offset = rd_len - dbg_len;
+                        info!("Video task got frame config={:?}, act size: {}, raw slice: {:02x?}...{:02x?}",config_frame, rd_len, &h264_data[..dbg_len], &h264_data[end_offset..]);
+                    } else {
+                        info!("Video task got frame config={:?}, act size: {}, raw bytes: {:02x?}",config_frame, rd_len, &h264_data[..dbg_len]);
+                    }
+                    dbg_count += 1;
+                }
+                if config_frame
+                {
+                    payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
+                    payload.extend_from_slice(&h264_data);
+                }
+                else
+                {
+                    payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
+                    payload.extend_from_slice(&rec_ts.to_be_bytes());
+                    payload.extend_from_slice(&h264_data);
+                }
 
-        match read_send_packet(&mut stream, &video_tx, sid, &mut dbg_counter).await {
-            Ok(()) => {
+                let mut pkt_rsp = Packet {
+                    channel: sid,
+                    flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                    final_length: None,
+                    payload,
+                };
+                match pkt_rsp.split()
+                {
+                    Ok(chunks)=>
+                        {
+                            for chunk in chunks
+                            {
+                                loop {
+                                    if act_unack <max_unack
+                                    {
+                                        video_tx.send_async(chunk).await?;
+                                        act_unack+=1;
+                                        break;
+                                    }
+                                    else
+                                    {
+                                        match ack_notify.recv_async().await {
+                                            Some(_) => {
+                                                if act_unack>0
+                                                {
+                                                    act_unack-=1;
+                                                }
+                                                continue;
+                                            }
+                                            None => {
+                                                error!("Video Channel closed, exiting");
+                                                return Err(Box::new(io::Error::new(io::ErrorKind::Other, "channel closed")));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    _ =>
+                        {
+                            error!("Video task failed to split packet");
+                        }
+                }
+
             }
-
+            Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
+                error!("scrcpy video stream ended");
+                return Err(Box::from(e));
+            }
             Err(e) => {
                 error!("scrcpy video read failed: {}", e);
-                break;
+                return Err(Box::from(e));
             }
         }
-
-        match ack_notify.recv().await {
-            Some(_) => {
-                continue;
-            }
-            None => {
-                error!("Video Channel closed, exiting");
-                return Err(Box::new(io::Error::new(io::ErrorKind::Other, "channel closed")));
-            }
-        }
-
     }
     //reassembler.flush();
     return Ok(());
@@ -328,7 +382,7 @@ async fn tsk_scrcpy_video(
 
 async fn tsk_scrcpy_audio(
     mut stream: TcpStream,
-    mut ack_notify:Receiver<u32>,
+    mut ack_notify:flume::Receiver<u32>,
     audio_tx: flume::Sender<Packet>,
     max_unack:u32,
     sid:u8
@@ -347,35 +401,91 @@ async fn tsk_scrcpy_audio(
         error!("SCRCPY Invalid audio codec configuration");
         return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY Invalid audio codec configuration")));
     }
-    //drain all previous permits
-    while let Ok(_) = ack_notify.try_recv() {}
-    for _ in 0..max_unack {
-        match read_send_packet(&mut stream, &audio_tx, sid, &mut dbg_counter).await {
-            Ok(()) => {
-            }
-
-            Err(e) => {
-                error!("scrcpy audio read failed: {}", e);
-                return Err(e);
-            }
-        }
-    }
+    let mut act_unack =0;
+    let mut dbg_count=0;
     loop {
-        match read_send_packet(&mut stream, &audio_tx, sid, &mut dbg_counter).await {
-            Ok(()) => {}
+        //Read video frames from SCRCPY server
+        match read_scrcpy_packet(&mut stream).await {
+            Ok((pts, data)) => {
+                let mut payload: Vec<u8>=Vec::new();
+                let rd_len = data.len();
+                let dbg_len = min(rd_len, 16);
+                let rec_ts = pts & 0x3FFF_FFFF_FFFF_FFFFu64;
+                let config_frame = (pts & 0x8000_0000_0000_0000u64) != 0;
+                if dbg_count <  10
+                {
+                    if rd_len > dbg_len
+                    {
+                        let end_offset = rd_len - dbg_len;
+                        info!("Audio task got packet, ts={}, act size: {}, raw slice: {:02x?}...{:02x?}",rec_ts, rd_len, &data[..dbg_len], &data[end_offset..]);
+                    } else {
+                        info!("Audio task got packet, ts={}, act size: {}, raw bytes: {:02x?}",rec_ts, rd_len, &data[..dbg_len]);
+                    }
+                    dbg_count+=1;
+                }
+                if config_frame
+                {
+                    payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
+                    payload.extend_from_slice(&data);
+                }
+                else
+                {
+                    payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
+                    payload.extend_from_slice(&rec_ts.to_be_bytes());
+                    payload.extend_from_slice(&data);
+                }
 
+                let mut pkt_rsp = Packet {
+                    channel: sid,
+                    flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                    final_length: None,
+                    payload,
+                };
+                match pkt_rsp.split()
+                {
+                    Ok(chunks)=>
+                        {
+                            for chunk in chunks
+                            {
+                                loop {
+                                    if act_unack <max_unack
+                                    {
+                                        audio_tx.send_async(chunk).await?;
+                                        act_unack+=1;
+                                        break;
+                                    }
+                                    else
+                                    {
+                                        match ack_notify.recv_async().await {
+                                            Some(_) => {
+                                                if act_unack>0
+                                                {
+                                                    act_unack-=1;
+                                                }
+                                                continue;
+                                            }
+                                            None => {
+                                                error!("Audio Channel closed, exiting");
+                                                return Err(Box::new(io::Error::new(io::ErrorKind::Other, "channel closed")));
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    _ =>
+                        {
+                            error!("Audio task failed to split packet");
+                        }
+                }
+            }
+            Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
+                error!("scrcpy audio stream ended");
+                return Err(Box::from(e));
+            }
             Err(e) => {
                 error!("scrcpy audio read failed: {}", e);
-                return Err(e);
-            }
-        }
-        match ack_notify.recv().await {
-            Some(_) => {
-                continue;
-            }
-            None => {
-                error!("Audio Channel closed, exiting");
-                return Err(Box::new(io::Error::new(io::ErrorKind::Other, "channel closed")));
+                return Err(Box::from(e));
             }
         }
     }
@@ -898,8 +1008,8 @@ pub(crate) async fn tsk_adb_scrcpy(
                 {
                     video_max_unack_mpsc =video_codec_params.max_unack as usize;
                 }
-                let (tx_ack_audio, rx_ack_audio) = mpsc::channel::<u32>(audio_max_unack_mpsc);
-                let (tx_ack_video, rx_ack_video) = mpsc::channel::<u32>(video_max_unack_mpsc);
+                let (tx_ack_audio, rx_ack_audio) = flume::bounded::<u32>(1);
+                let (tx_ack_video, rx_ack_video) = flume::bounded::<u32>(1);
                 let (tx_ctrl, rx_ctrl)=flume::bounded::<Packet>(5);
                 hnd_scrcpy_video = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_video(

@@ -29,7 +29,7 @@ use tokio::sync::{mpsc};
 use protos::ControlMessageType::{self, *};
 use crate::aa_services::{VideoCodecResolution::*, VideoFPS::*, AudioStream, AudioConfig, MediaCodec::*, ServiceType, CommandState, ServiceStatus, th_bluetooth, VideoStreamingParams, AudioStreamingParams, SensorType};
 use crate::aa_services::{th_input_source, th_media_sink_audio_guidance, th_media_sink_audio_streaming, th_media_sink_video, th_media_source, th_sensor_source, th_vendor_extension};
-use crate::config::HU_CONFIG_DELAY_MS;
+use crate::config::{HU_CONFIG_DELAY_MS, MAX_DATA_LEN};
 use crate::config_types::HexdumpLevel;
 use crate::io_uring::Endpoint;
 use crate::io_uring::IoDevice;
@@ -151,6 +151,68 @@ impl Packet {
         }
 
         Ok(())
+    }
+
+    /// payload split into chunks and return array of packets
+    pub(crate) async fn split(
+        &mut self,
+    ) -> Result<(Vec<Packet>)> {
+        let mut chunks:Vec<Vec<u8>> = vec![];
+        let mut packets:Vec<Packet> = vec![];
+        if self.payload.len()>MAX_DATA_LEN
+        {
+            //segmented data
+            for chunk in self.payload.chunks(MAX_DATA_LEN)
+            {
+                chunks.push(chunk.to_vec());
+            }
+            for (i, mut chunk) in chunks.iter().enumerate() {
+                if i==0
+                {
+                    //first frame
+                    let mut frame = Packet {
+                        channel: self.channel,
+                        flags: (self.flags & 0xFC) | FRAME_TYPE_FIRST,
+                        final_length: Some(self.payload.len() as u32),
+                        payload: *chunk,
+                    };
+                    packets.push(frame);
+                }
+                else if i== chunks.len() - 1
+                {
+                    //last frame
+                    let mut frame = Packet {
+                        channel: self.channel,
+                        flags: (self.flags & 0xFC) | FRAME_TYPE_LAST,
+                        final_length: Some(self.payload.len() as u32),
+                        payload: *chunk,
+                    };
+                    packets.push(frame);
+                }
+                else
+                {
+                    //consecutive frame
+                    let mut frame = Packet {
+                        channel: self.channel,
+                        flags: self.flags & 0xFC,
+                        final_length: Some(self.payload.len() as u32),
+                        payload: *chunk,
+                    };
+                    packets.push(frame);
+                }
+            }
+        }
+        else
+        {
+            //whole data
+            let mut frame: Packet;
+            frame.channel=self.channel;
+            frame.flags = self.flags;
+            frame.payload = chunks[0];
+            packets.push(frame);
+        }
+
+        Ok(packets)
     }
 
     /// composes a final frame and transmits it to endpoint device (HU/MD)
@@ -401,7 +463,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                                 error!("SCRCPY>HU Transmission error: {:?}", e);
                             }
                             // yield so other tasks can run to release backpressure on TCP
-                            tokio::task::yield_now().await;
+                            //tokio::task::yield_now().await;
                         }
                         Err(e) => {error!( "{} encrypt_payload error: {:?}", get_name(), e);},
                     }
