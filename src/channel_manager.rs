@@ -3,7 +3,7 @@ use log::log_enabled;
 use openssl::ssl::{ErrorCode, Ssl, SslContextBuilder, SslFiletype, SslMethod};
 use simplelog::*;
 use std::collections::VecDeque;
-use std::{fmt};
+use std::{fmt, io};
 use std::cmp::PartialEq;
 use std::io::{Read, Write};
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -465,7 +465,10 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                             // yield so other tasks can run to release backpressure on TCP
                             //tokio::task::yield_now().await;
                         }
-                        Err(e) => {error!( "{} encrypt_payload error: {:?}", get_name(), e);},
+                        Err(e) => {
+                            error!( "{} encrypt_payload error: {:?}", get_name(), e);
+                            return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY>HU channel closed")));
+                        },
                     }
                 }
         }
