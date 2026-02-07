@@ -256,7 +256,7 @@ pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, 
                     else
                     {
 
-                        if sensors.contains(&SensorType::SENSOR_NIGHT_MODE) {
+                        /*if sensors.contains(&SensorType::SENSOR_NIGHT_MODE) {
                             info!("{} send SENSOR_MESSAGE_REQUEST",get_name());
                             let mut req = SensorRequest::new();
                             req.set_type(protos::SensorType::SENSOR_NIGHT_MODE);
@@ -275,7 +275,7 @@ pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, 
                             {
                                 error!( "{} mpsc send error", get_name());
                             };
-                        }
+                        }*/
 
                     }
                 }
