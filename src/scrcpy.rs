@@ -226,10 +226,7 @@ async fn tsk_scrcpy_video(
                                     {
                                         match ack_notify.recv_async().await {
                                             Ok(_) => {
-                                                if act_unack>0
-                                                {
-                                                    act_unack=0;
-                                                }
+                                                act_unack=0;
                                                 continue;
                                             }
                                             Err(e) => {
@@ -458,10 +455,7 @@ async fn tsk_scrcpy_audio(
                                     {
                                         match ack_notify.recv_async().await {
                                             Ok(_) => {
-                                                if act_unack>0
-                                                {
-                                                    act_unack=0;
-                                                }
+                                                act_unack=0;
                                                 continue;
                                             }
                                             Err(e) => {
