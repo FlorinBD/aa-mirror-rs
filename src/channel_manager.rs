@@ -157,7 +157,7 @@ impl Packet {
     pub(crate) async fn split(
         &mut self,
     ) -> Result<(Vec<Packet>)> {
-        let mut chunks:Vec<Vec<u8>> = vec![];
+
         let mut packets:Vec<Packet> = vec![];
         if self.payload.len()>MAX_DATA_LEN
         {
@@ -207,7 +207,7 @@ impl Packet {
                 channel : self.channel,
                 flags : self.flags,
                 final_length: None,
-                payload : chunks[0].to_vec(),
+                payload : self.payload,
             };
             packets.push(frame);
         }
