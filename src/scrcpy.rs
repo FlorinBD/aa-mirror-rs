@@ -233,6 +233,7 @@ async fn tsk_scrcpy_video(
                                     }
                                     else
                                     {
+                                        info!("Video ACK limit hit, waiting new ACK");
                                         match ack_notify.recv_async().await {
                                             Ok(_) => {
                                                 act_unack=0;
@@ -471,6 +472,7 @@ async fn tsk_scrcpy_audio(
                                     }
                                     else
                                     {
+                                        info!("Audio ACK limit hit, waiting new ACK");
                                         match ack_notify.recv_async().await {
                                             Ok(_) => {
                                                 act_unack=0;
