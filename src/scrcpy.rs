@@ -143,8 +143,9 @@ impl ScrcpySize {
 }
 async fn tsk_scrcpy_video(
     mut stream: TcpStream,
-    mut cancel_notify:flume::Receiver<u32>,
+    mut ack_notify:Receiver<u32>,
     video_tx: flume::Sender<Packet>,
+    max_unack:u32,
     sid:u8,
 ) -> Result<()> {
     info!("Starting video server!");
@@ -166,20 +167,39 @@ async fn tsk_scrcpy_video(
     }
     info!("SCRCPY Video entering main loop");
     //let mut reassembler = NalReassembler::new();
-    loop {
-        if cancel_notify.try_recv().is_ok() {
-            info!("SCRCPY Video task CANCEL signal received, exiting main loop");
-            return Ok(());
-        }
-        else {
-            match read_send_packet(&mut stream, &video_tx, sid, &mut dbg_counter).await {
-                Ok(()) => {
-                }
+    //drain all previous permits
+    while let Ok(_) = ack_notify.try_recv() {}
+    //send first unacked packets
+    for _ in 0..max_unack {
+        match read_send_packet(&mut stream, &video_tx, sid, &mut dbg_counter).await {
+            Ok(()) => {
+            }
 
-                Err(e) => {
-                    error!("scrcpy video read failed: {}", e);
-                    return Err(e);
-                }
+            Err(e) => {
+                error!("scrcpy video read failed: {}", e);
+                return Err(e);
+            }
+        }
+    }
+    loop {
+
+        match read_send_packet(&mut stream, &video_tx, sid, &mut dbg_counter).await {
+            Ok(()) => {
+            }
+
+            Err(e) => {
+                error!("scrcpy video read failed: {}", e);
+                break;
+            }
+        }
+
+        match ack_notify.recv().await {
+            Some(_) => {
+                continue;
+            }
+            None => {
+                error!("Video Channel closed, exiting");
+                return Err(Box::new(io::Error::new(io::ErrorKind::Other, "channel closed")));
             }
         }
 
@@ -224,11 +244,12 @@ async fn tsk_scrcpy_video(
                     payload.extend_from_slice(&rec_ts.to_be_bytes());
                     payload.extend_from_slice(&h264_data);
                 }
+
                 let pkt_rsp = Packet {
                     channel: sid,
                     flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                     final_length: None,
-                    payload: payload,
+                    payload,
                 };
                 video_tx.send_async(pkt_rsp).await?;
             }
@@ -307,8 +328,9 @@ async fn tsk_scrcpy_video(
 
 async fn tsk_scrcpy_audio(
     mut stream: TcpStream,
-    mut cancel_notify:flume::Receiver<u32>,
+    mut ack_notify:Receiver<u32>,
     audio_tx: flume::Sender<Packet>,
+    max_unack:u32,
     sid:u8
 ) -> Result<()> {
     let mut dbg_counter=0;
@@ -325,23 +347,37 @@ async fn tsk_scrcpy_audio(
         error!("SCRCPY Invalid audio codec configuration");
         return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY Invalid audio codec configuration")));
     }
-    loop {
-        if cancel_notify.try_recv().is_ok(){
-            info!("SCRCPY Audio task CANCEL signal received, exiting main loop");
-            return Ok(());
-        }
-        else {
-            match read_send_packet(&mut stream, &audio_tx, sid, &mut dbg_counter).await {
-                Ok(()) => {
-                }
+    //drain all previous permits
+    while let Ok(_) = ack_notify.try_recv() {}
+    for _ in 0..max_unack {
+        match read_send_packet(&mut stream, &audio_tx, sid, &mut dbg_counter).await {
+            Ok(()) => {
+            }
 
-                Err(e) => {
-                    error!("scrcpy audio read failed: {}", e);
-                    return Err(e);
-                }
+            Err(e) => {
+                error!("scrcpy audio read failed: {}", e);
+                return Err(e);
             }
         }
+    }
+    loop {
+        match read_send_packet(&mut stream, &audio_tx, sid, &mut dbg_counter).await {
+            Ok(()) => {}
 
+            Err(e) => {
+                error!("scrcpy audio read failed: {}", e);
+                return Err(e);
+            }
+        }
+        match ack_notify.recv().await {
+            Some(_) => {
+                continue;
+            }
+            None => {
+                error!("Audio Channel closed, exiting");
+                return Err(Box::new(io::Error::new(io::ErrorKind::Other, "channel closed")));
+            }
+        }
     }
     return Ok(());
 
@@ -386,7 +422,7 @@ async fn tsk_scrcpy_audio(
                     channel: sid,
                     flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                     final_length: None,
-                    payload: payload,
+                    payload,
                 };
                 audio_tx.send_async(pkt_rsp).await?;
             }
@@ -797,12 +833,12 @@ pub(crate) async fn tsk_adb_scrcpy(
                 srv_cmd_tx.send_async(pkt_rsp).await?;
                 continue;
             }
-            /*let mut video_bitrate=video_codec_params.bitrate;
+            let mut video_bitrate=video_codec_params.bitrate;
             if config.dhu
             {
                 //limit video bitrate for DHU to keep connection open
                 video_bitrate=500_000;
-            }*/
+            }
             //AVC base profile, no B frames, only I and P frames, low-latency is MANDATORY
             let video_codec_options=format!("profile:int=1,level:int=512,i-frame-interval:int={},low-latency:int=1,max-bframes:int=0",video_codec_params.fps);
             let audio_codec_options="aac-profile:int=2";
@@ -832,7 +868,7 @@ pub(crate) async fn tsk_adb_scrcpy(
             cmd_shell.push("video_codec=h264".to_string());
             //cmd_shell.push(format!("audio_codec_options={}", audio_codec_options.to_string()));
             cmd_shell.push(format!("video_codec_options={}", video_codec_options.to_string()));
-            cmd_shell.push(format!("video_bit_rate={}", video_codec_params.bitrate));//video_codec_params.bitrate
+            cmd_shell.push(format!("video_bit_rate={}", video_bitrate));//video_codec_params.bitrate
             cmd_shell.push(format!("new_display={}x{}/{}", video_codec_params.res_w, video_codec_params.res_h, video_codec_params.dpi));
             cmd_shell.push(format!("max_fps={}", video_codec_params.fps));
             let (mut shell, mut sh_reader,line)=adb::shell_cmd(cmd_shell).await?;
@@ -859,15 +895,26 @@ pub(crate) async fn tsk_adb_scrcpy(
                 let (done_th_tx_audio, mut done_th_rx_audio) = oneshot::channel();
                 let (done_th_tx_ctrl, mut done_th_rx_ctrl) = oneshot::channel();
 
-                //mpsc channels for task cancellation
-                let (tx_cancel_audio, rx_cancel_audio) = flume::bounded::<u32>(1);
-                let (tx_cancel_video, rx_cancel_video) = flume::bounded::<u32>(1);
+                //mpsc channels for ACK notification, to maintain frame window
+                let mut audio_max_unack_mpsc = 1usize;
+                let mut video_max_unack_mpsc =1usize;
+                if audio_codec_params.max_unack > 0
+                {
+                    audio_max_unack_mpsc =audio_codec_params.max_unack as usize;
+                }
+                if video_codec_params.max_unack > 0
+                {
+                    video_max_unack_mpsc =video_codec_params.max_unack as usize;
+                }
+                let (tx_ack_audio, rx_ack_audio) = mpsc::channel::<u32>(audio_max_unack_mpsc);
+                let (tx_ack_video, rx_ack_video) = mpsc::channel::<u32>(video_max_unack_mpsc);
                 let (tx_ctrl, rx_ctrl)=flume::bounded::<Packet>(5);
                 hnd_scrcpy_video = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_video(
                         video_stream,
-                        rx_cancel_video,
+                        rx_ack_video,
                         video_tx,
+                        video_codec_params.max_unack,
                         video_codec_params.sid
                     ).await;
                     let _ = done_th_tx_video.send(res);
@@ -876,8 +923,9 @@ pub(crate) async fn tsk_adb_scrcpy(
                 hnd_scrcpy_audio = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_audio(
                         audio_stream,
-                        rx_cancel_audio,
+                        rx_ack_audio,
                         audio_tx,
+                        audio_codec_params.max_unack,
                         audio_codec_params.sid,
                     ).await;
                     let _ = done_th_tx_audio.send(res);
@@ -908,28 +956,63 @@ pub(crate) async fn tsk_adb_scrcpy(
                                 let cmd_id: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
                                 if cmd_id == CustomCommand::CMD_STOP_VIDEO_RECORDING as i32
                                 {
+
                                     info!("tsk_scrcpy_video Video streaming stopped");
-                                    tx_cancel_video.send_async(1).await?;
+                                    drop(tx_ack_video);
                                     //FIXME close the stream
                                     break;
                                 }
                                 else if cmd_id == CustomCommand::CMD_STOP_AUDIO_RECORDING as i32
                                 {
+
                                     info!("tsk_scrcpy_video Audio streaming stopped");
-                                    tx_cancel_audio.send_async(1).await?;
+                                    drop(tx_ack_audio);
                                     //FIXME close the stream
                                     break;
                                 }
                                 else if cmd_id == CustomCommand::CANCEL as i32
                                 {
+
                                     info!("tsk_scrcpy CANCEL CMD received, stopping all tasks");
-                                   tx_cancel_audio.send_async(1).await?;
-                                   tx_cancel_video.send_async(1).await?;
+                                    drop(tx_ack_audio);
+                                    drop(tx_ack_video);
                                     if let Err(_) = tx_ctrl.send_async(pkt).await
                                     {
                                         error!( "tsk_scrcpy control proxy send error, buffer full?");
                                     };
                                     break;
+                                }
+                            }
+                            else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK as i32
+                            {
+                                //info!("{} Received {} message", sid.to_string(), message_id);
+                                let data = &pkt.payload[2..]; // start of message data, without message_id
+                                if let Ok(_) = Ack::parse_from_bytes(&data)
+                                {
+                                    if pkt.channel == video_sid
+                                    {
+                                        info!("tsk_scrcpy: video ACK recived");
+                                        if let Err(_) = tx_ack_video.try_send(1)
+                                        {
+                                            error!( "tsk_scrcpy video ACK send error, buffer full?");
+                                        };
+                                    }
+                                    else if pkt.channel == audio_sid
+                                    {
+                                        info!("tsk_scrcpy: audio ACK recived");
+                                        if let Err(_) = tx_ack_audio.try_send(1)
+                                        {
+                                            error!( "tsk_scrcpy audio ACK send error, buffer full?");
+                                        };
+                                    }
+                                    else
+                                    {
+                                        error!("tsk_scrcpy unexpected channel ID for ACK command");
+                                    }
+                                }
+                                else
+                                {
+                                    error!( "tsk_scrcpy Unable to parse MEDIA_MESSAGE_ACK message");
                                 }
                             }
                             else if message_id == InputMessageId::INPUT_MESSAGE_INPUT_REPORT  as i32

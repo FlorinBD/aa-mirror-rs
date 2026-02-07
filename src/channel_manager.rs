@@ -3,14 +3,13 @@ use log::log_enabled;
 use openssl::ssl::{ErrorCode, Ssl, SslContextBuilder, SslFiletype, SslMethod};
 use simplelog::*;
 use std::collections::VecDeque;
-use std::{fmt, io};
+use std::{fmt};
 use std::cmp::PartialEq;
-use std::io::{ErrorKind, Read, Write};
+use std::io::{Read, Write};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
-use libc::sigdelset;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -30,7 +29,7 @@ use tokio::sync::{mpsc};
 use protos::ControlMessageType::{self, *};
 use crate::aa_services::{VideoCodecResolution::*, VideoFPS::*, AudioStream, AudioConfig, MediaCodec::*, ServiceType, CommandState, ServiceStatus, th_bluetooth, VideoStreamingParams, AudioStreamingParams, SensorType};
 use crate::aa_services::{th_input_source, th_media_sink_audio_guidance, th_media_sink_audio_streaming, th_media_sink_video, th_media_source, th_sensor_source, th_vendor_extension};
-use crate::config::{HU_CONFIG_DELAY_MS, MAX_DATA_LEN, MAX_PACKET_LEN};
+use crate::config::HU_CONFIG_DELAY_MS;
 use crate::config_types::HexdumpLevel;
 use crate::io_uring::Endpoint;
 use crate::io_uring::IoDevice;
@@ -118,41 +117,22 @@ pub struct Packet {
 }
 
 impl Packet {
-    ///payload encryption into chunks of max size
+    /// payload encryption if needed
     async fn encrypt_payload(
-        &self,
+        &mut self,
         mem_buf: &mut SslMemBuf,
         server: &mut openssl::ssl::SslStream<SslMemBuf>,
-    ) -> anyhow::Result<(Vec<Vec<u8>>)> {
-        //FIXME do chunks also for unencrypted
-        let mut retval:Vec<Vec<u8>> = vec![];
+    ) -> Result<()> {
         if (self.flags & ENCRYPTED) == ENCRYPTED {
-            if self.payload.len()> MAX_DATA_LEN
-            {
-                for chunk in self.payload.chunks(MAX_DATA_LEN)
-                {
-                    // save plain data for encryption
-                    server.ssl_write(&chunk)?;
-                    // read encrypted data
-                    let mut res: Vec<u8> = Vec::new();
-                    mem_buf.read_to(&mut res)?;
-                    retval.push(res);
-
-                }
-            }
-            else
-            {
-                // save plain data for encryption
-                server.ssl_write(&self.payload)?;
-                // read encrypted data
-                let mut res: Vec<u8> = Vec::new();
-                mem_buf.read_to(&mut res)?;
-                retval.push(res);
-
-            }
+            // save plain data for encryption
+            server.ssl_write(&self.payload)?;
+            // read encrypted data
+            let mut res: Vec<u8> = Vec::new();
+            mem_buf.read_to(&mut res)?;
+            self.payload = res;
         }
 
-        Ok(retval)
+        Ok(())
     }
 
     /// payload decryption if needed
@@ -172,279 +152,38 @@ impl Packet {
 
         Ok(())
     }
-    /// composes a final frame, encrypt if necessary and transmits it to endpoint device (HU/MD) using ack method
-    async fn transmit_with_ack<A: Endpoint<A>>(
-        &self,
-        device: &mut IoDevice<A>,
-        mem_buf: &mut SslMemBuf,
-        server: &mut openssl::ssl::SslStream<SslMemBuf>,
-        act_ack: &mut i32,
-        max_ack: i32,
-        ack_signal:&mut flume::Receiver<u32>,
-    ) -> anyhow::Result<usize, std::io::Error> {
-        if self.flags & ENCRYPTED == ENCRYPTED {
-            //let chunks=self.encrypt_payload(mem_buf, server).await;
-            match self.encrypt_payload(mem_buf, server).await {
-                Ok(chunks) => {
-                    if chunks.len() > 1
-                    {
-                        //segmented data
-                        let mut total_size = 0;
-                        for (i, mut chunk) in chunks.iter().enumerate() {
-                            let mut frame: Vec<u8> = vec![];
-                            let len = chunk.len()as  u16;
-                            frame.push(self.channel);
-                            if i==0
-                            {
-                                //first frame
-                                frame.push((self.flags & 0xFC) | FRAME_TYPE_FIRST);
-                                frame.push((len >> 8) as u8);
-                                frame.push((len & 0xff) as u8);
-                                let final_len = self.payload.len();
-                                // adding addional 4-bytes of final_len header
-                                frame.push((final_len >> 24) as u8);
-                                frame.push((final_len >> 16) as u8);
-                                frame.push((final_len >> 8) as u8);
-                                frame.push((final_len & 0xff) as u8);
-                            }
-                            else if i== chunks.len() - 1
-                            {
-                                //last frame
-                                frame.push((self.flags & 0xFC) | FRAME_TYPE_LAST);
-                                frame.push((len >> 8) as u8);
-                                frame.push((len & 0xff) as u8);
-                            }
-                            else
-                            {
-                                //consecutive frame
-                                frame.push(self.flags & 0xFC);
-                                frame.push((len >> 8) as u8);
-                                frame.push((len & 0xff) as u8);
-                            }
-                            frame.extend_from_slice(&mut chunk);
-                            total_size+=frame.len();
-                            if *act_ack<max_ack
-                            {
-                                self.ep_send(frame,device).await?;
-                                *act_ack+=1;
-                            }
-                            else {
-                                match ack_signal.recv_async().await {
-                                    Some(_) => {
-                                        self.ep_send(frame,device).await?;
-                                        *act_ack=1;
-                                    }
-                                    None => {
-                                        error!("ACK Channel closed, exiting");
-                                        return Err(io::Error::new(io::ErrorKind::Other, "channel closed"));
-                                    }
-                                }
-                            }
 
-                        }
-                        Ok(total_size)
-                    }
-                    else
-                    {
-                        //whole data
-                        let len = chunks[0].len()as  u16;
-                        let mut frame: Vec<u8> = vec![];
-                        frame.push(self.channel);
-                        frame.push(self.flags);
-                        frame.push((len >> 8) as u8);
-                        frame.push((len & 0xff) as u8);
-                        if let Some(final_len) = self.final_length {
-                            // adding addional 4-bytes of final_len header
-                            frame.push((final_len >> 24) as u8);
-                            frame.push((final_len >> 16) as u8);
-                            frame.push((final_len >> 8) as u8);
-                            frame.push((final_len & 0xff) as u8);
-                        }
-                        frame.extend_from_slice(&chunks[0]);
-                        if *act_ack<max_ack
-                        {
-                            *act_ack+=1;
-                            return self.ep_send(frame,device).await;
-                        }
-                        else {
-                            match ack_signal.recv_async().await {
-                                Some(_) => {
-                                    *act_ack=1;
-                                    return self.ep_send(frame,device).await;
-                                }
-                                None => {
-                                    error!("ACK Channel closed, exiting");
-                                    return Err(io::Error::new(io::ErrorKind::Other, "channel closed"));
-                                }
-                            }
-                        }
-
-                    }
-                }
-
-                Err(e) => {
-                    error!("{}: Encrypting error", get_name());
-                    Err(std::io::Error::new(ErrorKind::Other, "Encrypting error"))
-                }
-            }
-
-        }
-        else
-        {
-            //send raw payload
-            let len = self.payload.len() as u16;
-            let mut frame: Vec<u8> = vec![];
-            frame.push(self.channel);
-            frame.push(self.flags);
-            frame.push((len >> 8) as u8);
-            frame.push((len & 0xff) as u8);
-            if let Some(final_len) = self.final_length {
-                // adding addional 4-bytes of final_len header
-                frame.push((final_len >> 24) as u8);
-                frame.push((final_len >> 16) as u8);
-                frame.push((final_len >> 8) as u8);
-                frame.push((final_len & 0xff) as u8);
-            }
-            frame.extend_from_slice(&self.payload);
-            if *act_ack<max_ack
-            {
-                *act_ack+=1;
-                return self.ep_send(frame,device).await;
-            }
-            else {
-                match ack_signal.recv_async().await {
-                    Some(_) => {
-                        *act_ack=1;
-                        return self.ep_send(frame,device).await;
-                    }
-                    None => {
-                        error!("ACK Channel closed, exiting");
-                        return Err(io::Error::new(io::ErrorKind::Other, "channel closed"));
-                    }
-                }
-            }
-        }
-    }
-
-    /// composes a final frame, encrypt if necessary and transmits it to endpoint device (HU/MD)
+    /// composes a final frame and transmits it to endpoint device (HU/MD)
     async fn transmit<A: Endpoint<A>>(
         &self,
         device: &mut IoDevice<A>,
-        mem_buf: &mut SslMemBuf,
-        server: &mut openssl::ssl::SslStream<SslMemBuf>,
-    ) -> anyhow::Result<usize, std::io::Error> {
-        if self.flags & ENCRYPTED == ENCRYPTED {
-            //let chunks=self.encrypt_payload(mem_buf, server).await;
-            match self.encrypt_payload(mem_buf, server).await {
-                Ok(chunks) => {
-                    if chunks.len() > 1
-                    {
-                        error!("{}: fragmented data detected, you must use transmit_with_ack()", get_name());
-                        //segmented data
-                        let mut total_size = 0;
-                        for (i, mut chunk) in chunks.iter().enumerate() {
-                            let mut frame: Vec<u8> = vec![];
-                            let len = chunk.len()as  u16;
-                            frame.push(self.channel);
-                            if i==0
-                            {
-                                //first frame
-                                frame.push((self.flags & 0xFC) | FRAME_TYPE_FIRST);
-                                frame.push((len >> 8) as u8);
-                                frame.push((len & 0xff) as u8);
-                                let final_len = self.payload.len();
-                                // adding addional 4-bytes of final_len header
-                                frame.push((final_len >> 24) as u8);
-                                frame.push((final_len >> 16) as u8);
-                                frame.push((final_len >> 8) as u8);
-                                frame.push((final_len & 0xff) as u8);
-                            }
-                            else if i== chunks.len() - 1
-                            {
-                                //last frame
-                                frame.push((self.flags & 0xFC) | FRAME_TYPE_LAST);
-                                frame.push((len >> 8) as u8);
-                                frame.push((len & 0xff) as u8);
-                            }
-                            else
-                            {
-                                //consecutive frame
-                                frame.push(self.flags & 0xFC);
-                                frame.push((len >> 8) as u8);
-                                frame.push((len & 0xff) as u8);
-                            }
-                            frame.extend_from_slice(&mut chunk);
-                            total_size+=frame.len();
-                            self.ep_send(frame,device).await?;
-
-                        }
-                        Ok(total_size)
-                    }
-                    else
-                    {
-                        //whole data
-                        let len = chunks[0].len()as  u16;
-                        let mut frame: Vec<u8> = vec![];
-                        frame.push(self.channel);
-                        frame.push(self.flags);
-                        frame.push((len >> 8) as u8);
-                        frame.push((len & 0xff) as u8);
-                        if let Some(final_len) = self.final_length {
-                            // adding addional 4-bytes of final_len header
-                            frame.push((final_len >> 24) as u8);
-                            frame.push((final_len >> 16) as u8);
-                            frame.push((final_len >> 8) as u8);
-                            frame.push((final_len & 0xff) as u8);
-                        }
-                        frame.extend_from_slice(&chunks[0]);
-                        return self.ep_send(frame,device).await;
-                    }
-                }
-
-                Err(e) => {
-                    error!("{}: Encrypting error", get_name());
-                    Err(std::io::Error::new(ErrorKind::Other, "Encrypting error"))
-                }
-            }
-
-        }
-        else
-        {
-            //send raw payload
-            let len = self.payload.len() as u16;
-            let mut frame: Vec<u8> = vec![];
-            frame.push(self.channel);
-            frame.push(self.flags);
-            frame.push((len >> 8) as u8);
-            frame.push((len & 0xff) as u8);
-            if let Some(final_len) = self.final_length {
-                // adding addional 4-bytes of final_len header
-                frame.push((final_len >> 24) as u8);
-                frame.push((final_len >> 16) as u8);
-                frame.push((final_len >> 8) as u8);
-                frame.push((final_len & 0xff) as u8);
-            }
-            frame.extend_from_slice(&self.payload);
-            return self.ep_send(frame,device).await;
-        }
-    }
-
-    async fn ep_send<A: Endpoint<A>>(&self, data:Vec<u8>, device: &mut IoDevice<A>,) -> anyhow::Result<usize, std::io::Error>
-    {
-        if data.len() > MAX_PACKET_LEN
-        {
-            error!("{}: data too large, got {}, wanted {}", get_name(), data.len(), MAX_PACKET_LEN);
+    ) -> std::result::Result<usize, std::io::Error> {
+        let len = self.payload.len() as u16;
+        let mut frame: Vec<u8> = vec![];
+        frame.push(self.channel);
+        frame.push(self.flags);
+        frame.push((len >> 8) as u8);
+        frame.push((len & 0xff) as u8);
+        if let Some(final_len) = self.final_length {
+            // adding addional 4-bytes of final_len header
+            frame.push((final_len >> 24) as u8);
+            frame.push((final_len >> 16) as u8);
+            frame.push((final_len >> 8) as u8);
+            frame.push((final_len & 0xff) as u8);
         }
         match device {
             IoDevice::UsbWriter(device, _) => {
+                frame.append(&mut self.payload.clone());
                 let mut dev = device.borrow_mut();
-                dev.write(&data).await
+                dev.write(&frame).await
             }
             IoDevice::EndpointIo(device) => {
-                device.write(data).submit().await.0
+                frame.append(&mut self.payload.clone());
+                device.write(frame).submit().await.0
             }
             IoDevice::TcpStreamIo(device) => {
-                device.write(data).submit().await.0
+                frame.append(&mut self.payload.clone());
+                device.write(frame).submit().await.0
             }
             _ => todo!(),
         }
@@ -625,9 +364,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
     r_statistics: Arc<AtomicUsize>,
     w_statistics: Arc<AtomicUsize>,
     dmp_level:HexdumpLevel,
-    mut audio_ack_notify:flume::Receiver<u32>,
-    mut video_ack_notify:flume::Receiver<u32>,
-    ) -> Result<()> {
+) -> Result<()> {
     let mut ssl_handshake_done:bool=false;
     let ssl = ssl_builder().await?;
     let mut mem_buf = SslMemBuf {
@@ -636,10 +373,6 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
     };
     let mut server = openssl::ssl::SslStream::new(ssl, mem_buf.clone())?;
     info!( "{}: Starting message proxy loop...", get_name());
-    let mut audio_codec_params = None;
-    let mut video_codec_params = None;
-    let mut act_ack_audio=0;
-    let mut act_ack_video=0;
     loop {
         tokio::select! {
         biased;
@@ -652,35 +385,25 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                 }
                 else
                 {
-                    if let Some(params)=audio_codec_params
-                    {
-                        if(msg.channel == params.sid)
-                        {
+                    /*let _ = pkt_debug(
+                        HexdumpLevel::DecryptedOutput,
+                        dmp_level,
+                        &msg,
+                        "SCRCPY".parse().unwrap()
+                    ).await;*/
+                    match msg.encrypt_payload(&mut mem_buf, &mut server).await {
+                        Ok(_) => {
                             // Increment byte counters for statistics
                             // fixme: compute final_len for precise stats
                             w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
-                            if let Err(e) = msg.transmit_with_ack(&mut hu_wr, &mut mem_buf, &mut server, &mut act_ack_audio, params.max_unack,  &mut audio_ack_notify).await.with_context(|| format!("{}: SCRCPY transmit to HU failed", get_name())) {
+                            //msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: SCRCPY transmit to HU failed", get_name()))?;
+                            if let Err(e) = msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: SCRCPY transmit to HU failed", get_name())) {
                                 error!("SCRCPY>HU Transmission error: {:?}", e);
-                             return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other,"SCRCPY>HU Transmission error")));
                             }
+                            // yield so other tasks can run to release backpressure on TCP
+                            tokio::task::yield_now().await;
                         }
-                    }
-                    else if let Some(params)=video_codec_params
-                    {
-                        if(msg.channel == params.sid)
-                        {
-                            // Increment byte counters for statistics
-                            // fixme: compute final_len for precise stats
-                            w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
-                            if let Err(e) = msg.transmit_with_ack(&mut hu_wr, &mut mem_buf, &mut server, &mut act_ack_video, params.max_unack, &mut video_ack_notify).await.with_context(|| format!("{}: SCRCPY transmit to HU failed", get_name())) {
-                                error!("SCRCPY>HU Transmission error: {:?}", e);
-                             return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other,"SCRCPY>HU Transmission error")));
-                            }
-                        }
-                    }
-                    else
-                    {
-                        error!("{}: audio/video codec_params not received yet but streaming was started", get_name());
+                        Err(e) => {error!( "{} encrypt_payload error: {:?}", get_name(), e);},
                     }
                 }
         }
@@ -699,67 +422,29 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                             &msg,
                             "MD".parse().unwrap()
                         ).await;
-                         // Increment byte counters for statistics
-                    // fixme: compute final_len for precise stats
-                    w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
-                            //msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: SCRCPY transmit to HU failed", get_name()))?;
-                    if let Err(e) = msg.transmit(&mut hu_wr, &mut mem_buf, &mut server).await.with_context(|| format!("{}: SCRCPY transmit to HU failed", get_name())) {
-                        error!("srv>HU Transmission error: {:?}", e);
-                        return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other,"srv>HU Transmission error")));
-                    }
+                        match msg.encrypt_payload(&mut mem_buf, &mut server).await {
+                            Ok(_) => {
+                                // Increment byte counters for statistics
+                                // fixme: compute final_len for precise stats
+                                w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
+                                msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: Service transmit to HU failed", get_name()))?;
+                            }
+                            Err(e) => {error!( "{} encrypt_payload error: {:?}", get_name(), e);},
+                        }
                 }
             }
             else
             {
-                let _ = pkt_debug(
-                    HexdumpLevel::DecryptedOutput,
-                    dmp_level,
-                    &msg,
-                    "MD".parse().unwrap()
-                ).await;
-                let message_id: i32 = u16::from_be_bytes(msg.payload[0..=1].try_into()?).into();
-                if message_id == MESSAGE_CUSTOM_CMD  as i32
-                {
-                    let cmd_id: i32 = u16::from_be_bytes(msg.payload[2..=3].try_into()?).into();
-                    let data = &msg.payload[4..]; // start of message data, without message_id
-                    if cmd_id == CustomCommand::CMD_START_VIDEO_RECORDING as i32
-                    {
-                        match postcard::take_from_bytes::<VideoStreamingParams>(data) {
-                            Ok((cmd, rest)) => {
-                                info!("{} Parsed VideoStreamingParams: {:?}",get_name(), cmd);
-                                info!("{} Remaining bytes: {}",get_name(), rest.len());
-                                video_codec_params =Some(cmd);
-                            }
-                            Err(e) => {
-                                error!("{} postcard parsing error: {:?}",get_name(), e);
-                            }
-                        }
-                    }
-                    else if cmd_id == CustomCommand::CMD_START_AUDIO_RECORDING as i32
-                    {
-                        match postcard::take_from_bytes::<AudioStreamingParams>(data) {
-                            Ok((cmd, rest)) => {
-                                info!("{} Parsed AudioStreamingParams: {:?}",get_name(), cmd);
-                                info!("{} Remaining bytes: {}",get_name(), rest.len());
-                                audio_codec_params =Some(cmd);
-                            }
-                            Err(e) => {
-                                error!("{} postcard parsing error: {:?}",get_name(), e);
-                            }
-                        }
-                    }
-                    else
-                    {
-                        info!("{} unknown command received",get_name());
-                    }
-                }
-                else
-                {
+                    let _ = pkt_debug(
+                        HexdumpLevel::DecryptedOutput,
+                        dmp_level,
+                        &msg,
+                        "MD".parse().unwrap()
+                    ).await;
                     // Increment byte counters for statistics
                     // fixme: compute final_len for precise stats
                     w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
-                    msg.transmit(&mut hu_wr, &mut mem_buf, &mut server).await.with_context(|| format!("{}: Service transmit to HU failed", get_name()))?;
-                }
+                    msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: Service transmit to HU failed", get_name()))?;
 
             }
         }
@@ -814,7 +499,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                             // Step2: send server hello
                             let pkt = ssl_encapsulate(mem_buf.clone()).await?;
                             let _ = pkt_debug(HexdumpLevel::RawOutput, dmp_level, &pkt,"MD".parse().unwrap()).await;
-                            pkt.transmit(&mut hu_wr, &mut mem_buf, &mut server).await.with_context(|| format!("{}: transmit failed", get_name()))?;
+                            pkt.transmit(&mut hu_wr).await.with_context(|| format!("{}: transmit failed", get_name()))?;
 
                             //Step3: ClientKeyExchange
                             let pkt = hu_rx.recv().await.ok_or("hu reader channel hung up")?;
@@ -839,7 +524,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                             //Step4: Change Cipher spec finished
                             let pkt = ssl_encapsulate(mem_buf.clone()).await?;
                             let _ = pkt_debug(HexdumpLevel::RawOutput, dmp_level, &pkt, "MD".parse().unwrap()).await;
-                            pkt.transmit(&mut hu_wr, &mut mem_buf, &mut server).await.with_context(|| format!("{}: transmit failed", get_name()))?;
+                            pkt.transmit(&mut hu_wr).await.with_context(|| format!("{}: transmit failed", get_name()))?;
                     }
                     else {
                         if let Err(_) = srv_tx.send(msg).await{
@@ -852,8 +537,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
         else => {
             // all channels closed
             tokio::time::sleep(Duration::from_secs(1)).await;
-                error!("packet_tls_proxy ALL CHANNELS CLOSED! handle app restart needed");
-                return Err(Box::new(std::io::Error::new(std::io::ErrorKind::Other,"all tls channels closed")));
+                error!("packet_tls_proxy ALL CHANNELS CLOSED! handle app restart needed")
         }
         }
     }
@@ -955,11 +639,9 @@ pub async fn ch_proxy(
     tx_srv: Sender<Packet>,
     scrcpy_cmd_tx: flume::Sender<Packet>,
     scrcpy_cmd_rx: flume::Receiver<Packet>,
-    ack_audio: flume::Sender<u32>,
-    ack_video: flume::Sender<u32>,
 ) -> Result<()> {
     info!( "{} Entering channel manager",get_name());
-   // waiting for initial version frame (HU is starting transmission)
+    // waiting for initial version frame (HU is starting transmission)
     info!( "{} Waiting for HU version request...",get_name());
     //let pkt = rx_hu.recv().await.ok_or("reader channel hung up")?;
     let pkt = rx_srv.recv().await.ok_or("rx_srv channel hung up")?;
@@ -968,18 +650,18 @@ pub async fn ch_proxy(
         Ok(_v) => info!( "{} HU version request received, sending VersionResponse back...",get_name()),
         Err(e) => {error!( "{} HU sent unexpected channel message", get_name()); return Err(e)},
     }
-        // build version response for HU
-        //let mut response = VersionResponse::new();
-        //let mut payload: Vec<u8> = response.write_to_bytes()?;
-        let mut payload: Vec<u8>=Vec::new();
-        payload.push(((MESSAGE_VERSION_RESPONSE as u16) >> 8) as u8);
-        payload.push( ((MESSAGE_VERSION_RESPONSE as u16) & 0xff) as u8);
-        payload.push( pkt.payload[2]);//send back same version as requested
-        payload.push( pkt.payload[3]);
-        payload.push( pkt.payload[4]);
-        payload.push( pkt.payload[5]);
-        payload.push( ((MessageStatus::STATUS_SUCCESS  as u16) >> 8) as u8);
-        payload.push( ((MessageStatus::STATUS_SUCCESS  as u16) & 0xff) as u8);
+    // build version response for HU
+    //let mut response = VersionResponse::new();
+    //let mut payload: Vec<u8> = response.write_to_bytes()?;
+    let mut payload: Vec<u8>=Vec::new();
+    payload.push(((MESSAGE_VERSION_RESPONSE as u16) >> 8) as u8);
+    payload.push( ((MESSAGE_VERSION_RESPONSE as u16) & 0xff) as u8);
+    payload.push( pkt.payload[2]);//send back same version as requested
+    payload.push( pkt.payload[3]);
+    payload.push( pkt.payload[4]);
+    payload.push( pkt.payload[5]);
+    payload.push( ((MessageStatus::STATUS_SUCCESS  as u16) >> 8) as u8);
+    payload.push( ((MessageStatus::STATUS_SUCCESS  as u16) & 0xff) as u8);
 
     let pkt_rsp = Packet {
         channel: 0,
