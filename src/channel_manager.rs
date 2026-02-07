@@ -166,7 +166,7 @@ impl Packet {
             {
                 chunks.push(chunk.to_vec());
             }
-            for (i, mut chunk) in chunks.iter().enumerate() {
+            for (i, chunk) in chunks.enumerate() {
                 if i==0
                 {
                     //first frame
@@ -174,7 +174,7 @@ impl Packet {
                         channel: self.channel,
                         flags: (self.flags & 0xFC) | FRAME_TYPE_FIRST,
                         final_length: Some(self.payload.len() as u32),
-                        payload: *chunk,
+                        payload: chunk.to_vec(),
                     };
                     packets.push(frame);
                 }
@@ -185,7 +185,7 @@ impl Packet {
                         channel: self.channel,
                         flags: (self.flags & 0xFC) | FRAME_TYPE_LAST,
                         final_length: None,
-                        payload: *chunk,
+                        payload: chunk.to_vec(),
                     };
                     packets.push(frame);
                 }
@@ -196,7 +196,7 @@ impl Packet {
                         channel: self.channel,
                         flags: self.flags & 0xFC,
                         final_length: None,
-                        payload: *chunk,
+                        payload: chunk.to_vec(),
                     };
                     packets.push(frame);
                 }
@@ -210,7 +210,7 @@ impl Packet {
                 channel : self.channel,
                 flags : self.flags,
                 final_length: None,
-                payload : chunks[0],
+                payload : chunks[0].to_vec(),
             };
             packets.push(frame);
         }
