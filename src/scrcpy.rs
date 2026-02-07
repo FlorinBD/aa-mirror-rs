@@ -230,7 +230,6 @@ async fn tsk_scrcpy_video(
                                                 return Err(Box::new(io::Error::new(io::ErrorKind::Other, "Error sending video chunk")));
                                             }
                                         }
-
                                     }
                                     else
                                     {
