@@ -466,7 +466,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                                 return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY>HU channel closed")));
                             }
                             // yield so other tasks can run to release backpressure on TCP
-                            //tokio::task::yield_now().await;
+                            tokio::task::yield_now().await;
                         }
                         Err(e) => {
                             error!( "{} encrypt_payload error: {:?}", get_name(), e);
