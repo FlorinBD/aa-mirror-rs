@@ -463,13 +463,14 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                             }
                             if let Err(e) = msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: SCRCPY transmit to HU failed", get_name())) {
                                 error!("SCRCPY>HU Transmission error: {:?}", e);
+                                return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY>HU channel closed")));
                             }
                             // yield so other tasks can run to release backpressure on TCP
                             //tokio::task::yield_now().await;
                         }
                         Err(e) => {
                             error!( "{} encrypt_payload error: {:?}", get_name(), e);
-                            return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY>HU channel closed")));
+                            return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY>HU encrypt_payload error")));
                         },
                     }
                 }
