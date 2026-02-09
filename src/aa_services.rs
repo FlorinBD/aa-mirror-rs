@@ -191,7 +191,7 @@ pub enum VideoFPS {
     FPS_60 = 1,
     FPS_30 = 2,
 }
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Copy, Clone, Debug, PartialEq, Eq)]
 pub enum MediaCodec {
     AUDIO_PCM = 1,
     AUDIO_AAC_LC = 2,
