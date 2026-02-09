@@ -850,6 +850,7 @@ pub async fn ch_proxy(
                         };
                         audio_codec_params.bitrate=audio_cfg.bitrate as i32;
                         audio_codec_params.sid=ch_id as u8;
+                        audio_codec_params.codec=acd;
                         let (tx, rx):(Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
                         srv_senders.push(tx);
                         srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_audio_streaming(ch_id,true, tx_srv.clone(), rx, scrcpy_cmd_tx.clone(), audio_cfg, audio_codec_params.clone())));

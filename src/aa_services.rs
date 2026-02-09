@@ -3,6 +3,7 @@
 use simplelog::*;
 use std::fmt;
 use std::time::{Duration, SystemTime};
+use futures::future::err;
 use tokio::sync::mpsc::{Receiver, Sender};
 use serde::{Serialize, Deserialize};
 
@@ -26,7 +27,7 @@ use protos::*;
 use protos::ControlMessageType::{self, *};
 use crate::adb;
 use crate::channel_manager::{Packet, ENCRYPTED, FRAME_TYPE_CONTROL, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
-use crate::config::{SCRCPY_AUDIO_CODEC, SCRCPY_PORT};
+use crate::config::{SCRCPY_PORT};
 use crate::scrcpy::ScrcpyControlMessageType;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -80,6 +81,7 @@ pub(crate) struct VideoStreamingParams {
 
 #[derive(Serialize, Deserialize, Clone,Debug)]
 pub(crate) struct AudioStreamingParams {
+    pub(crate) codec: MediaCodec,
     pub(crate) bitrate: i32,
     pub(crate) sid:u8,
     pub(crate) max_unack:u32,
@@ -105,6 +107,7 @@ impl Default for AudioStreamingParams {
             bitrate: 4800,
             sid:0,
             max_unack:0,
+            codec: MediaCodec::AUDIO_PCM,
         }
     }
 }
@@ -1437,7 +1440,17 @@ pub async fn th_media_sink_audio_guidance(ch_id: i32, enabled:bool, tx_srv: Send
                         if enabled
                         {
                             let mut cfg_req= Setup::new();
-                            cfg_req.set_type(MediaCodecType::MEDIA_CODEC_AUDIO_PCM);
+                            if acfg.codec == MediaCodec::AUDIO_PCM
+                            {
+                                cfg_req.set_type(MediaCodecType::MEDIA_CODEC_AUDIO_PCM);
+                            }
+                            else if acfg.codec == MediaCodec::AUDIO_AAC_LC
+                            {
+                                cfg_req.set_type(MediaCodecType::MEDIA_CODEC_AUDIO_AAC_LC);
+                            }
+                            else {
+                                error!("{}: Unsupported audio codec detected", get_name())
+                            }
 
                             let mut payload: Vec<u8>=cfg_req.write_to_bytes().expect("serialization failed");
                             payload.insert(0,((MediaMessageId::MEDIA_MESSAGE_SETUP as u16) >> 8) as u8);
@@ -1569,7 +1582,17 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                         if enabled
                         {
                             let mut cfg_req= Setup::new();
-                            cfg_req.set_type(MediaCodecType::MEDIA_CODEC_AUDIO_PCM);
+                            if acfg.codec == MediaCodec::AUDIO_PCM
+                            {
+                                cfg_req.set_type(MediaCodecType::MEDIA_CODEC_AUDIO_PCM);
+                            }
+                            else if acfg.codec == MediaCodec::AUDIO_AAC_LC
+                            {
+                                cfg_req.set_type(MediaCodecType::MEDIA_CODEC_AUDIO_AAC_LC);
+                            }
+                            else {
+                                error!("{}: Unsupported audio codec detected", get_name())
+                            }
 
                             let mut payload: Vec<u8>=cfg_req.write_to_bytes().expect("serialization failed");
                             payload.insert(0,((MediaMessageId::MEDIA_MESSAGE_SETUP as u16) >> 8) as u8);

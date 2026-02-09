@@ -11,10 +11,10 @@ use tokio::sync::mpsc::Receiver;
 use tokio::sync::{mpsc, oneshot, Notify};
 use tokio_uring::net::TcpStream;
 use tokio_util::bytes::BytesMut;
-use crate::aa_services::{AudioStreamingParams, VideoStreamingParams};
+use crate::aa_services::{AudioStreamingParams, MediaCodec, VideoStreamingParams};
 use crate::adb;
 use crate::channel_manager::{Packet, ENCRYPTED, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
-use crate::config::{AppConfig, SCRCPY_AUDIO_CODEC, SCRCPY_METADATA_HEADER_LEN, SCRCPY_PORT, SCRCPY_VERSION};
+use crate::config::{AppConfig, SCRCPY_METADATA_HEADER_LEN, SCRCPY_PORT, SCRCPY_VERSION};
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use protos::*;
 use protos::ControlMessageType::{self, *};
@@ -339,8 +339,8 @@ async fn tsk_scrcpy_audio(
         .filter(|c| c.is_ascii_graphic() || *c == ' ')
         .collect();
     info!("SCRCPY Audio codec id: {}", codec_id);
-    if codec_id != SCRCPY_AUDIO_CODEC.to_string() {
-        error!("SCRCPY Invalid audio codec configuration");
+    if codec_id != "raw" && codec_id != "aac" {
+        error!("SCRCPY Unsupported audio codec configuration detected");
         return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY Invalid audio codec configuration")));
     }
     let mut act_unack =0;
@@ -825,6 +825,11 @@ pub(crate) async fn tsk_adb_scrcpy(
             //AVC base profile, no B frames, only I and P frames, low-latency is MANDATORY
             let video_codec_options=format!("profile:int=1,level:int=512,i-frame-interval:int={},low-latency:int=1,max-bframes:int=0",video_codec_params.fps);
             let mut cmd_shell:Vec<String> = vec![];
+            let mut audio_codec="raw";
+            if audio_codec_params.codec == MediaCodec::AUDIO_AAC_LC
+            {
+                audio_codec="aac";
+            }
             cmd_shell.push("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar".to_string());
             cmd_shell.push("app_process".to_string());
             cmd_shell.push("/".to_string());
@@ -843,7 +848,7 @@ pub(crate) async fn tsk_adb_scrcpy(
             cmd_shell.push("cleanup=true".to_string());
             cmd_shell.push("display_ime_policy=local".to_string());
             cmd_shell.push("stay_awake=true".to_string());
-            cmd_shell.push(format!("audio_codec={}",SCRCPY_AUDIO_CODEC.to_string() ));
+            cmd_shell.push(format!("audio_codec={}",audio_codec.to_string() ));
             cmd_shell.push(format!("audio_bit_rate={}", audio_codec_params.bitrate));
             cmd_shell.push(format!("max_size={}", video_codec_params.res_w));
             cmd_shell.push("video_codec=h264".to_string());
