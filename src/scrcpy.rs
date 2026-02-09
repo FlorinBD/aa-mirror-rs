@@ -783,6 +783,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                     Err(flume::RecvError::Disconnected) => {
                         // Sender has been dropped, exit loop
                         println!("Sender closed, exiting loop");
+                        //FIXME break the loop an restart
                     }
                 }
             }
