@@ -152,8 +152,6 @@ async fn tsk_scrcpy_video(
     sid:u8,
 ) -> Result<()> {
     info!("Starting video server!");
-    let mut dbg_counter=0;
-
     //codec metadata
     let metadata=read_exact(&mut stream, 12).await?;
     info!("SCRCPY Video codec metadata: {:02x?}", &metadata);
@@ -329,7 +327,6 @@ async fn tsk_scrcpy_audio(
     max_unack:u32,
     sid:u8
 ) -> Result<()> {
-    let mut dbg_counter=0;
     info!("Starting audio server!");
     //codec metadata
     let metadata=read_exact(&mut stream, 4).await?;
