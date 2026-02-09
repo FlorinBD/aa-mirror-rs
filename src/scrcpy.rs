@@ -416,7 +416,7 @@ async fn tsk_scrcpy_audio(
                 return Err(Box::from(e));
             }
         }
-        if act_unack >= max_unack
+        if (act_unack >= max_unack) && (max_unack>0)
         {
             info!("Audio ACK limit hit, waiting new ACK");
             ack_notify.notified().await;
