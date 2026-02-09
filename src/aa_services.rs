@@ -1391,7 +1391,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
         if let Err(_) = tx.send(pkt_rsp).await{
             error!( "{} send error",get_name());
         };
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        tokio::time::sleep(Duration::from_millis(200)).await;
         info!( "{}, channel {:?}: Sending START command", get_name(), ch_id);
         let mut start_req = Start::new();
         start_req.set_session_id(session_id);
