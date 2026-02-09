@@ -4,6 +4,7 @@ use std::io;
 use std::sync::Arc;
 use std::time::Duration;
 use flume::SendError;
+use log::debug;
 use serde::{Deserialize, Serialize};
 use simplelog::{error, info};
 use tokio::process::Command;
@@ -683,8 +684,10 @@ pub(crate) async fn tsk_adb_scrcpy(
             info!("ADB disconnect response: {:?}", line);
         }
     }
+    let mut hu_conn_restart=false;
     loop
     {
+        hu_conn_restart=false;
         if let Some(device)=adb::get_first_adb_device(config.clone()).await {
             info!("{}: ADB device found: {:?}, trying to get video/audio from it now",NAME, device);
 
@@ -770,6 +773,12 @@ pub(crate) async fn tsk_adb_scrcpy(
                                     }
                                 }
                             }
+                            else if cmd_id == CustomCommand::CANCEL as i32
+                            {
+                                debug!("task_adb_scrcpy: CustomCommand::CANCEL received, exiting loop");
+                                hu_conn_restart=true;
+                                break;
+                            }
                             else
                             {
                                 info!("tsk_adb_scrcpy unknown command received");
@@ -782,12 +791,18 @@ pub(crate) async fn tsk_adb_scrcpy(
                     }
                     Err(flume::RecvError::Disconnected) => {
                         // Sender has been dropped, exit loop
-                        println!("Sender closed, exiting loop");
+                        debug!("Sender closed, exiting loop");
                         //FIXME break the loop an restart
+                        hu_conn_restart=true;
+                        break;
                     }
                 }
             }
 
+            if hu_conn_restart
+            {
+                continue;
+            }
             let video_sid=video_codec_params.sid.clone();
             let audio_sid=audio_codec_params.sid.clone();
             let mut cmd_push = vec![];
