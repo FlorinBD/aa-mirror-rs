@@ -20,3 +20,4 @@ improve scrcpy audio/video reader to not re-alocate buf every time, use a single
 implement night/day switch for sensor_channel with:  "adb shell cmd uimode night yes"
 signal all tasks that must be finished in a clean way
 packet transmit should contain also encrypt to get rid of the new field
+implement media ack sliding window using tokio::sync::Semaphore;
