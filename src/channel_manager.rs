@@ -465,7 +465,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                                 error!("SCRCPY>HU Transmission error: {:?}", e);
                                 return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY>HU channel closed")));
                             }
-                            // yield so other tasks can run to release backpressure on TCP
+                            // yield so other tasks can run to release backpressure on TCP, this improves lag
                             tokio::task::yield_now().await;
                         }
                         Err(e) => {
@@ -499,6 +499,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                                 if let Err(_) = srv_tx.send(msg).await{
                                     error!( "{} tls proxy send to service error",get_name());
                                 };
+                                tokio::task::yield_now().await;
                             }
                             Err(e) => {error!( "{} decrypt_payload error: {:?}", get_name(), e);},
                         }
