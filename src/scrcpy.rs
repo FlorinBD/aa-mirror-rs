@@ -1038,7 +1038,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                             }
                             else
                             {
-                                error!("tsk_scrcpy_video unknown message id: {}", message_id);
+                                error!("tsk_adb_scrcpy unknown message id: {}", message_id);
                             }
                         }
                         Ok(n) = sh_reader.read(&mut buf) => {
