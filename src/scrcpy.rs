@@ -219,7 +219,7 @@ async fn tsk_scrcpy_video(
                                 match video_tx.send_async(chunk).await
                                 {
                                     Ok(_) => {
-
+                                        tokio::task::yield_now().await;
                                     }
                                     Err(e) => {
                                         error!("Error sending video chunk: {:?}",e);
@@ -390,6 +390,7 @@ async fn tsk_scrcpy_audio(
                                 match audio_tx.send_async(chunk).await
                                 {
                                     Ok(_) => {
+                                        tokio::task::yield_now().await;
                                     }
                                     Err(e) => {
                                         error!("Error sending audio chunk: {:?}", e);

@@ -1365,6 +1365,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                     if let Err(_) = scrcpy_cmd.send_async(pkt).await{
                         error!( "{} mpsc send error",get_name());
                     };
+                    tokio::task::yield_now().await;
                 }
             }
             else
@@ -1732,6 +1733,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                 {
                     //info!("{} Received {} message, proxy to SCRCPY", ch_id.to_string(), message_id);
                     scrcpy_cmd.send_async(pkt).await?;
+                    tokio::task::yield_now().await;
                 }
             }
             else if message_id == MediaMessageId::MEDIA_MESSAGE_AUDIO_UNDERFLOW_NOTIFICATION  as i32
@@ -1926,7 +1928,7 @@ pub async fn th_input_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, m
                 if let Err(_) = scrcpy_cmd.send_async(pkt).await{
                     error!( "{} scrcpy_cmd send error",get_name());
                 };
-
+                tokio::task::yield_now().await;
             }
             else if message_id == InputMessageId::INPUT_MESSAGE_KEY_BINDING_RESPONSE  as i32
             {
