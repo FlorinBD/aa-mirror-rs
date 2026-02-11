@@ -1932,15 +1932,15 @@ pub async fn th_input_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, m
             }
             else if message_id == InputMessageId::INPUT_MESSAGE_KEY_BINDING_RESPONSE  as i32
             {
-                info!("{} Received INPUT_MESSAGE_KEY_BINDING_RESPONSE", get_name());
+                debug!("{} Received INPUT_MESSAGE_KEY_BINDING_RESPONSE", get_name());
                 let data = &pkt.payload[2..]; // start of message data, without message_id
                 if  let Ok(rsp) = KeyBindingResponse::parse_from_bytes(&data) {
-                    info!("{} Decoded KeyBindingResponse status: {:?}",get_name(), rsp.status())
+                    debug!("{} Decoded KeyBindingResponse status: {:?}",get_name(), rsp.status())
                 }
 
             }
             else {
-                info!( "{} Unmanaged message ID: {} received", get_name(), message_id);
+                error!( "{} Unmanaged message ID: {} received", get_name(), message_id);
             }
         }
     }

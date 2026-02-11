@@ -155,7 +155,7 @@ async fn tsk_scrcpy_video(
     info!("Starting video server!");
     //codec metadata
     let metadata=read_exact(&mut stream, 12).await?;
-    info!("SCRCPY Video codec metadata: {:02x?}", &metadata);
+    debug!("SCRCPY Video codec metadata: {:02x?}", &metadata);
     let mut codec_id=String::from_utf8_lossy(&metadata[0..4]).to_string();
     codec_id=codec_id.chars()
         .filter(|c| c.is_ascii_graphic() || *c == ' ')
@@ -181,14 +181,14 @@ async fn tsk_scrcpy_video(
                 let config_frame = (pts & 0x8000_0000_0000_0000u64) != 0;
                 let rd_len = h264_data.len();
                 let dbg_len = min(rd_len, 16);
-                if dbg_count <  10
+                if dbg_count <  100
                 {
                     if rd_len > dbg_len
                     {
                         let end_offset = rd_len - dbg_len;
-                        info!("Video task got frame config={:?}, act size: {}, raw slice: {:02x?}...{:02x?}",config_frame, rd_len, &h264_data[..dbg_len], &h264_data[end_offset..]);
+                        debug!("Video task got frame config={:?}, ts={}, act size: {}, raw slice: {:02x?}...{:02x?}",config_frame, rec_ts, rd_len, &h264_data[..dbg_len], &h264_data[end_offset..]);
                     } else {
-                        info!("Video task got frame config={:?}, act size: {}, raw bytes: {:02x?}",config_frame, rd_len, &h264_data[..dbg_len]);
+                        debug!("Video task got frame config={:?}, ts={}, act size: {}, raw bytes: {:02x?}",config_frame, rec_ts, rd_len, &h264_data[..dbg_len]);
                     }
                     dbg_count += 1;
                 }
@@ -331,12 +331,12 @@ async fn tsk_scrcpy_audio(
     info!("Starting audio server!");
     //codec metadata
     let metadata=read_exact(&mut stream, 4).await?;
-    info!("SCRCPY Audio codec metadata: {:02x?}", &metadata);
+    debug!("SCRCPY Audio codec metadata: {:02x?}", &metadata);
     let mut codec_id=String::from_utf8_lossy(&metadata[0..4]).to_string();
     codec_id=codec_id.chars()
         .filter(|c| c.is_ascii_graphic() || *c == ' ')
         .collect();
-    info!("SCRCPY Audio codec id: {}", codec_id);
+    debug!("SCRCPY Audio codec id: {}", codec_id);
     if codec_id != "raw" && codec_id != "aac" {
         error!("SCRCPY Unsupported audio codec configuration detected");
         return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY Invalid audio codec configuration")));
@@ -357,9 +357,9 @@ async fn tsk_scrcpy_audio(
                     if rd_len > dbg_len
                     {
                         let end_offset = rd_len - dbg_len;
-                        info!("Audio task got packet, ts={}, act size: {}, raw slice: {:02x?}...{:02x?}",rec_ts, rd_len, &data[..dbg_len], &data[end_offset..]);
+                        debug!("Audio task got packet, ts={}, act size: {}, raw slice: {:02x?}...{:02x?}",rec_ts, rd_len, &data[..dbg_len], &data[end_offset..]);
                     } else {
-                        info!("Audio task got packet, ts={}, act size: {}, raw bytes: {:02x?}",rec_ts, rd_len, &data[..dbg_len]);
+                        debug!("Audio task got packet, ts={}, act size: {}, raw bytes: {:02x?}",rec_ts, rd_len, &data[..dbg_len]);
                     }
                     dbg_count+=1;
                 }
@@ -999,16 +999,16 @@ pub(crate) async fn tsk_adb_scrcpy(
                             {
                                 //info!("{} Received {} message", sid.to_string(), message_id);
                                 let data = &pkt.payload[2..]; // start of message data, without message_id
-                                if let Ok(_) = Ack::parse_from_bytes(&data)
+                                if let Ok(ack) = Ack::parse_from_bytes(&data)
                                 {
                                     if pkt.channel == video_sid
                                     {
-                                        info!("tsk_scrcpy: video ACK recived");
+                                        debug!("tsk_scrcpy: video ACK recived: {:?}", ack);
                                         ack_video.notify_one();
                                     }
                                     else if pkt.channel == audio_sid
                                     {
-                                        info!("tsk_scrcpy: audio ACK recived");
+                                        debug!("tsk_scrcpy: audio ACK recived");
                                         ack_audio.notify_one();
                                     }
                                     else
