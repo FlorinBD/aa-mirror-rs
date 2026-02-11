@@ -14,6 +14,7 @@ use clap::Parser;
 use humantime::format_duration;
 use simplelog::*;
 use std::os::unix::fs::PermissionsExt;
+use std::panic;
 
 use std::fs;
 use std::fs::OpenOptions;
@@ -401,6 +402,7 @@ fn generate_usb_strings(input: &str, output: &str) -> std::io::Result<()> {
 }
 
 fn main() -> Result<()> {
+
     let started = Instant::now();
     // CLI arguments
     let args = Args::parse();
@@ -417,6 +419,13 @@ fn main() -> Result<()> {
             std::process::exit(1);
         }
     };
+    if config.debug
+    {
+        panic::set_hook(Box::new(|info| {
+            eprintln!("panic occurred: {:?}", info);
+            error!("panic occurred: {:?}", info);
+        }));
+    }
     let config_json = AppConfig::load_config_json().expect("Invalid embedded config.json");
 
     logging_init(config.debug, config.disable_console_debug, &config.logfile);
