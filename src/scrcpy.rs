@@ -1047,16 +1047,28 @@ pub(crate) async fn tsk_adb_scrcpy(
                                 info!("shell stdout: {}", String::from_utf8_lossy(&buf[..n]));
                             }
                         }
-                        Ok(..) = &mut done_th_rx_video => {
-                            error!("SCRCPY Video Task finished");
+
+                        res = &mut done_th_rx_video => {
+                        match res {
+                            Ok(_) => error!("SCRCPY Video Task finished"),
+                            Err(_) => error!("SCRCPY Video Task dropped or panicked"),
+                            }
                             break;
                         }
-                        Ok(..) = &mut done_th_rx_audio => {
-                            error!("SCRCPY Audio Task finished");
+
+                        res = &mut done_th_rx_audio => {
+                        match res {
+                            Ok(_) => error!("SCRCPY Audio Task finished"),
+                            Err(_) => error!("SCRCPY Audio Task dropped or panicked"),
+                            }
                             break;
                         }
-                        Ok(..) = &mut done_th_rx_ctrl => {
-                            error!("SCRCPY Control Task finished");
+
+                        res = &mut done_th_rx_ctrl => {
+                        match res {
+                            Ok(_) => error!("SCRCPY Control Task finished"),
+                            Err(_) => error!("SCRCPY Control Task dropped or panicked"),
+                            }
                             break;
                         }
                         else => {
