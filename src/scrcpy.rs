@@ -247,7 +247,7 @@ async fn tsk_scrcpy_video(
         }
         if act_unack >= max_unack
         {
-            info!("Video ACK limit hit, waiting new ACK");
+            debug!("Video ACK limit hit, waiting new ACK");
             ack_notify.notified().await;
             act_unack=0;
         }
