@@ -1741,7 +1741,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                 let data = &pkt.payload[2..]; // start of message data, without message_id
                 if  let Ok(_) = AudioUnderflowNotification::parse_from_bytes(&data)
                 {
-                    info!("{} Received {} message: MEDIA_MESSAGE_AUDIO_UNDERFLOW_NOTIFICATION", ch_id.to_string(), message_id);
+                    debug!("{} Received {} message: MEDIA_MESSAGE_AUDIO_UNDERFLOW_NOTIFICATION", ch_id.to_string(), message_id);
                 }
                 else {
                     error!("{}: Unable to deserialize MEDIA_MESSAGE_AUDIO_UNDERFLOW_NOTIFICATION", ch_id.to_string())
@@ -1749,7 +1749,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
             }
             else
             {
-                info!( "{} Unknown message ID: {} received", get_name(), message_id);
+                error!( "{} Unknown message ID: {} received", get_name(), message_id);
             }
         }
 
@@ -1866,7 +1866,7 @@ pub async fn th_input_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, m
             let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
             if message_id == MESSAGE_CHANNEL_OPEN_RESPONSE  as i32
             {
-                info!("{} Received {} message", ch_id.to_string(), message_id);
+                debug!("{} Received {} message", ch_id.to_string(), message_id);
                 let data = &pkt.payload[2..]; // start of message data, without message_id
                 if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
                     if rsp.status() != STATUS_SUCCESS
@@ -1900,7 +1900,7 @@ pub async fn th_input_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, m
             }
             else if message_id == MESSAGE_CUSTOM_CMD  as i32
             {
-                info!("{} Received {} message", ch_id.to_string(), message_id);
+                debug!("{} Received {} message", ch_id.to_string(), message_id);
                 let cmd: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
                 if cmd == CustomCommand::CMD_OPEN_CH as i32
                 {
@@ -1924,7 +1924,7 @@ pub async fn th_input_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, m
             }
             else if message_id == InputMessageId::INPUT_MESSAGE_INPUT_REPORT  as i32
             {
-                info!("{} Received {} message, proxy to SCRCPY control channel", ch_id.to_string(), message_id);
+                debug!("{} Received {} message, proxy to SCRCPY control channel", ch_id.to_string(), message_id);
                 if let Err(_) = scrcpy_cmd.send_async(pkt).await{
                     error!( "{} scrcpy_cmd send error",get_name());
                 };
