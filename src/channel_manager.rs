@@ -499,7 +499,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                                 if let Err(_) = srv_tx.send(msg).await{
                                     error!( "{} tls proxy send to service error",get_name());
                                 };
-                                tokio::task::yield_now().await;
+                                //tokio::task::yield_now().await;
                             }
                             Err(e) => {error!( "{} decrypt_payload error: {:?}", get_name(), e);},
                         }
