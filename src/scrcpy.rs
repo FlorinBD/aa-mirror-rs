@@ -4,6 +4,7 @@ use std::io;
 use std::sync::Arc;
 use std::time::Duration;
 use flume::SendError;
+use libc::sigdelset;
 use log::debug;
 use serde::{Deserialize, Serialize};
 use simplelog::{error, info};
@@ -1003,7 +1004,14 @@ pub(crate) async fn tsk_adb_scrcpy(
                                 {
                                     if pkt.channel == video_sid
                                     {
-                                        debug!("tsk_scrcpy: video ACK recived, ts[0]: {:?}", ack.receive_timestamp_ns[0]);
+                                        if ack.receive_timestamp_ns.len()>0
+                                        {
+                                            debug!("tsk_scrcpy: video ACK recived, ts[0]: {:?}", ack.receive_timestamp_ns[0]);
+                                        }
+                                        else
+                                        {
+                                            debug!("tsk_scrcpy: video ACK recived");
+                                        }
                                         ack_video.notify_one();
                                     }
                                     else if pkt.channel == audio_sid
