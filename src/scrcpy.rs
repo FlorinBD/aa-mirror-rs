@@ -1003,7 +1003,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                                 {
                                     if pkt.channel == video_sid
                                     {
-                                        debug!("tsk_scrcpy: video ACK recived: {:?}", ack);
+                                        debug!("tsk_scrcpy: video ACK recived, ts[0]: {:?}", ack.receive_timestamp_ns[0]);
                                         ack_video.notify_one();
                                     }
                                     else if pkt.channel == audio_sid
