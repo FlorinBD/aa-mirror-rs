@@ -177,7 +177,7 @@ async fn tsk_scrcpy_video(
         match ack_notify.send(()).await {
             Ok(()) => {}
             Err(e) => {
-                error!("scrcpy video ack read failed: {}", e);
+                error!("scrcpy video ack send failed: {:?}", e);
                 return Err(Box::from(e));
             }
         }
@@ -350,7 +350,7 @@ async fn tsk_scrcpy_audio(
         match ack_notify.send(()).await {
             Ok(()) => {}
             Err(e) => {
-                error!("scrcpy video ack read failed: {}", e);
+                error!("scrcpy audio ack send failed: {:?}", e);
                 return Err(Box::from(e));
             }
         }
