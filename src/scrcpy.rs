@@ -22,7 +22,7 @@ use protos::*;
 use protos::ControlMessageType::{self, *};
 use protobuf::{Message};
 use tokio::io::AsyncReadExt;
-use std::sync::mpsc::Sender;
+use tokio::sync::mpsc::Sender;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 const NAME: &str = "<i><bright-black> scrcpy: </>";
