@@ -148,7 +148,7 @@ impl ScrcpySize {
 }
 async fn tsk_scrcpy_video(
     mut stream: TcpStream,
-    ack_notify:Arc<Notify>,
+    ack_notify:Receiver<()>,
     video_tx: flume::Sender<Packet>,
     max_unack:u32,
     sid:u8,
@@ -173,6 +173,13 @@ async fn tsk_scrcpy_video(
     let mut act_unack =0;
     let mut dbg_count=0;
     loop {
+        match ack_notify.send(()).await {
+            Ok(()) => {}
+            Err(e) => {
+                error!("scrcpy video ack read failed: {}", e);
+                return Err(Box::from(e));
+            }
+        }
         //Read video frames from SCRCPY server
         match read_scrcpy_packet(&mut stream).await {
             Ok((pts, h264_data)) => {
@@ -246,12 +253,6 @@ async fn tsk_scrcpy_video(
                 return Err(Box::from(e));
             }
         }
-        if act_unack >= max_unack
-        {
-            debug!("Video ACK limit hit, waiting new ACK");
-            ack_notify.notified().await;
-            act_unack=0;
-        }
     }
     //reassembler.flush();
     return Ok(());
@@ -324,7 +325,7 @@ async fn tsk_scrcpy_video(
 
 async fn tsk_scrcpy_audio(
     mut stream: TcpStream,
-    mut ack_notify:Arc<Notify>,
+    mut ack_notify:Receiver<()>,
     audio_tx: flume::Sender<Packet>,
     max_unack:u32,
     sid:u8
@@ -345,6 +346,13 @@ async fn tsk_scrcpy_audio(
     let mut act_unack =0;
     let mut dbg_count=0;
     loop {
+        match ack_notify.send(()).await {
+            Ok(()) => {}
+            Err(e) => {
+                error!("scrcpy video ack read failed: {}", e);
+                return Err(Box::from(e));
+            }
+        }
         //Read video frames from SCRCPY server
         match read_scrcpy_packet(&mut stream).await {
             Ok((pts, data)) => {
@@ -415,12 +423,6 @@ async fn tsk_scrcpy_audio(
                 error!("scrcpy audio read failed: {}", e);
                 return Err(Box::from(e));
             }
-        }
-        if (act_unack >= max_unack) && (max_unack>0)
-        {
-            info!("Audio ACK limit hit, waiting new ACK");
-            ack_notify.notified().await;
-            act_unack=0;
         }
     }
     return Ok(());
