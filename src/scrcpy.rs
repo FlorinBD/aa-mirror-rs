@@ -913,15 +913,17 @@ pub(crate) async fn tsk_adb_scrcpy(
                 //let (tx_ack_audio, rx_ack_audio) = flume::bounded::<u32>(1);
                 //let (tx_ack_video, rx_ack_video) = flume::bounded::<u32>(1);
 
-                let notify_audio = Arc::new(Notify::new());
-                let notify_video = Arc::new(Notify::new());
-                let ack_audio=notify_audio.clone();
-                let ack_video=notify_video.clone();
+                //let notify_audio = Arc::new(Notify::new());
+                //let notify_video = Arc::new(Notify::new());
+                //let ack_audio=notify_audio.clone();
+                //let ack_video=notify_video.clone();
+                let (ack_audio_tx, mut ack_audio_rx) = mpsc::channel::<()>(audio_max_unack_mpsc);
+                let (ack_video_tx, mut ack_video_rx) = mpsc::channel::<()>(video_max_unack_mpsc);
                 let (tx_ctrl, rx_ctrl)=flume::bounded::<Packet>(5);
                 hnd_scrcpy_video = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_video(
                         video_stream,
-                        notify_video.clone(),
+                        ack_video_tx,
                         video_tx,
                         video_codec_params.max_unack,
                         video_codec_params.sid
@@ -932,7 +934,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                 hnd_scrcpy_audio = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_audio(
                         audio_stream,
-                        notify_audio.clone(),
+                        ack_audio_tx,
                         audio_tx,
                         audio_codec_params.max_unack,
                         audio_codec_params.sid,
@@ -1012,12 +1014,14 @@ pub(crate) async fn tsk_adb_scrcpy(
                                         {
                                             debug!("tsk_scrcpy: video ACK recived");
                                         }
-                                        ack_video.notify_one();
+                                        //ack_video.notify_one();
+                                        ack_video_rx.try_recv();
                                     }
                                     else if pkt.channel == audio_sid
                                     {
                                         debug!("tsk_scrcpy: audio ACK recived");
-                                        ack_audio.notify_one();
+                                        //ack_audio.notify_one();
+                                        ack_audio_rx.try_recv();
                                     }
                                     else
                                     {
