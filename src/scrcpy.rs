@@ -363,7 +363,7 @@ async fn tsk_scrcpy_audio(
                 let dbg_len = min(rd_len, 16);
                 let rec_ts = pts & 0x3FFF_FFFF_FFFF_FFFFu64;
                 let config_frame = (pts & 0x8000_0000_0000_0000u64) != 0;
-                if dbg_count <  10
+                if dbg_count <  100
                 {
                     if rd_len > dbg_len
                     {
@@ -1036,6 +1036,10 @@ pub(crate) async fn tsk_adb_scrcpy(
                                         else
                                         {
                                             debug!("tsk_scrcpy: audio ACK recived");
+                                        }
+                                        if ack.ack.receive_timestamp_ns.len()>0
+                                        {
+                                            debug!("tsk_scrcpy: audio ACK recived ts[0]: {:?}", ack.receive_timestamp_ns[0]);
                                         }
                                         ack_audio_rx.try_recv();
                                     }
