@@ -346,6 +346,7 @@ async fn tsk_scrcpy_audio(
     }
     let mut act_unack =0;
     let mut dbg_count=0;
+    let mut frame_counter=0;
     loop {
         match ack_notify.send(()).await {
             Ok(()) => {}
@@ -414,6 +415,12 @@ async fn tsk_scrcpy_audio(
                         {
                             error!("Audio task failed to split packet");
                         }
+                }
+                frame_counter+=1;
+                if frame_counter = max_unack
+                {
+                    frame_counter=0;
+                    debug!("Audio max_unack reached")
                 }
             }
             Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
