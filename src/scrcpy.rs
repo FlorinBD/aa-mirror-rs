@@ -190,7 +190,7 @@ async fn tsk_scrcpy_video(
                 let config_frame = (pts & 0x8000_0000_0000_0000u64) != 0;
                 let rd_len = h264_data.len();
                 let dbg_len = min(rd_len, 16);
-                if dbg_count <  100
+                if dbg_count <  10
                 {
                     if rd_len > dbg_len
                     {
@@ -363,7 +363,7 @@ async fn tsk_scrcpy_audio(
                 let dbg_len = min(rd_len, 16);
                 let rec_ts = pts & 0x3FFF_FFFF_FFFF_FFFFu64;
                 let config_frame = (pts & 0x8000_0000_0000_0000u64) != 0;
-                if dbg_count <  100
+                if dbg_count <  10
                 {
                     if rd_len > dbg_len
                     {
@@ -416,12 +416,12 @@ async fn tsk_scrcpy_audio(
                             error!("Audio task failed to split packet");
                         }
                 }
-                frame_counter+=1;
+                /*frame_counter+=1;
                 if frame_counter == (max_unack-1)
                 {
                     frame_counter=0;
                     debug!("Audio max_unack reached")
-                }
+                }*/
             }
             Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
                 error!("scrcpy audio stream ended");
