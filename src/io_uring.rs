@@ -278,6 +278,9 @@ pub async fn io_loop(
         cfg,
     ));
     loop {
+        //drain scrcpy commands?
+        //while let Ok(msg) = rx_scrcpy_srv_cmd.clone().try_recv() {
+        //}
         // reload new config
         let config = config.read().await.clone();
 
