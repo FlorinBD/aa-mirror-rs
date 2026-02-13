@@ -245,7 +245,7 @@ impl Packet {
             }
             IoDevice::TcpStreamIo(device) => {
                 frame.append(&mut self.payload.clone());
-                device.write(frame).submit().await.0
+                device.write_all(frame).submit().await.0
             }
             _ => todo!(),
         }

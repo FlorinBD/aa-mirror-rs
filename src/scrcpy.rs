@@ -1037,7 +1037,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                                         {
                                             debug!("tsk_scrcpy: audio ACK recived");
                                         }
-                                        if ack.ack.receive_timestamp_ns.len()>0
+                                        if ack.receive_timestamp_ns.len()>0
                                         {
                                             debug!("tsk_scrcpy: audio ACK recived ts[0]: {:?}", ack.receive_timestamp_ns[0]);
                                         }
