@@ -417,7 +417,7 @@ async fn tsk_scrcpy_audio(
                         }
                 }
                 frame_counter+=1;
-                if frame_counter = max_unack
+                if frame_counter = max_unack-1
                 {
                     frame_counter=0;
                     debug!("Audio max_unack reached")
