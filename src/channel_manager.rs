@@ -55,7 +55,7 @@ pub const FRAME_TYPE_CONTROL: u8 = 1 << 2;
 pub const ENCRYPTED: u8 = 1 << 3;
 
 // location for hu_/md_ private keys and certificates:
-const KEYS_PATH: &str = "/etc/aa-mirror-rs";
+pub const KEYS_PATH: &str = "/etc/aa-mirror-rs";
 const RES_PATH: &str = "/etc/aa-mirror-rs/res";
 
 #[derive(PartialEq, Copy, Clone, Debug)]

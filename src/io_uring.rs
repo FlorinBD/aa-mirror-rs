@@ -259,6 +259,7 @@ pub async fn io_loop(
     let shared_config = config.clone();
     #[allow(unused_variables)]
     //check if RSA cert files are present, if not, stop, this is FATAL error
+    let prefix = "md";
     loop {
         let path_cert = format!("{KEYS_PATH}/{prefix}_cert.pem");
         if !Path::new(&path_cert).exists() {
