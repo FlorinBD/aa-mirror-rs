@@ -325,7 +325,7 @@ pub async fn io_loop(
                 Ok(s) => hu_usb = Some(s),
                 Err(e) => {
                     error!("{} 🔴 Error opening USB accessory: {}", NAME, e);
-                    // notify main loop to restart if HU is lost
+                    // notify main loop to restart if HU is lost to prevent connection loop, upon restart, USB is re-initialized
                     let _ = need_restart.send(None);
                     //tokio::time::sleep(Duration::from_secs(2)).await;
                     continue;
