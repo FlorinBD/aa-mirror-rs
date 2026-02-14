@@ -3,6 +3,7 @@ use humantime::format_duration;
 use simplelog::*;
 use std::cell::RefCell;
 use std::marker::PhantomData;
+use std::path::Path;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -257,7 +258,29 @@ pub async fn io_loop(
 ) -> Result<()> {
     let shared_config = config.clone();
     #[allow(unused_variables)]
-    //let (client_handler, ev_tx) = spawn_ev_client_task().await;
+    //check if RSA cert files are present, if not, stop, this is FATAL error
+    loop {
+        let path_cert = format!("{KEYS_PATH}/{prefix}_cert.pem");
+        if !Path::new(&path_cert).exists() {
+            error!("{}: FATAL, RSA CERT File doesn't exists", NAME);
+            tokio::time::sleep(Duration::from_secs(10)).await;
+            continue;
+        }
+        let path_prv_key = format!("{KEYS_PATH}/{prefix}_key.pem");
+        if !Path::new(&path_prv_key).exists() {
+            error!("{}: FATAL, RSA Private key doesn't exists", NAME);
+            tokio::time::sleep(Duration::from_secs(10)).await;
+            continue;
+        }
+        let path_gal_cert = format!("{KEYS_PATH}/galroot_cert.pem");
+        if !Path::new(&path_gal_cert).exists() {
+            error!("{}: FATAL, GAL CERT File doesn't exists", NAME);
+            tokio::time::sleep(Duration::from_secs(10)).await;
+            continue;
+        }
+        break;
+    }
+
 
     // prepare/bind needed TCP listeners
     /*info!("{} 🛰️ Starting TCP server for MD...", NAME);
