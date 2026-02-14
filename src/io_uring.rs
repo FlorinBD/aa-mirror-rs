@@ -179,7 +179,7 @@ async fn transfer_monitor(
 async fn flatten<T>(handle: &mut JoinHandle<Result<T>>, dbg_info:String) -> Result<T> {
     match handle.await {
         Ok(Ok(result)) => Ok(result),
-        Ok(Err(err)) => Err(err),
+        Ok(Err(err)) => Err(format!("task {} failed with error: {:?}", dbg_info, err).into()),
         Err(er) => Err(format!("task handling failed for {} with error: {:?}", dbg_info, er).into()),
     }
 }
