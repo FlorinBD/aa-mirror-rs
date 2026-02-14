@@ -112,7 +112,7 @@ impl UsbGadgetState {
 
                 // now waiting for accesory start from uevent thread loop
                 let retval = accessory_started.notified();
-                if let Err(_) = timeout(Duration::from_secs_f32(3.0), retval).await {
+                if let Err(_) = timeout(Duration::from_secs_f32(5.0), retval).await {
                     error!(
                     "{} 🔌 USB Manager: Timeout waiting for accessory start, trying to recover...",
                     NAME
