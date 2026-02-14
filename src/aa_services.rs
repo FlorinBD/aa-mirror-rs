@@ -1073,6 +1073,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                                                 0xEB, 0xAE, 0xBA, 0xEB, 0xAE, 0xBA, 0xEB, 0xAE, 0xBA, 0xEB, 0xAE, 0xBA, 0xEB, 0xAE, 0xBA, 0xEB, 0xAF];
     info!( "{}: Starting...", get_name());
     let mut md_connected=false;
+    let mut first_screen_sent=false;
     let mut video_stream_started:bool=false;
     let mut session_id=1;
     loop {
@@ -1206,6 +1207,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                     if (rsp.focus() == VideoFocusMode::VIDEO_FOCUS_PROJECTED) || (rsp.focus()==VideoFocusMode::VIDEO_FOCUS_PROJECTED_NO_INPUT_FOCUS)
                     {
                         info!( "{}, channel {:?}: VIDEO_FOCUS_PROJECTED received", get_name(), pkt.channel);
+                        first_screen_sent=false;
                         if !md_connected
                         {
                             info!( "{}, channel {:?}: MD not connected yet, showing startup screen", get_name(), pkt.channel);
@@ -1224,28 +1226,32 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                             if let Err(_) = tx_srv.send(pkt_rsp).await{
                                 error!( "{} mpsc send error",get_name());
                             };
-                            //Send first frame
-                            let mut payload=wait_screen_first_frame.to_vec();
-                            payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) >> 8) as u8);
-                            payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) & 0xff) as u8);
-                            payload.insert(2, 0);//timestamp 0.0
-                            payload.insert(3, 0);
-                            payload.insert(4, 0);
-                            payload.insert(5, 0);
-                            payload.insert(6, 0);
-                            payload.insert(7, 0);
-                            payload.insert(8, 0);
-                            payload.insert(9, 0);
-                            let pkt_rsp = Packet {
-                                channel: ch_id as u8,
-                                flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                                final_length: None,
-                                payload: payload,
-                            };
-                            //tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
-                            if let Err(_) = tx_srv.send(pkt_rsp).await{
-                                error!( "{} mpsc send error",get_name());
-                            };
+                            if video_params.max_unack > 1
+                            {
+                                //Send first frame
+                                let mut payload=wait_screen_first_frame.to_vec();
+                                payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) >> 8) as u8);
+                                payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) & 0xff) as u8);
+                                payload.insert(2, 0);//timestamp 0.0
+                                payload.insert(3, 0);
+                                payload.insert(4, 0);
+                                payload.insert(5, 0);
+                                payload.insert(6, 0);
+                                payload.insert(7, 0);
+                                payload.insert(8, 0);
+                                payload.insert(9, 0);
+                                let pkt_rsp = Packet {
+                                    channel: ch_id as u8,
+                                    flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                                    final_length: None,
+                                    payload: payload,
+                                };
+                                //tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+                                if let Err(_) = tx_srv.send(pkt_rsp).await{
+                                    error!( "{} mpsc send error",get_name());
+                                };
+                                first_screen_sent=true;
+                            }
                         }
                         else
                         {
@@ -1366,6 +1372,35 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         error!( "{} mpsc send error",get_name());
                     };
                     //tokio::task::yield_now().await;
+                }
+                else
+                {
+                    if md_connected && (!first_screen_sent)
+                    {
+                        //Send first frame
+                        let mut payload=wait_screen_first_frame.to_vec();
+                        payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) >> 8) as u8);
+                        payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) & 0xff) as u8);
+                        payload.insert(2, 0);//timestamp 0.0
+                        payload.insert(3, 0);
+                        payload.insert(4, 0);
+                        payload.insert(5, 0);
+                        payload.insert(6, 0);
+                        payload.insert(7, 0);
+                        payload.insert(8, 0);
+                        payload.insert(9, 0);
+                        let pkt_rsp = Packet {
+                            channel: ch_id as u8,
+                            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                            final_length: None,
+                            payload: payload,
+                        };
+                        //tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+                        if let Err(_) = tx_srv.send(pkt_rsp).await{
+                            error!( "{} mpsc send error",get_name());
+                        };
+                        first_screen_sent=true;
+                    }
                 }
             }
             else
