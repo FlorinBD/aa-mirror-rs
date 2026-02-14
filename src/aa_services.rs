@@ -1167,7 +1167,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                 let data = &pkt.payload[2..]; // start of message data, without message_id
                 if  let Ok(rsp) = ChConfig::parse_from_bytes(&data)
                 {
-                    info!( "{}, channel {:?}: Message status: {:?}", get_name(), pkt.channel, rsp.status());
+                    info!( "{}, channel {:?} MEDIA_MESSAGE_CONFIG received: Message status: {:?}, max_unack: {}", get_name(), pkt.channel, rsp.status(), rsp.max_unacked());
                     if rsp.status() == ConfigStatus::STATUS_READY
                     {
                         video_params.max_unack=rsp.max_unacked();
@@ -1688,7 +1688,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                 let data = &pkt.payload[2..]; // start of message data, without message_id
                 if  let Ok(rsp) = ChConfig::parse_from_bytes(&data)
                 {
-                    info!( "{}, channel {:?}: Message status: {:?}", get_name(), pkt.channel, rsp.status());
+                    info!( "{}, channel {:?} MEDIA_MESSAGE_CONFIG received: Message status: {:?}, max_unack: {}", get_name(), pkt.channel, rsp.status(), rsp.max_unacked());
                     if rsp.status() == STATUS_READY
                     {
                         audio_params.max_unack=rsp.max_unacked();
