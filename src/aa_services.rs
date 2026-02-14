@@ -1728,7 +1728,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                     {
                         audio_params.max_unack=rsp.max_unacked();
                         info!( "{}, channel {:?}: Starting audio capture", get_name(), pkt.channel);
-                        if acfg.codec == MediaCodec::AUDIO_PCM
+                        if (acfg.codec == MediaCodec::AUDIO_PCM) || (acfg.codec == MediaCodec::AUDIO_AAC_LC)
                         {
 
                             if md_connected
