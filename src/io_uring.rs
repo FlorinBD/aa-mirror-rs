@@ -376,11 +376,11 @@ pub async fn io_loop(
             //hu_tcp_stream = Some(hu.clone());
         }
 
-        //service packet proxy
-        tsk_packet_proxy = tokio_uring::spawn(packet_tls_proxy(hu_w, rxr_hu, rxr_srv, tx_srv, rx_scrcpy.clone(), stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested));
-
         // dedicated reading threads:
         tsk_hu_read = tokio_uring::spawn(endpoint_reader(hu_r, txr_hu));
+
+        //service packet proxy
+        tsk_packet_proxy = tokio_uring::spawn(packet_tls_proxy(hu_w, rxr_hu, rxr_srv, tx_srv, rx_scrcpy.clone(), stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested));
 
         // main processing threads:
         tsk_ch_manager = tokio_uring::spawn(ch_proxy(
