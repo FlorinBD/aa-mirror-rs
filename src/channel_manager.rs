@@ -45,6 +45,7 @@ fn get_name() -> String {
 // async contexts needs some extra restrictions
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
+
 // message related constants:
 pub const HEADER_LENGTH: usize = 4;
 pub const FRAME_TYPE_FIRST: u8 = 1 << 0;

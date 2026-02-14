@@ -325,9 +325,9 @@ pub async fn io_loop(
                 Ok(s) => hu_usb = Some(s),
                 Err(e) => {
                     error!("{} 🔴 Error opening USB accessory: {}", NAME, e);
-                    // notify main loop to restart
-                    //let _ = need_restart.send(None);
-                    tokio::time::sleep(Duration::from_secs(2)).await;
+                    // notify main loop to restart if HU is lost
+                    let _ = need_restart.send(None);
+                    //tokio::time::sleep(Duration::from_secs(2)).await;
                     continue;
                 }
             }
@@ -423,6 +423,7 @@ pub async fn io_loop(
         if let Err(_) = tx_scrcpy_cmd.send_async(pkt_rsp).await{
             error!( "io_uring.io_loop() send error");
         };
+
         // Make sure the reference count drops to zero and the socket is
         // freed by aborting both tasks (which both hold a `Rc<TcpStream>`
         // for each direction)
@@ -430,7 +431,6 @@ pub async fn io_loop(
         tsk_hu_read.abort();
         tsk_ch_manager.abort();
         tsk_monitor.abort();
-
 
         // make sure TCP connections are closed before next connection attempts
         /*if let Some(stream) = hu_tcp_stream {
