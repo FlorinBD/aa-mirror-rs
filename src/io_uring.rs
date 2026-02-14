@@ -183,7 +183,7 @@ async fn flatten<T>(handle: &mut JoinHandle<Result<T>>, dbg_info:String) -> Resu
             Ok(result)
         },
         Ok(Err(err)) => {
-            format!("Task {} failed with error: {:?}", dbg_info, err);
+            format!("Task {} finished with error: {:?}", dbg_info, err);
             Err(err.into())
         },
         Err(er) => {
