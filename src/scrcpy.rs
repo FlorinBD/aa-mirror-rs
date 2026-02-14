@@ -760,6 +760,10 @@ pub(crate) async fn tsk_adb_scrcpy(
                                         {
                                             break;
                                         }
+                                        else
+                                        {
+                                            debug!("tsk_adb_scrcpy: Audio strat is not available, waiting for it before starting SCRCPY recording");
+                                        }
 
                                     }
                                     Err(e) => {
@@ -778,6 +782,10 @@ pub(crate) async fn tsk_adb_scrcpy(
                                         if start_audio_recived && start_video_recived
                                         {
                                             break;
+                                        }
+                                        else
+                                        {
+                                            debug!("tsk_adb_scrcpy: Video strat is not available, waiting for it before starting SCRCPY recording");
                                         }
                                     }
                                     Err(e) => {
