@@ -1679,11 +1679,11 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                     md_connected=true;
                     if audio_focus
                     {
-                        info!("{} MD connected, recived, proxy to SCRCPY",get_name());
+                        info!("{} MD connected, received from SCRCPY",get_name());
                         session_id +=1;
                         start_media(&tx_srv, ch_id as u8, session_id).await?;
 
-                        info!( "{} Send custom CMD_START_AUDIO_RECORDING for ch {}",get_name(), ch_id);
+                        info!( "{} Send custom CMD_START_AUDIO_RECORDING for ch {} to SCRCPY",get_name(), ch_id);
                         let bytes: Vec<u8> = postcard::to_stdvec(&audio_params)?;
                         let mut payload = Vec::new();
                         payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
