@@ -1679,7 +1679,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                     md_connected=true;
                     if audio_focus
                     {
-                        info!("{} MD connected, received from SCRCPY",get_name());
+                        info!("{} MD connected received from SCRCPY",get_name());
                         session_id +=1;
                         start_media(&tx_srv, ch_id as u8, session_id).await?;
 
