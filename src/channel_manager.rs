@@ -1110,7 +1110,7 @@ pub async fn ch_proxy(
                     else if cmd_id == CustomCommand::MD_DISCONNECTED as i32
                     {
                         let ch=pkt.channel as i32;
-                        info!("{} MD connected, proxy packet to media channels",get_name());
+                        info!("{} MD disconnected, proxy packet to media channels",get_name());
                         let idx=get_service_index(&channel_status, audio_codec_params.sid as i32);
                         if idx !=255
                         {
