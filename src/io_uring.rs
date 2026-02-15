@@ -260,23 +260,12 @@ pub async fn io_loop(
     let shared_config = config.clone();
     #[allow(unused_variables)]
     //check if RSA cert files are present, if not, stop, this is FATAL error
-    let prefix = "md";
     loop {
-        let path_cert = format!("{KEYS_PATH}/{prefix}_cert.pem");
-        if !Path::new(&path_cert).exists() {
-            error!("{}: FATAL, RSA CERT File doesn't exists", NAME);
-            tokio::time::sleep(Duration::from_secs(10)).await;
-            continue;
-        }
-        let path_prv_key = format!("{KEYS_PATH}/{prefix}_key.pem");
-        if !Path::new(&path_prv_key).exists() {
-            error!("{}: FATAL, RSA Private key doesn't exists", NAME);
-            tokio::time::sleep(Duration::from_secs(10)).await;
-            continue;
-        }
+        let path_cert = format!("{KEYS_PATH}/md_cert.pem");
+        let path_prv_key = format!("{KEYS_PATH}/md_key.pem");
         let path_gal_cert = format!("{KEYS_PATH}/galroot_cert.pem");
-        if !Path::new(&path_gal_cert).exists() {
-            error!("{}: FATAL, GAL CERT File doesn't exists", NAME);
+        if (!Path::new(&path_cert).exists()) || (!Path::new(&path_prv_key).exists()) || (!Path::new(&path_gal_cert).exists()){
+            error!("{}: FATAL, RSA CERT Files doesn't exists", NAME);
             tokio::time::sleep(Duration::from_secs(10)).await;
             continue;
         }
