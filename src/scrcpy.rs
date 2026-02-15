@@ -230,6 +230,10 @@ async fn tsk_scrcpy_video(
                                     }
                                 }
                             }
+                            if config_frame
+                            {
+                                continue;//config frames doesn't need ACK???? FIXME confirm this!!!
+                            }
                             act_unack+=1;
                         }
                     _ =>
