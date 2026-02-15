@@ -1147,14 +1147,15 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                     };
                 }
                 else if cmd == CustomCommand::MD_CONNECTED as i32 {
+                    md_connected=true;
                     if config_recived && video_focus
                     {
                         if !video_stream_started
                         {
                             info!("{} MD connected, send media STOP to HU",get_name());
-                            md_connected=true;
                             session_id +=1;
                             video_stream_started=false;
+                            first_screen_sent=false;
                             stop_start_media(&tx_srv, ch_id as u8, session_id).await?;
                         }
                         else
@@ -1164,7 +1165,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                     }
                     else
                     {
-                        info!("{} MD connected, but config frame was not recived or video has no focus",get_name());
+                        info!("{} MD connected, but config frame was not received or video has no focus",get_name());
                     }
 
                 }
@@ -1174,6 +1175,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                     {
                         session_id +=1;
                         video_stream_started=false;
+                        first_screen_sent=false;
                         stop_start_media(&tx_srv, ch_id as u8, session_id).await?;
                     }
                     md_connected=false;
@@ -1189,6 +1191,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                     if rsp.status() == ConfigStatus::STATUS_READY
                     {
                         config_recived=true;
+                        first_screen_sent=false;
                         video_params.max_unack=rsp.max_unacked();
                         info!( "{}, channel {:?}: Sending START command", get_name(), pkt.channel);
                         session_id +=1;
@@ -1226,54 +1229,61 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                     {
                         info!( "{}, channel {:?}: VIDEO_FOCUS_PROJECTED received", get_name(), pkt.channel);
                         video_focus=true;
-                        first_screen_sent=false;
+
                         if !md_connected
                         {
-                            info!( "{}, channel {:?}: MD not connected yet, showing startup screen", get_name(), pkt.channel);
-                            //Send config frame
-                            let mut payload=wait_screen_config_frame.to_vec();
-                            payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16) >> 8) as u8);
-                            payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16) & 0xff) as u8);
+                            if !first_screen_sent
+                            {
+                                info!( "{}, channel {:?}: MD not connected yet, showing startup screen", get_name(), pkt.channel);
+                                //Send config frame
+                                let mut payload=wait_screen_config_frame.to_vec();
+                                payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16) >> 8) as u8);
+                                payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16) & 0xff) as u8);
 
-                            let pkt_rsp = Packet {
-                                channel: ch_id as u8,
-                                flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                                final_length: None,
-                                payload: payload,
-                            };
-                            //tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
-                            if let Err(_) = tx_srv.send(pkt_rsp).await{
-                                error!( "{} mpsc send error",get_name());
-                            };
-                            //Send first frame
-                            let mut payload=wait_screen_first_frame.to_vec();
-                            payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) >> 8) as u8);
-                            payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) & 0xff) as u8);
-                            payload.insert(2, 0);//timestamp 0.0
-                            payload.insert(3, 0);
-                            payload.insert(4, 0);
-                            payload.insert(5, 0);
-                            payload.insert(6, 0);
-                            payload.insert(7, 0);
-                            payload.insert(8, 0);
-                            payload.insert(9, 0);
-                            let pkt_rsp = Packet {
-                                channel: ch_id as u8,
-                                flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                                final_length: None,
-                                payload: payload,
-                            };
-                            //tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
-                            if let Err(_) = tx_srv.send(pkt_rsp).await{
-                                error!( "{} mpsc send error",get_name());
-                            };
-                            first_screen_sent=true;
+                                let pkt_rsp = Packet {
+                                    channel: ch_id as u8,
+                                    flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                                    final_length: None,
+                                    payload: payload,
+                                };
+                                //tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+                                if let Err(_) = tx_srv.send(pkt_rsp).await{
+                                    error!( "{} mpsc send error",get_name());
+                                };
+                                //Send first frame
+                                let mut payload=wait_screen_first_frame.to_vec();
+                                payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) >> 8) as u8);
+                                payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) & 0xff) as u8);
+                                payload.insert(2, 0);//timestamp 0.0
+                                payload.insert(3, 0);
+                                payload.insert(4, 0);
+                                payload.insert(5, 0);
+                                payload.insert(6, 0);
+                                payload.insert(7, 0);
+                                payload.insert(8, 0);
+                                payload.insert(9, 0);
+                                let pkt_rsp = Packet {
+                                    channel: ch_id as u8,
+                                    flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                                    final_length: None,
+                                    payload: payload,
+                                };
+                                //tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+                                if let Err(_) = tx_srv.send(pkt_rsp).await{
+                                    error!( "{} mpsc send error",get_name());
+                                };
+                                first_screen_sent=true;
+                            }
+                            else {
+                                debug!( "{}, channel {:?}: MD not connected yet, startup screen already done", get_name(), pkt.channel);
+                            }
+
                         }
                         else
                         {
                             if !video_stream_started
                             {
-                                info!( "{}, channel {:?}: MD connected, starting video streaming", get_name(), pkt.channel);
+                                debug!( "{}, channel {:?}: MD connected, starting video streaming", get_name(), pkt.channel);
                                 video_stream_started=true;
                                 let bytes: Vec<u8> = postcard::to_stdvec(&video_params)?;
                                 let mut payload = Vec::new();
