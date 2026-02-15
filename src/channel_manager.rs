@@ -793,7 +793,12 @@ pub async fn ch_proxy(
         Ok(_v) => info!( "{} MESSAGE_SERVICE_DISCOVERY_RESPONSE received",get_name()),
         Err(e) => {error!( "{} HU sent unexpected channel message", get_name()); return Err(e)},
     }
-    //let mut srv_senders:Vec<Option<Box<Sender<Packet>>>> = vec![];
+    let _ = pkt_debug(
+                        HexdumpLevel::DecryptedInput,
+                        HexdumpLevel::DecryptedInput,
+                        &pkt,
+                        "HU".parse().unwrap()
+                    ).await;
     let mut srv_senders;
     let mut srv_tsk_handles;
     let mut channel_status;
