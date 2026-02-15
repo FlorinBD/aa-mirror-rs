@@ -217,6 +217,19 @@ async fn tsk_scrcpy_video(
                 {
                     Ok(chunks)=>
                         {
+                            if !config_frame
+                            {
+                                //wait for ACK
+                                match ack_notify.send(()).await {
+                                    Ok(()) => {}
+                                    Err(e) => {
+                                        error!("scrcpy video ack send failed: {:?}", e);
+                                        return Err(Box::from(e));
+                                    }
+                                }
+                            }
+
+                            //send all chunks
                             for chunk in chunks
                             {
                                 match video_tx.send_async(chunk).await
@@ -230,11 +243,6 @@ async fn tsk_scrcpy_video(
                                     }
                                 }
                             }
-                            if config_frame
-                            {
-                                continue;//config frames doesn't need ACK???? FIXME confirm this!!!
-                            }
-                            act_unack+=1;
                         }
                     _ =>
                         {
@@ -252,14 +260,7 @@ async fn tsk_scrcpy_video(
                 return Err(Box::from(e));
             }
         }
-        //wait for ACK
-        match ack_notify.send(()).await {
-            Ok(()) => {}
-            Err(e) => {
-                error!("scrcpy video ack send failed: {:?}", e);
-                return Err(Box::from(e));
-            }
-        }
+
     }
     //reassembler.flush();
     return Ok(());
