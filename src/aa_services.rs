@@ -1075,6 +1075,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
     let mut md_connected=false;
     let mut first_screen_sent=false;
     let mut video_stream_started:bool=false;
+    let mut config_recived=false;
     let mut session_id=1;
     loop {
         let pkt=  rx_srv.recv().await.ok_or("service reader channel hung up")?;
@@ -1145,11 +1146,19 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                     };
                 }
                 else if cmd == CustomCommand::MD_CONNECTED as i32 {
-                    info!("{} MD connected, send media STOP to HU",get_name());
-                    md_connected=true;
-                    session_id +=1;
-                    video_stream_started=false;
-                    stop_start_media(&tx_srv, ch_id as u8, session_id).await?;
+                    if config_recived
+                    {
+                        info!("{} MD connected, send media STOP to HU",get_name());
+                        md_connected=true;
+                        session_id +=1;
+                        video_stream_started=false;
+                        stop_start_media(&tx_srv, ch_id as u8, session_id).await?;
+                    }
+                    else
+                    {
+                        info!("{} MD connected, but config frame was not recived",get_name());
+                    }
+
                 }
                 else if cmd == CustomCommand::MD_DISCONNECTED as i32 {
                     info!("{} MD disconnected, send media STOP to HU",get_name());
@@ -1171,6 +1180,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                     info!( "{}, channel {:?} MEDIA_MESSAGE_CONFIG received: Message status: {:?}, max_unack: {}", get_name(), pkt.channel, rsp.status(), rsp.max_unacked());
                     if rsp.status() == ConfigStatus::STATUS_READY
                     {
+                        config_recived=true;
                         video_params.max_unack=rsp.max_unacked();
                         info!( "{}, channel {:?}: Sending START command", get_name(), pkt.channel);
                         session_id +=1;
@@ -1596,6 +1606,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
     let mut audio_stream_started:bool=false;
     let mut md_connected=false;
     let mut audio_focus=false;
+    let mut config_recived=false;
     let mut session_id=1;
     loop {
         let pkt=  rx_srv.recv().await.ok_or("service reader channel hung up")?;
@@ -1677,7 +1688,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                 }
                 else if cmd == CustomCommand::MD_CONNECTED as i32 {
                     md_connected=true;
-                    if audio_focus
+                    if audio_focus && config_recived
                     {
                         info!("{} MD connected received from SCRCPY",get_name());
                         session_id +=1;
@@ -1701,7 +1712,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                     }
                     else
                     {
-                        info!("{} MD connected, recived but we don't have audio focus",get_name());
+                        info!("{} MD connected, recived but we don't have audio focus or config frame not recived",get_name());
                         audio_stream_started=false;
                     }
 
@@ -1726,6 +1737,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                     info!( "{}, channel {:?} MEDIA_MESSAGE_CONFIG received: Message status: {:?}, max_unack: {}", get_name(), pkt.channel, rsp.status(), rsp.max_unacked());
                     if rsp.status() == STATUS_READY
                     {
+                        config_recived=true;
                         audio_params.max_unack=rsp.max_unacked();
                         info!( "{}, channel {:?}: Starting audio capture", get_name(), pkt.channel);
                         if (acfg.codec == MediaCodec::AUDIO_PCM) || (acfg.codec == MediaCodec::AUDIO_AAC_LC)
