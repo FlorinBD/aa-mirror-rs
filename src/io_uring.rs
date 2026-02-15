@@ -374,7 +374,7 @@ pub async fn io_loop(
         let (txr_hu, rxr_hu):       (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
         let (tx_srv, rx_srv):   (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
         let (txr_srv, rxr_srv): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(20);
-
+        //let tx_srv_cloned=tx_srv.clone();
         let mut tsk_ch_manager;
         let mut tsk_hu_read;
         let mut tsk_packet_proxy;
@@ -448,6 +448,21 @@ pub async fn io_loop(
         if let Err(_) = tx_scrcpy_cmd.send_async(pkt_rsp).await{
             error!( "io_uring.io_loop() send error");
         };
+        //Stop HU connection as well
+        /*let mut bye_req = ByeByeRequest::new();
+        bye_req.set_reason(ByeByeReason::USER_SELECTION);
+        let mut payload: Vec<u8>=Vec::new();
+        payload.extend_from_slice(&(ControlMessageType::MESSAGE_BYEBYE_REQUEST as u16).to_be_bytes());
+        payload.extend_from_slice(&bye_req.write_to_bytes().expect("serialization failed"));
+        let pkt_rsp = Packet {
+            channel: 0,
+            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+            final_length: None,
+            payload: payload,
+        };
+        if let Err(_) = tx_srv_cloned.send(pkt_rsp).await{
+            error!( "io_uring.io_loop() send error");
+        };*/
 
         // Make sure the reference count drops to zero and the socket is
         // freed by aborting both tasks (which both hold a `Rc<TcpStream>`
