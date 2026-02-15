@@ -174,13 +174,7 @@ async fn tsk_scrcpy_video(
     let mut act_unack =0;
     let mut dbg_count=0;
     loop {
-        match ack_notify.send(()).await {
-            Ok(()) => {}
-            Err(e) => {
-                error!("scrcpy video ack send failed: {:?}", e);
-                return Err(Box::from(e));
-            }
-        }
+
         //Read video frames from SCRCPY server
         match read_scrcpy_packet(&mut stream).await {
             Ok((pts, h264_data)) => {
@@ -251,6 +245,14 @@ async fn tsk_scrcpy_video(
             }
             Err(e) => {
                 error!("scrcpy video read failed: {}", e);
+                return Err(Box::from(e));
+            }
+        }
+        //wait for ACK
+        match ack_notify.send(()).await {
+            Ok(()) => {}
+            Err(e) => {
+                error!("scrcpy video ack send failed: {:?}", e);
                 return Err(Box::from(e));
             }
         }
