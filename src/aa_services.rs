@@ -1149,11 +1149,18 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                 else if cmd == CustomCommand::MD_CONNECTED as i32 {
                     if config_recived && video_focus
                     {
-                        info!("{} MD connected, send media STOP to HU",get_name());
-                        md_connected=true;
-                        session_id +=1;
-                        video_stream_started=false;
-                        stop_start_media(&tx_srv, ch_id as u8, session_id).await?;
+                        if !video_stream_started
+                        {
+                            info!("{} MD connected, send media STOP to HU",get_name());
+                            md_connected=true;
+                            session_id +=1;
+                            video_stream_started=false;
+                            stop_start_media(&tx_srv, ch_id as u8, session_id).await?;
+                        }
+                        else
+                        {
+                            info!("{} MD connected, but video is streaming, ignoring CMD",get_name());
+                        }
                     }
                     else
                     {
@@ -1697,36 +1704,43 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                     md_connected=true;
                     if audio_focus && config_recived
                     {
-                        info!("{} MD connected received from SCRCPY",get_name());
-                        session_id +=1;
-                        start_media(&tx_srv, ch_id as u8, session_id).await?;
+                        if !audio_stream_started
+                        {
+                            info!("{} MD connected received from SCRCPY",get_name());
+                            session_id +=1;
+                            start_media(&tx_srv, ch_id as u8, session_id).await?;
 
-                        info!( "{} Send custom CMD_START_AUDIO_RECORDING for ch {} to SCRCPY",get_name(), ch_id);
-                        let bytes: Vec<u8> = postcard::to_stdvec(&audio_params)?;
-                        let mut payload = Vec::new();
-                        payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
-                        payload.extend_from_slice(&(CustomCommand::CMD_START_AUDIO_RECORDING as u16).to_be_bytes());
-                        payload.extend_from_slice(&bytes);
+                            info!( "{} Send custom CMD_START_AUDIO_RECORDING for ch {} to SCRCPY",get_name(), ch_id);
+                            let bytes: Vec<u8> = postcard::to_stdvec(&audio_params)?;
+                            let mut payload = Vec::new();
+                            payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+                            payload.extend_from_slice(&(CustomCommand::CMD_START_AUDIO_RECORDING as u16).to_be_bytes());
+                            payload.extend_from_slice(&bytes);
 
-                        let pkt_rsp = Packet {
-                            channel: ch_id as u8,
-                            flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                            final_length: None,
-                            payload: payload.clone(),
-                        };
-                        scrcpy_cmd.send_async(pkt_rsp).await?;
-                        audio_stream_started =true;
+                            let pkt_rsp = Packet {
+                                channel: ch_id as u8,
+                                flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                                final_length: None,
+                                payload: payload.clone(),
+                            };
+                            scrcpy_cmd.send_async(pkt_rsp).await?;
+                            audio_stream_started =true;
+                        }
+                        else {
+                            debug!("{} MD connected, received but audio is streaming already, ignoring CMD",get_name());
+                        }
+
                     }
                     else
                     {
-                        info!("{} MD connected, recived but we don't have audio focus or config frame not recived",get_name());
+                        debug!("{} MD connected, recived but we don't have audio focus or config frame not recived",get_name());
                         audio_stream_started=false;
                     }
 
 
                 }
                 else if cmd == CustomCommand::MD_DISCONNECTED as i32 {
-                    info!("{} MD diconnected",get_name());
+                    debug!("{} MD diconnected",get_name());
                     if md_connected && audio_focus
                     {
                         audio_stream_started=false;
