@@ -1075,6 +1075,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
     let mut md_connected=false;
     let mut first_screen_sent=false;
     let mut video_stream_started:bool=false;
+    let mut video_focus=false;
     let mut config_recived=false;
     let mut session_id=1;
     loop {
@@ -1146,7 +1147,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                     };
                 }
                 else if cmd == CustomCommand::MD_CONNECTED as i32 {
-                    if config_recived
+                    if config_recived && video_focus
                     {
                         info!("{} MD connected, send media STOP to HU",get_name());
                         md_connected=true;
@@ -1156,7 +1157,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                     }
                     else
                     {
-                        info!("{} MD connected, but config frame was not recived",get_name());
+                        info!("{} MD connected, but config frame was not recived or video has no focus",get_name());
                     }
 
                 }
@@ -1217,6 +1218,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                     if (rsp.focus() == VideoFocusMode::VIDEO_FOCUS_PROJECTED) || (rsp.focus()==VideoFocusMode::VIDEO_FOCUS_PROJECTED_NO_INPUT_FOCUS)
                     {
                         info!( "{}, channel {:?}: VIDEO_FOCUS_PROJECTED received", get_name(), pkt.channel);
+                        video_focus=true;
                         first_screen_sent=false;
                         if !md_connected
                         {
@@ -1291,6 +1293,11 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                             }
                         }
 
+                    }
+                    else
+                    {
+                        video_focus=false;
+                        debug!( "{} video focus lost",get_name());
                     }
                 }
                 else
