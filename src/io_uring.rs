@@ -273,17 +273,16 @@ pub async fn io_loop(
     }
 
 
-    // prepare/bind needed TCP listeners
-    /*info!("{} 🛰️ Starting TCP server for MD...", NAME);
-    let bind_addr = format!("0.0.0.0:{}", TCP_SERVER_PORT).parse().unwrap();
-    let mut md_listener = Some(TcpListener::bind(bind_addr).unwrap());
-    info!("{} 🛰️ MD TCP server bound to: <u>{}</u>", NAME, bind_addr);*/
-    info!("{} 🛰️ Starting TCP server for DHU...", NAME);
-    let bind_addr = format!("0.0.0.0:{}", TCP_DHU_PORT).parse().unwrap();
-    let mut dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
-    info!("{} 🛰️ DHU TCP server bound to: <u>{}</u>", NAME, bind_addr);
     let cfg = shared_config.read().await.clone();
     let hex_requested = cfg.hexdump_level;
+    // prepare/bind needed TCP listeners
+    let mut dhu_listener=None;
+    let bind_addr = format!("0.0.0.0:{}", TCP_DHU_PORT).parse().unwrap();
+    if cfg.dhu {
+        info!("{} 🛰️ Starting TCP server for DHU...", NAME);
+        dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
+        info!("{} 🛰️ DHU TCP server bound to: <u>{}</u>", NAME, bind_addr);
+    }
 
     //io channels for scrcpy
     //media frames channel, scrcpy>HU, TODO implement Arc<Packet> to solve copy
