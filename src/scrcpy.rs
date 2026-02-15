@@ -171,7 +171,6 @@ async fn tsk_scrcpy_video(
     }
     info!("SCRCPY Video entering main loop");
     //let mut reassembler = NalReassembler::new();
-    let mut act_unack =0;
     let mut dbg_count=0;
     loop {
 
