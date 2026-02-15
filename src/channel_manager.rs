@@ -467,7 +467,7 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                                 return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY>HU channel closed")));
                             }
                             // yield so other tasks can run to release backpressure on TCP, this improves lag
-                            tokio::task::yield_now().await;
+                            //tokio::task::yield_now().await;
                         }
                         Err(e) => {
                             error!( "{} encrypt_payload error: {:?}", get_name(), e);
@@ -491,16 +491,15 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                     else {
                         match msg.decrypt_payload(&mut mem_buf, &mut server).await {
                             Ok(_) => {
-                                let _ = pkt_debug(
+                                /*let _ = pkt_debug(
                                     HexdumpLevel::DecryptedInput,
                                     dmp_level,
                                     &msg,
                                     "HU".parse().unwrap()
-                                ).await;
+                                ).await;*/
                                 if let Err(_) = srv_tx.send(msg).await{
                                     error!( "{} tls proxy send to service error",get_name());
                                 };
-                                //tokio::task::yield_now().await;
                             }
                             Err(e) => {error!( "{} decrypt_payload error: {:?}", get_name(), e);},
                         }
@@ -572,12 +571,12 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                         error!( "{}: tls proxy error: received encrypted message from service before TLS handshake", get_name());
                 }
                 else {
-                        let _ = pkt_debug(
+                       /* let _ = pkt_debug(
                             HexdumpLevel::DecryptedOutput,
                             dmp_level,
                             &msg,
                             "MD".parse().unwrap()
-                        ).await;
+                        ).await;*/
                         match msg.encrypt_payload(&mut mem_buf, &mut server).await {
                             Ok(_) => {
                                 // Increment byte counters for statistics
@@ -591,12 +590,12 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
             }
             else
             {
-                    let _ = pkt_debug(
+                   /* let _ = pkt_debug(
                         HexdumpLevel::DecryptedOutput,
                         dmp_level,
                         &msg,
                         "MD".parse().unwrap()
-                    ).await;
+                    ).await;*/
                     // Increment byte counters for statistics
                     // fixme: compute final_len for precise stats
                     w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
