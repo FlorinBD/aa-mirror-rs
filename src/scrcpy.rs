@@ -535,12 +535,6 @@ async fn tsk_scrcpy_control(
                 // Received a packet
                 let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
                 info!("tsk_scrcpy_control Received command id {:?}", message_id);
-                let _ = channel_manager::pkt_debug(
-                        HexdumpLevel::DecryptedInput,
-                        HexdumpLevel::DecryptedInput,
-                        &pkt,
-                        "SCRCPY".parse().unwrap()
-                    ).await;
                 if message_id == InputMessageId::INPUT_MESSAGE_INPUT_REPORT  as i32
                 {
                     let data = &pkt.payload[2..]; // start of message data, without message_id
@@ -645,6 +639,18 @@ async fn tsk_scrcpy_control(
                                 if let Err(e) = res {
                                     error!("tsk_scrcpy_control send error: {}", e);
                                 }
+                            }
+                        }
+                        else if rsp.absolute_event.is_some()
+                        {
+                            for (_,key_ev) in rsp.absolute_event.data.iter().enumerate() {
+                                debug!("scrcpy_control received ABS event: keycode={:?}, value={:?}",key_ev.keycode(),key_ev.value())
+                            }
+                        }
+                        else if rsp.relative_event.is_some()
+                        {
+                            for (_,key_ev) in rsp.absolute_event.data.iter().enumerate() {
+                                debug!("scrcpy_control received REL event: keycode={:?}, delta={:?}",key_ev.keycode(),key_ev.delta())
                             }
                         }
                         else
