@@ -14,7 +14,7 @@ use tokio::sync::{mpsc, oneshot, Notify};
 use tokio_uring::net::TcpStream;
 use tokio_util::bytes::BytesMut;
 use crate::aa_services::{AudioStreamingParams, MediaCodec, VideoStreamingParams};
-use crate::adb;
+use crate::{adb, channel_manager};
 use crate::channel_manager::{Packet, ENCRYPTED, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
 use crate::config::{AppConfig, SCRCPY_METADATA_HEADER_LEN, SCRCPY_PORT, SCRCPY_VERSION};
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
@@ -23,6 +23,7 @@ use protos::ControlMessageType::{self, *};
 use protobuf::{Message};
 use tokio::io::AsyncReadExt;
 use tokio::sync::mpsc::Sender;
+use crate::config_types::HexdumpLevel;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 const NAME: &str = "<i><bright-black> scrcpy: </>";
@@ -534,6 +535,12 @@ async fn tsk_scrcpy_control(
                 // Received a packet
                 let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
                 info!("tsk_scrcpy_control Received command id {:?}", message_id);
+                let _ = channel_manager::pkt_debug(
+                        HexdumpLevel::DecryptedInput,
+                        HexdumpLevel::DecryptedInput,
+                        &pkt,
+                        "SCRCPY".parse().unwrap()
+                    ).await;
                 if message_id == InputMessageId::INPUT_MESSAGE_INPUT_REPORT  as i32
                 {
                     let data = &pkt.payload[2..]; // start of message data, without message_id
