@@ -354,13 +354,6 @@ async fn tsk_scrcpy_audio(
     let mut dbg_count=0;
     let mut frame_counter=0;
     loop {
-        match ack_notify.send(()).await {
-            Ok(()) => {}
-            Err(e) => {
-                error!("scrcpy audio ack send failed: {:?}", e);
-                return Err(Box::from(e));
-            }
-        }
         //Read video frames from SCRCPY server
         match read_scrcpy_packet(&mut stream).await {
             Ok((pts, data)) => {
@@ -402,6 +395,16 @@ async fn tsk_scrcpy_audio(
                 {
                     Ok(chunks)=>
                         {
+                            if !config_frame
+                            {
+                                match ack_notify.send(()).await {
+                                    Ok(()) => {}
+                                    Err(e) => {
+                                        error!("scrcpy audio ack send failed: {:?}", e);
+                                        return Err(Box::from(e));
+                                    }
+                                }
+                            }
                             for chunk in chunks
                             {
                                 match audio_tx.send_async(chunk).await
