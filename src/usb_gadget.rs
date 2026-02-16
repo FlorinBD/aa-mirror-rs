@@ -110,9 +110,9 @@ impl UsbGadgetState {
                 let _ = self.enable(DEFAULT_GADGET_NAME);
                 info!("{} 🔌 USB Manager: Enabled default gadget", NAME);
 
-                // now waiting for accesory start from uevent thread loop
+                // now waiting for accesory start from uevent thread loop, witch can take up to 1 minute
                 let retval = accessory_started.notified();
-                if let Err(_) = timeout(Duration::from_secs_f32(5.0), retval).await {
+                if let Err(_) = timeout(Duration::from_secs_f32(35.0), retval).await {
                     error!(
                     "{} 🔌 USB Manager: Timeout waiting for accessory start, trying to recover...",
                     NAME
