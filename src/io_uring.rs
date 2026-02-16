@@ -154,9 +154,10 @@ async fn transfer_monitor(
             stall_usb_bytes_last = usb_bytes_out - stall_usb_bytes_last;
             stall_tcp_bytes_last = tcp_bytes_out - stall_tcp_bytes_last;
 
-            if stall_usb_bytes_last == 0 || stall_tcp_bytes_last == 0 {
-                return Err("unexpected transfer stall".into());
-            }
+            //if stall_usb_bytes_last == 0 || stall_tcp_bytes_last == 0 {
+                //return Err("unexpected transfer stall".into());
+                //debug!("transfer_monitor: unexpected transfer stall?")
+            //}
 
             // save values for next iteration
             stall_check = Instant::now();
