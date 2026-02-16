@@ -275,6 +275,7 @@ pub async fn io_loop(
 
 
     let cfg = shared_config.read().await.clone();
+    let cfg_clone=cfg.clone();
     let hex_requested = cfg.hexdump_level;
     // prepare/bind needed TCP listeners
     let mut dhu_listener=None;
@@ -306,7 +307,7 @@ pub async fn io_loop(
         //}
         // reload new config
         let config = config.read().await.clone();
-
+        let cfg2=cfg_clone.clone();
         // generate Durations from configured seconds
         let stats_interval = {
             if config.stats_interval == 0 {
@@ -415,7 +416,7 @@ pub async fn io_loop(
             txr_srv,
             tx_scrcpy_cmd.clone(),
             rx_scrcpy_srv_cmd.clone(),
-            cfg.clone(),
+            cfg2,
         ));
 
         // Thread for monitoring transfer
