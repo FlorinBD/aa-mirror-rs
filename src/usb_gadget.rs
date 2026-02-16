@@ -106,7 +106,7 @@ impl UsbGadgetState {
         accessory_started: Arc<tokio::sync::Notify>,
     ) {
         if self.legacy {
-            for _try in 1..=2 {
+            for _try in 1..=2 {//FIXME try for about 20 times, it takes around 50 sec. for HU to start
                 let _ = self.enable(DEFAULT_GADGET_NAME);
                 info!("{} 🔌 USB Manager: Enabled default gadget", NAME);
 
