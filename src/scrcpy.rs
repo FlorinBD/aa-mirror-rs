@@ -649,7 +649,7 @@ async fn tsk_scrcpy_control(
                         }
                         else if rsp.relative_event.is_some()
                         {
-                            for (_,key_ev) in rsp.absolute_event.data.iter().enumerate() {
+                            for (_,key_ev) in rsp.relative_event.data.iter().enumerate() {
                                 debug!("scrcpy_control received REL event: keycode={:?}, delta={:?}",key_ev.keycode(),key_ev.delta())
                             }
                         }
