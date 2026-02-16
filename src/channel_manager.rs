@@ -29,7 +29,7 @@ use tokio::sync::{mpsc};
 use protos::ControlMessageType::{self, *};
 use crate::aa_services::{VideoCodecResolution::*, VideoFPS::*, AudioStream, AudioConfig, MediaCodec::*, ServiceType, CommandState, ServiceStatus, th_bluetooth, VideoStreamingParams, AudioStreamingParams, SensorType};
 use crate::aa_services::{th_input_source, th_media_sink_audio_guidance, th_media_sink_audio_streaming, th_media_sink_video, th_media_source, th_sensor_source, th_vendor_extension};
-use crate::config::{HU_CONFIG_DELAY_MS, MAX_DATA_LEN, MAX_PACKET_LEN};
+use crate::config::{AppConfig, SharedConfig, HU_CONFIG_DELAY_MS, MAX_DATA_LEN, MAX_PACKET_LEN};
 use crate::config_types::HexdumpLevel;
 use crate::io_uring::Endpoint;
 use crate::io_uring::IoDevice;
@@ -945,6 +945,7 @@ pub async fn ch_proxy(
     tx_srv: Sender<Packet>,
     scrcpy_cmd_tx: flume::Sender<Packet>,
     scrcpy_cmd_rx: flume::Receiver<Packet>,
+    config: AppConfig,
 ) -> Result<()> {
     info!( "{} Entering channel manager",get_name());
     // waiting for initial version frame (HU is starting transmission)
@@ -1123,6 +1124,11 @@ pub async fn ch_proxy(
                         VideoFrameRateType::VIDEO_FPS_30=>{ video_codec_params.fps=30; FPS_30},
                         _=>{ video_codec_params.fps=30; FPS_30},
                     };
+                    //ovveride from config file
+                    if config.video_bitrate > 0
+                    {
+                        video_codec_params.bitrate=config.video_bitrate;
+                    }
                     video_codec_params.dpi=proto_srv.media_sink_service.video_configs[0].density() as i32;
                     video_codec_params.sid=ch_id as u8;
                     srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_video(ch_id,true, tx_srv.clone(), rx, scrcpy_cmd_tx.clone(), video_codec_params.clone())));

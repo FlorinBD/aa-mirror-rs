@@ -415,6 +415,7 @@ pub async fn io_loop(
             txr_srv,
             tx_scrcpy_cmd.clone(),
             rx_scrcpy_srv_cmd.clone(),
+            cfg.clone(),
         ));
 
         // Thread for monitoring transfer

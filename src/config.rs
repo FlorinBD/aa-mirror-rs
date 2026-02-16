@@ -100,6 +100,7 @@ pub struct AppConfig {
     pub legacy: bool,
     pub quick_reconnect: bool,
     pub scrcpy_screen_off: bool,
+    pub video_bitrate:i32,
     pub connect: BluetoothAddressList,
     pub logfile: PathBuf,
     pub stats_interval: u16,
@@ -242,6 +243,7 @@ impl Default for AppConfig {
             legacy: true,
             quick_reconnect: false,
             scrcpy_screen_off:true,
+            video_bitrate:4_000_000,
             connect: BluetoothAddressList::default(),
             logfile: "/var/log/aa-mirror-rs.log".into(),
             stats_interval: 0,
@@ -334,6 +336,7 @@ impl AppConfig {
         doc["disable_console_debug"] = value(self.disable_console_debug);
         doc["legacy"] = value(self.legacy);
         doc["scrcpy_screen_off"] = value(self.scrcpy_screen_off);
+        doc["video_bitrate"] = value(self.video_bitrate as i64);
         doc["quick_reconnect"] = value(self.quick_reconnect);
         doc["connect"] = value(self.connect.to_string());
         doc["logfile"] = value(self.logfile.display().to_string());
