@@ -369,8 +369,8 @@ pub async fn io_loop(
         // we can send a reference-counted version of it. also, since a
         // tokio-uring runtime is single-threaded, we can use `Rc` instead of
         // `Arc`.
-        let stats_w_bytes = Arc::new(AtomicUsize::new(0));
-        let stats_r_bytes = Arc::new(AtomicUsize::new(0));
+        //let stats_w_bytes = Arc::new(AtomicUsize::new(0));
+        //let stats_r_bytes = Arc::new(AtomicUsize::new(0));
         // mpsc channels:
         let (txr_hu, rxr_hu):       (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
         let (tx_srv, rx_srv):   (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
