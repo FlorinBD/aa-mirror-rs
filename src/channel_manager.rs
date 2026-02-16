@@ -417,8 +417,8 @@ pub async fn endpoint_reader<A: Endpoint<A>>(
     }
 }
 
-/// main reader thread for a service
-pub async fn packet_tls_proxy<A: Endpoint<A>>(
+/// main reader thread for a service, transfer monitored
+pub async fn packet_tls_proxy_trm<A: Endpoint<A>>(
     mut hu_wr: IoDevice<A>,
     mut hu_rx: Receiver<Packet>,
     mut srv_rx: Receiver<Packet>,
@@ -599,6 +599,243 @@ pub async fn packet_tls_proxy<A: Endpoint<A>>(
                     // Increment byte counters for statistics
                     // fixme: compute final_len for precise stats
                     w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
+                    msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: Service transmit to HU failed", get_name()))?;
+
+            }
+        }
+        else => {
+            // all channels closed
+            tokio::time::sleep(Duration::from_secs(1)).await;
+                error!("packet_tls_proxy ALL CHANNELS CLOSED! handle app restart needed")
+        }
+        }
+    }
+
+
+
+    /// checking if there was a true fatal SSL error
+    /// Note that the error may not be fatal. For example if the underlying
+    /// stream is an asynchronous one then `HandshakeError::WouldBlock` may
+    /// just mean to wait for more I/O to happen later.
+    fn ssl_check_failure<T>(res: std::result::Result<T, openssl::ssl::Error>) -> Result<()> {
+        if let Err(err) = res {
+            match err.code() {
+                ErrorCode::WANT_READ | ErrorCode::WANT_WRITE | ErrorCode::SYSCALL => Ok(()),
+                _ => return Err(Box::new(err)),
+            }
+        } else {
+            Ok(())
+        }
+    }
+
+    /// creates Ssl for HeadUnit (SSL server) and MobileDevice (SSL client)
+    async fn ssl_builder() -> Result<Ssl> {
+        let mut ctx_builder = SslContextBuilder::new(SslMethod::tls())?;
+
+        // for HU/headunit we need to act as a MD/mobiledevice, so load "md" key and cert
+        // and vice versa
+        let prefix = "md";
+        ctx_builder.set_certificate_file(format!("{KEYS_PATH}/{prefix}_cert.pem"), SslFiletype::PEM)?;
+        ctx_builder.set_private_key_file(format!("{KEYS_PATH}/{prefix}_key.pem"), SslFiletype::PEM)?;
+        ctx_builder.check_private_key()?;
+        // trusted root certificates:
+        ctx_builder.set_ca_file(format!("{KEYS_PATH}/galroot_cert.pem"))?;
+
+        ctx_builder.set_min_proto_version(Some(openssl::ssl::SslVersion::TLS1_2))?;
+        ctx_builder.set_options(openssl::ssl::SslOptions::NO_TLSV1_3);
+
+        let openssl_ctx = ctx_builder.build();
+        let mut ssl = Ssl::new(&openssl_ctx)?;
+        ssl.set_accept_state(); // SSL server
+        Ok(ssl)
+    }
+
+    /// encapsulates SSL data into Packet
+    async fn ssl_encapsulate(mut mem_buf: SslMemBuf) -> Result<Packet> {
+        // read SSL-generated data
+        let mut res: Vec<u8> = Vec::new();
+        mem_buf.read_to(&mut res)?;
+
+        // create MESSAGE_ENCAPSULATED_SSL Packet
+        let message_type = ControlMessageType::MESSAGE_ENCAPSULATED_SSL as u16;
+        res.insert(0, (message_type >> 8) as u8);
+        res.insert(1, (message_type & 0xff) as u8);
+        Ok(Packet {
+            channel: 0x00,
+            flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+            final_length: None,
+            payload: res,
+        })
+    }
+}
+
+/// main reader thread for a service, no transfer monitor
+pub async fn packet_tls_proxy<A: Endpoint<A>>(
+    mut hu_wr: IoDevice<A>,
+    mut hu_rx: Receiver<Packet>,
+    mut srv_rx: Receiver<Packet>,
+    srv_tx: Sender<Packet>,
+    scrcpy_rx: flume::Receiver<Packet>,
+    dmp_level:HexdumpLevel,
+) -> Result<()> {
+    let mut ssl_handshake_done:bool=false;
+    let ssl = ssl_builder().await?;
+    let mut mem_buf = SslMemBuf {
+        client_stream: Arc::new(Mutex::new(VecDeque::new())),
+        server_stream: Arc::new(Mutex::new(VecDeque::new())),
+    };
+    let mut server = openssl::ssl::SslStream::new(ssl, mem_buf.clone())?;
+    info!( "{}: Starting message proxy loop...", get_name());
+    loop {
+        tokio::select! {
+        biased;
+
+            // 🔴 highest priority, SCRCPY>HU
+            Ok(mut msg) = scrcpy_rx.recv_async() => {
+            if !ssl_handshake_done
+                {
+                    error!( "{}: tls proxy error: received encrypted message from service before TLS handshake", get_name());
+                }
+                else
+                {
+                    /*let _ = pkt_debug(
+                        HexdumpLevel::DecryptedOutput,
+                        dmp_level,
+                        &msg,
+                        "SCRCPY".parse().unwrap()
+                    ).await;*/
+                    match msg.encrypt_payload(&mut mem_buf, &mut server).await {
+                        Ok(_) => {
+                            if msg.payload.len() > MAX_PACKET_LEN {
+                                error!("tls_proxy SCRCPY>HU packet payload too big, got {}",msg.payload.len());
+                            }
+                            if let Err(e) = msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: SCRCPY transmit to HU failed", get_name())) {
+                                error!("SCRCPY>HU Transmission error: {:?}", e);
+                                return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY>HU channel closed")));
+                            }
+                            // yield so other tasks can run to release backpressure on TCP, this improves lag
+                            //tokio::task::yield_now().await;
+                        }
+                        Err(e) => {
+                            error!( "{} encrypt_payload error: {:?}", get_name(), e);
+                            return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY>HU encrypt_payload error")));
+                        },
+                    }
+                }
+        }
+            // medium priority, HU>Service
+        Some(mut msg) = hu_rx.recv() => {
+                if msg.flags&ENCRYPTED !=0
+                {
+                    if !ssl_handshake_done
+                    {
+                        error!( "{}: tls proxy error: received encrypted message from HU before TLS handshake", get_name());
+                    }
+                    else {
+                        match msg.decrypt_payload(&mut mem_buf, &mut server).await {
+                            Ok(_) => {
+                                /*let _ = pkt_debug(
+                                    HexdumpLevel::DecryptedInput,
+                                    dmp_level,
+                                    &msg,
+                                    "HU".parse().unwrap()
+                                ).await;*/
+                                if let Err(_) = srv_tx.send(msg).await{
+                                    error!( "{} tls proxy send to service error",get_name());
+                                };
+                            }
+                            Err(e) => {error!( "{} decrypt_payload error: {:?}", get_name(), e);},
+                        }
+                    }
+                }
+                else
+                {
+                    let _ = pkt_debug(HexdumpLevel::DecryptedInput, dmp_level, &msg, "HU".parse().unwrap()).await;
+                    // message_id is the first 2 bytes of payload
+                    let message_id: i32 = u16::from_be_bytes(msg.payload[0..=1].try_into()?).into();
+                    if !ssl_handshake_done && (message_id == ControlMessageType::MESSAGE_ENCAPSULATED_SSL as i32)
+                    {
+                        // doing SSL handshake
+                            //Step1: parse client hello
+                            let _ = pkt_debug(HexdumpLevel::RawInput, dmp_level, &msg, "HU".parse().unwrap()).await;
+                            msg.ssl_decapsulate_write(&mut mem_buf).await?;
+                            ssl_check_failure(server.accept())?;
+                            info!(
+                                "{} 🔒 stage #{} of {}: SSL handshake: {}",
+                                get_name(),
+                                1,
+                                2,
+                                server.ssl().state_string_long(),
+                            );
+                            // Step2: send server hello
+                            let pkt = ssl_encapsulate(mem_buf.clone()).await?;
+                            let _ = pkt_debug(HexdumpLevel::RawOutput, dmp_level, &pkt,"MD".parse().unwrap()).await;
+                            pkt.transmit(&mut hu_wr).await.with_context(|| format!("{}: transmit failed", get_name()))?;
+
+                            //Step3: ClientKeyExchange
+                            let pkt = hu_rx.recv().await.ok_or("hu reader channel hung up")?;
+                            let _ = pkt_debug(HexdumpLevel::RawInput, dmp_level, &pkt, "HU".parse().unwrap()).await;
+                            pkt.ssl_decapsulate_write(&mut mem_buf).await?;
+                            ssl_check_failure(server.accept())?;
+                            info!(
+                                "{} 🔒 stage #{} of {}: SSL handshake: {}",
+                                get_name(),
+                                2,
+                                2,
+                                server.ssl().state_string_long(),
+                            );
+                            if server.ssl().is_init_finished() {
+                                ssl_handshake_done=true;
+                                info!(
+                                    "{} 🔒 SSL init complete, negotiated cipher: <b><blue>{}</>",
+                                    get_name(),
+                                    server.ssl().current_cipher().unwrap().name(),
+                                );
+                            }
+                            //Step4: Change Cipher spec finished
+                            let pkt = ssl_encapsulate(mem_buf.clone()).await?;
+                            let _ = pkt_debug(HexdumpLevel::RawOutput, dmp_level, &pkt, "MD".parse().unwrap()).await;
+                            pkt.transmit(&mut hu_wr).await.with_context(|| format!("{}: transmit failed", get_name()))?;
+                    }
+                    else {
+                        if let Err(_) = srv_tx.send(msg).await{
+                            error!( "{} tls proxy send to service error",get_name());
+                        };
+                    }
+
+                }
+        }
+        //lower priority Service>HU
+        Some(mut msg) = srv_rx.recv() => {
+            if msg.flags&ENCRYPTED !=0
+            {
+                if !ssl_handshake_done
+                {
+                        error!( "{}: tls proxy error: received encrypted message from service before TLS handshake", get_name());
+                }
+                else {
+                       /* let _ = pkt_debug(
+                            HexdumpLevel::DecryptedOutput,
+                            dmp_level,
+                            &msg,
+                            "MD".parse().unwrap()
+                        ).await;*/
+                        match msg.encrypt_payload(&mut mem_buf, &mut server).await {
+                            Ok(_) => {
+                                msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: Service transmit to HU failed", get_name()))?;
+                            }
+                            Err(e) => {error!( "{} encrypt_payload error: {:?}", get_name(), e);},
+                        }
+                }
+            }
+            else
+            {
+                   /* let _ = pkt_debug(
+                        HexdumpLevel::DecryptedOutput,
+                        dmp_level,
+                        &msg,
+                        "MD".parse().unwrap()
+                    ).await;*/
                     msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: Service transmit to HU failed", get_name()))?;
 
             }
