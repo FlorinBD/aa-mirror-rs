@@ -120,7 +120,6 @@ pub struct AppConfig {
     #[serde(default, deserialize_with = "empty_string_as_none")]
     pub wired: Option<UsbId>,
     pub dhu: bool,
-    #[serde(default, deserialize_with = "empty_string_as_none")]
     pub enable_ssh: bool,
     pub enable_ftp: bool,
     pub usb_serial_console: bool,
