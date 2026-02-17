@@ -238,6 +238,7 @@ impl Default for AppConfig {
             timeout_secs: 10,
             webserver: webserver_default_bind(),
             bt_timeout_secs: 0,
+            action_requested: None,
             dpi: 0,
             wired: None,
             dhu: false,
