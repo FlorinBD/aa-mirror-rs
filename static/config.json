@@ -7,6 +7,10 @@
           "typ": "boolean",
           "description": "Enable SSH server"
         },
+        "enable_ftp": {
+          "typ": "boolean",
+          "description": "Enable FTP server"
+        },
         "wifi_version": {
           "typ": "integer",
           "description": "Wi-Fi operation mode:\n`1` = Wi-Fi 1 (802.11b) (Only 2.4 GHz),\n`2` = Wi-Fi 2 (IEEE 802.11a) (Only 5 GHz),\n`3` = Wi-Fi 3 (IEEE 802.11g) (only 2.4 GHz),\n`4` = Wi-Fi 4 (IEEE 802.11n) (2.4/5 GHz),\n`5` = Wi-Fi 5 (IEEE 802.11ac) (only 5 GHz),\n`6` = Wi-Fi 6/6E (IEEE 802.11ax) (2.4/5 GHz for Wi-Fi 6, 2.4/5/6 GHz for Wi-Fi 6E),\n`7` = Wi-Fi 7 (IEEE 802.11be) (2.4/5/6 GHz)"
@@ -64,13 +68,13 @@
           "typ": "boolean",
           "description": "Turn off screen after SCRCPY server starts"
         },
-        "quick_reconnect": {
-          "typ": "boolean",
-          "description": "EXPERIMENTAL: Maintain persistent Bluetooth connection to enable faster reconnection with MD"
-        },
         "video_bitrate": {
           "typ": "integer",
           "description": "Video recording quality, default=4Mbps, 0=Get from SDR"
+        },
+        "dpi": {
+          "typ": "integer",
+          "description": "Force DPI\n0 = don't change DPI"
         },
         "wired": {
           "typ": "string",
@@ -128,7 +132,7 @@
         },
         "connect": {
           "typ": "string",
-          "description": "Auto-connect to phone and initiate connection\nempty string/no value: don't auto-connect,\nzeros: iterate over all previously connected devices,\nmay be set to a comma seperated list of phone BT MAC addresses for connecting to a specific list of phones, wildcard may not be used with list"
+          "description": "Auto-connect to phone and initiate connection\nempty string/no value: don't auto-connect,\nzeros: iterate over all connected devices,\nmay be set to a comma seperated list of phone MAC addresses for connecting to a specific list of phones, wildcard may not be used with list"
         },
         "bt_timeout_secs": {
           "typ": "integer",
@@ -145,76 +149,6 @@
         "change_usb_order": {
           "typ": "boolean",
           "description": "Connect to HU USB before Bluetooth handshake"
-        }
-      }
-    },
-    {
-      "title": "🕵️‍♂️ MITM CONFIGURATION",
-      "values": {
-        "mitm": {
-          "typ": "boolean",
-          "description": "Enable MITM mode"
-        },
-        "dpi": {
-          "typ": "integer",
-          "description": "Force DPI\n0 = don't change DPI"
-        },
-        "audio_max_unacked": {
-          "typ": "integer",
-          "description": "Override the `max_unacked` setting for audio channels. This may improve audio performance on some head units, but could worsen it on others. Adjust this value experimentally only if you experience audio stuttering.\n0 = leave unchanged"
-        },
-        "remove_tap_restriction": {
-          "typ": "boolean",
-          "description": "remove tap restriction"
-        },
-        "video_in_motion": {
-          "typ": "boolean",
-          "description": "video in motion"
-        },
-        "disable_media_sink": {
-          "typ": "boolean",
-          "description": "Disable media sink"
-        },
-        "disable_tts_sink": {
-          "typ": "boolean",
-          "description": "Disable TTS sink"
-        },
-        "developer_mode": {
-          "typ": "boolean",
-          "description": "Developer mode"
-        },
-        "remove_bluetooth": {
-          "typ": "boolean",
-          "description": "Remove Bluetooth service from `service discovery response`"
-        },
-        "remove_wifi": {
-          "typ": "boolean",
-          "description": "Remove Wi-Fi service from `service discovery response`"
-        },
-        "stop_on_disconnect": {
-          "typ": "boolean",
-          "description": "Stop working on manual `Disconnect` from phone"
-        },
-        "waze_lht_workaround": {
-          "typ": "boolean",
-          "description": "Enable `Waze` workaround for LHT (Left-Hand Traffic) countries by swaping U_TURN_LEFT to U_TURN_RIGHT in navigation / HUD"
-        }
-      }
-    },
-    {
-      "title": "🔌 MITM/EV ROUTING CONFIGURATION",
-      "values": {
-        "ev": {
-          "typ": "boolean",
-          "description": "Enable EV routing"
-        },
-        "ev_battery_logger": {
-          "typ": "string",
-          "description": "Path to script executed when Android Auto session starts/stops and EV battery data is needed\nArgument \"start\" or \"stop\" is appended automatically when invoked"
-        },
-        "ev_connector_types": {
-          "typ": "string",
-          "description": "List of EV connector types supported by your car. Possible values (separate multiple with a comma ','):\nEV_CONNECTOR_TYPE_J1772, EV_CONNECTOR_TYPE_MENNEKES, EV_CONNECTOR_TYPE_CHADEMO, EV_CONNECTOR_TYPE_COMBO_1, EV_CONNECTOR_TYPE_COMBO_2, EV_CONNECTOR_TYPE_TESLA_SUPERCHARGER, EV_CONNECTOR_TYPE_GBT\n\nIf left empty, the default is EV_CONNECTOR_TYPE_MENNEKES."
         }
       }
     },

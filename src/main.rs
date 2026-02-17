@@ -279,18 +279,11 @@ async fn tokio_main(
         }
         // wait for restart notification
         let _ = need_restart.recv().await;
-        if !(cfg.quick_reconnect) {
-            info!(
+        info!(
                 "{} 📵 TCP/USB connection closed or not started, trying again...",
                 NAME
             );
-            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-        } else {
-            info!(
-                "{} 📵 TCP/USB connection closed or not started, quick restart...",
-                NAME
-            );
-        }
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
         // TODO: make proper main loop with cancellation
         // re-read config

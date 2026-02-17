@@ -98,7 +98,6 @@ pub struct AppConfig {
     pub hexdump_level: HexdumpLevel,
     pub disable_console_debug: bool,
     pub legacy: bool,
-    pub quick_reconnect: bool,
     pub scrcpy_screen_off: bool,
     pub video_bitrate:i32,
     pub connect: BluetoothAddressList,
@@ -117,27 +116,13 @@ pub struct AppConfig {
     )]
     pub webserver: Option<String>,
     pub bt_timeout_secs: u16,
-    pub mitm: bool,
     pub dpi: u16,
-    pub audio_max_unacked: u8,
-    pub remove_tap_restriction: bool,
-    pub video_in_motion: bool,
-    pub disable_media_sink: bool,
-    pub disable_tts_sink: bool,
-    pub developer_mode: bool,
     #[serde(default, deserialize_with = "empty_string_as_none")]
     pub wired: Option<UsbId>,
     pub dhu: bool,
-    pub ev: bool,
-    pub remove_bluetooth: bool,
-    pub remove_wifi: bool,
-    pub change_usb_order: bool,
-    pub stop_on_disconnect: bool,
-    pub waze_lht_workaround: bool,
     #[serde(default, deserialize_with = "empty_string_as_none")]
-    pub ev_battery_logger: Option<String>,
-    pub ev_connector_types: EvConnectorTypes,
     pub enable_ssh: bool,
+    pub enable_ftp: bool,
     pub usb_serial_console: bool,
     pub wifi_version: u16,
     pub band: String,
@@ -241,7 +226,6 @@ impl Default for AppConfig {
             hexdump_level: HexdumpLevel::Disabled,
             disable_console_debug: false,
             legacy: true,
-            quick_reconnect: false,
             scrcpy_screen_off:true,
             video_bitrate:4_000_000,
             connect: BluetoothAddressList::default(),
@@ -254,26 +238,11 @@ impl Default for AppConfig {
             timeout_secs: 10,
             webserver: webserver_default_bind(),
             bt_timeout_secs: 0,
-            mitm: false,
             dpi: 0,
-            audio_max_unacked: 0,
-            remove_tap_restriction: false,
-            video_in_motion: false,
-            disable_media_sink: false,
-            disable_tts_sink: false,
-            developer_mode: false,
             wired: None,
             dhu: false,
-            ev: false,
-            remove_bluetooth: false,
-            remove_wifi: false,
-            change_usb_order: false,
-            stop_on_disconnect: false,
-            waze_lht_workaround: false,
-            ev_battery_logger: None,
-            action_requested: None,
-            ev_connector_types: EvConnectorTypes::default(),
             enable_ssh: true,
+            enable_ftp: false,
             usb_serial_console: false,
             wifi_version: get_latest_wifi_version().unwrap_or(1),
             band: {
@@ -337,7 +306,6 @@ impl AppConfig {
         doc["legacy"] = value(self.legacy);
         doc["scrcpy_screen_off"] = value(self.scrcpy_screen_off);
         doc["video_bitrate"] = value(self.video_bitrate as i64);
-        doc["quick_reconnect"] = value(self.quick_reconnect);
         doc["connect"] = value(self.connect.to_string());
         doc["logfile"] = value(self.logfile.display().to_string());
         doc["stats_interval"] = value(self.stats_interval as i64);
@@ -354,27 +322,11 @@ impl AppConfig {
             doc["webserver"] = value(webserver);
         }
         doc["bt_timeout_secs"] = value(self.bt_timeout_secs as i64);
-        doc["mitm"] = value(self.mitm);
         doc["dpi"] = value(self.dpi as i64);
-        doc["audio_max_unacked"] = value(self.audio_max_unacked as i64);
-        doc["remove_tap_restriction"] = value(self.remove_tap_restriction);
-        doc["video_in_motion"] = value(self.video_in_motion);
-        doc["disable_media_sink"] = value(self.disable_media_sink);
-        doc["disable_tts_sink"] = value(self.disable_tts_sink);
-        doc["developer_mode"] = value(self.developer_mode);
         doc["wired"] = value(self.wired.as_ref().map_or(String::new(), |w| w.to_string()));
         doc["dhu"] = value(self.dhu);
-        doc["ev"] = value(self.ev);
-        doc["remove_bluetooth"] = value(self.remove_bluetooth);
-        doc["remove_wifi"] = value(self.remove_wifi);
-        doc["change_usb_order"] = value(self.change_usb_order);
-        doc["stop_on_disconnect"] = value(self.stop_on_disconnect);
-        doc["waze_lht_workaround"] = value(self.waze_lht_workaround);
-        if let Some(path) = &self.ev_battery_logger {
-            doc["ev_battery_logger"] = value(path);
-        }
-        doc["ev_connector_types"] = value(self.ev_connector_types.to_string());
         doc["enable_ssh"] = value(self.enable_ssh);
+        doc["enable_ftp"] = value(self.enable_ftp);
         doc["usb_serial_console"] = value(self.usb_serial_console);
         doc["wifi_version"] = value(self.wifi_version as i64);
         doc["band"] = value(self.band.to_string());
