@@ -418,7 +418,7 @@ pub async fn endpoint_reader<A: Endpoint<A>>(
 }
 
 /// main reader thread for a service, transfer monitored
-pub async fn packet_tls_proxy_trm<A: Endpoint<A>>(
+pub async fn packet_tls_proxy<A: Endpoint<A>>(
     mut hu_wr: IoDevice<A>,
     mut hu_rx: Receiver<Packet>,
     mut srv_rx: Receiver<Packet>,
@@ -670,7 +670,7 @@ pub async fn packet_tls_proxy_trm<A: Endpoint<A>>(
 }
 
 /// main reader thread for a service, no transfer monitor
-pub async fn packet_tls_proxy<A: Endpoint<A>>(
+pub async fn packet_tls_proxy_no_trm<A: Endpoint<A>>(
     mut hu_wr: IoDevice<A>,
     mut hu_rx: Receiver<Packet>,
     mut srv_rx: Receiver<Packet>,

@@ -155,8 +155,7 @@ async fn transfer_monitor(
             stall_tcp_bytes_last = tcp_bytes_out - stall_tcp_bytes_last;
 
             if stall_usb_bytes_last == 0 || stall_tcp_bytes_last == 0 {
-                return Err("unexpected transfer stall".into());
-                //debug!("transfer_monitor: unexpected transfer stall?")
+                return Err("Packet transfer watchdog: unexpected transfer stall, timeout exceeded".into());
             }
 
             // save values for next iteration
@@ -369,8 +368,8 @@ pub async fn io_loop(
         // we can send a reference-counted version of it. also, since a
         // tokio-uring runtime is single-threaded, we can use `Rc` instead of
         // `Arc`.
-        //let stats_w_bytes = Arc::new(AtomicUsize::new(0));
-        //let stats_r_bytes = Arc::new(AtomicUsize::new(0));
+        let stats_w_bytes = Arc::new(AtomicUsize::new(0));
+        let stats_r_bytes = Arc::new(AtomicUsize::new(0));
         // mpsc channels:
         let (txr_hu, rxr_hu):       (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
         let (tx_srv, rx_srv):   (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
@@ -406,7 +405,7 @@ pub async fn io_loop(
         tsk_hu_read = tokio_uring::spawn(endpoint_reader(hu_r, txr_hu));
 
         //service packet proxy
-        tsk_packet_proxy = tokio_uring::spawn(packet_tls_proxy(hu_w, rxr_hu, rxr_srv, tx_srv, rx_scrcpy.clone(), hex_requested));
+        tsk_packet_proxy = tokio_uring::spawn(packet_tls_proxy(hu_w, rxr_hu, rxr_srv, tx_srv, rx_scrcpy.clone(), stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested));
 
         // main processing threads:
         tsk_ch_manager = tokio_uring::spawn(ch_proxy(
@@ -418,19 +417,19 @@ pub async fn io_loop(
         ));
 
         // Thread for monitoring transfer
-        /*let mut tsk_monitor = tokio::spawn(transfer_monitor(
+        let mut tsk_monitor = tokio::spawn(transfer_monitor(
             stats_interval,
             stats_w_bytes,
             stats_r_bytes,
             read_timeout,
             shared_config.clone(),
-        ));*/
+        ));
 
         // Stop as soon as one of them errors
         let res = tokio::try_join!(
             flatten(&mut tsk_hu_read, "tsk_hu_read".into()),
             flatten(&mut tsk_ch_manager, "tsk_ch_manager".into()),
-            //flatten(&mut tsk_monitor,"tsk_monitor".into()),
+            flatten(&mut tsk_monitor,"tsk_monitor".into()),
             flatten(&mut tsk_packet_proxy,"tsk_pkt_proxy".into()),
         );
 
@@ -472,7 +471,7 @@ pub async fn io_loop(
         tsk_packet_proxy.abort();
         tsk_hu_read.abort();
         tsk_ch_manager.abort();
-        //tsk_monitor.abort();
+        tsk_monitor.abort();
 
         // make sure TCP connections are closed before next connection attempts
         /*if let Some(stream) = hu_tcp_stream {
