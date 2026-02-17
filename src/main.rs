@@ -259,7 +259,6 @@ async fn tokio_main(
     
 
     // main connection loop
-    let change_usb_order = cfg.change_usb_order;
     let mut need_restart = restart_tx.subscribe();
     loop {
         if let Some(ref mut leds) = led_manager {
