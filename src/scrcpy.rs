@@ -90,6 +90,15 @@ pub struct ScrcpyKeyEvent {
     pub metastate:i32,
 }
 
+#[derive(Serialize, Deserialize, Copy, Clone, Debug, Default)]
+pub struct ScrcpyScrollEvent {
+    pub position:ScrcpyPosition,
+    //pub screen_size: ScrcpySize,  //not clear if should be here or not
+    pub hscroll: i16,
+    pub vscroll:i16,
+    pub buttons:i32,
+}
+
 impl ScrcpyKeyEvent {
     /// Serialize struct into big-endian bytes using BytesMut
     fn to_be_bytes(&self) -> Vec<u8> {
@@ -98,6 +107,18 @@ impl ScrcpyKeyEvent {
         buf.extend_from_slice(&self.key_code.to_be_bytes());
         buf.extend_from_slice(&self.repeat.to_be_bytes());
         buf.extend_from_slice(&self.metastate.to_be_bytes());
+        buf.to_vec() // convert BytesMut to Vec<u8>
+    }
+}
+
+impl ScrcpyScrollEvent {
+    /// Serialize struct into big-endian bytes using BytesMut
+    fn to_be_bytes(&self) -> Vec<u8> {
+        let mut buf = BytesMut::new();
+        buf.extend_from_slice(&self.position.to_be_bytes());
+        buf.extend_from_slice(&self.hscroll.to_be_bytes());
+        buf.extend_from_slice(&self.vscroll.to_be_bytes());
+        buf.extend_from_slice(&self.buttons.to_be_bytes());
         buf.to_vec() // convert BytesMut to Vec<u8>
     }
 }
@@ -529,6 +550,7 @@ async fn tsk_scrcpy_control(
             error!("tsk_scrcpy_control send error: {}", e);
         }
     }
+    let mut last_touched_point ;
     loop {
         match cmd_rx.recv_async().await {
             Ok(pkt) => {
@@ -556,6 +578,7 @@ async fn tsk_scrcpy_control(
                                 } else if touch_action == PointerAction::ACTION_UP
                                 {
                                     _action = AndroidTouchEvent::Up as u8;
+                                    last_touched_point = ScrcpyPoint { x: touch_x as i32, y: touch_y as i32 };
                                 } else if touch_action == PointerAction::ACTION_MOVED
                                 {
                                     _action = AndroidTouchEvent::Move as u8;
@@ -592,6 +615,7 @@ async fn tsk_scrcpy_control(
                                     _action = AndroidTouchEvent::Down as u8;
                                 } else if touch_action == PointerAction::ACTION_UP
                                 {
+                                    last_touched_point = ScrcpyPoint { x: touch_x as i32, y: touch_y as i32 };
                                     _action = AndroidTouchEvent::Up as u8;
                                 } else if touch_action == PointerAction::ACTION_MOVED
                                 {
@@ -650,7 +674,22 @@ async fn tsk_scrcpy_control(
                         else if rsp.relative_event.is_some()
                         {
                             for (_,key_ev) in rsp.relative_event.data.iter().enumerate() {
-                                debug!("scrcpy_control received REL event: keycode={:?}, delta={:?}",key_ev.keycode(),key_ev.delta())
+                                //debug!("scrcpy_control received REL event: keycode={:?}, delta={:?}",key_ev.keycode(),key_ev.delta())
+                                if key_ev.keycode() == KeyCode::KEYCODE_ROTARY_CONTROLLER
+                                {
+                                    let ev = ScrcpyScrollEvent { position: last_touched_point, vscroll:key_ev.delta() as i16, hscroll:0, buttons:0 };
+                                    //info!("SCRCPY Control inject event: {:?}",ev);
+                                    let ev_bytes=ev.to_be_bytes();
+                                    let mut payload: Vec<u8> = Vec::new();
+                                    payload.push(ScrcpyControlMessageType::InjectScrollEvent as u8);
+                                    payload.extend_from_slice(&ev_bytes);
+                                    //stream.write_all(payload).await;
+                                    let (res, _) = stream.write_all(payload).await;
+                                    if let Err(e) = res {
+                                        error!("tsk_scrcpy_control send error: {}", e);
+                                    }
+                                }
+
                             }
                         }
                         else
