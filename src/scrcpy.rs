@@ -683,7 +683,6 @@ async fn tsk_scrcpy_control(
                                     let mut payload: Vec<u8> = Vec::new();
                                     payload.push(ScrcpyControlMessageType::InjectScrollEvent as u8);
                                     payload.extend_from_slice(&ev_bytes);
-                                    //stream.write_all(payload).await;
                                     let (res, _) = stream.write_all(payload).await;
                                     if let Err(e) = res {
                                         error!("tsk_scrcpy_control send error: {}", e);
