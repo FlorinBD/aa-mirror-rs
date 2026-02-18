@@ -92,7 +92,7 @@ pub struct ScrcpyKeyEvent {
 
 #[derive(Serialize, Deserialize, Copy, Clone, Debug, Default)]
 pub struct ScrcpyScrollEvent {
-    pub position:ScrcpyPosition,
+    pub position:ScrcpyPoint,
     //pub screen_size: ScrcpySize,  //not clear if should be here or not
     pub hscroll: i16,
     pub vscroll:i16,
@@ -675,7 +675,7 @@ async fn tsk_scrcpy_control(
                         {
                             for (_,key_ev) in rsp.relative_event.data.iter().enumerate() {
                                 //debug!("scrcpy_control received REL event: keycode={:?}, delta={:?}",key_ev.keycode(),key_ev.delta())
-                                if key_ev.keycode() == KeyCode::KEYCODE_ROTARY_CONTROLLER
+                                if key_ev.keycode() == KeyCode::KEYCODE_ROTARY_CONTROLLER as u32
                                 {
                                     let ev = ScrcpyScrollEvent { position: last_touched_point, vscroll:key_ev.delta() as i16, hscroll:0, buttons:0 };
                                     //info!("SCRCPY Control inject event: {:?}",ev);
