@@ -24,3 +24,4 @@ solve ADB connection when dev state is STALE, is connected but not REACHABLE
 
 NOTES:
 HU doesn't send ACK for config frames?? (video frames)
+transfer_monitor() must be used because TcpStream dosen't close when HU/DHU is disconnected and we can't re-connect
