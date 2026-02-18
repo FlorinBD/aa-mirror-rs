@@ -550,7 +550,7 @@ async fn tsk_scrcpy_control(
             error!("tsk_scrcpy_control send error: {}", e);
         }
     }
-    let mut last_touched_point ;
+    let mut last_touched_point=ScrcpyPoint{x:0,y:0};
     loop {
         match cmd_rx.recv_async().await {
             Ok(pkt) => {
