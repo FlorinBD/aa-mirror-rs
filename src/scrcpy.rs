@@ -3,6 +3,7 @@ use std::future::Future;
 use std::io;
 use std::sync::Arc;
 use std::time::Duration;
+use std::iter;
 use flume::SendError;
 use libc::sigdelset;
 use log::debug;
