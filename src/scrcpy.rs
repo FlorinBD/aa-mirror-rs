@@ -3,7 +3,6 @@ use std::future::Future;
 use std::io;
 use std::sync::Arc;
 use std::time::Duration;
-use std::iter;
 use flume::SendError;
 use libc::sigdelset;
 use log::debug;
@@ -13,7 +12,6 @@ use tokio::process::Command;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::{mpsc, oneshot, Notify};
 use tokio_uring::net::TcpStream;
-use tokio_uring::buf::fixed::FixedBufRegistry;
 use tokio_util::bytes::BytesMut;
 use crate::aa_services::{AudioStreamingParams, MediaCodec, VideoStreamingParams};
 use crate::{adb, channel_manager};
@@ -177,7 +175,6 @@ async fn tsk_scrcpy_video(
     video_tx: flume::Sender<Packet>,
     max_unack:u32,
     sid:u8,
-    registry: FixedBufRegistry<Vec<u8>>,
 ) -> Result<()> {
     info!("Starting video server!");
     //codec metadata
@@ -196,7 +193,6 @@ async fn tsk_scrcpy_video(
     }
     debug!("SCRCPY Video entering main loop");
     //let mut reassembler = NalReassembler::new();
-    let mut buf = registry.check_out(0).expect("buffer 0 in use");
     let mut dbg_count=0;
     loop {
 
@@ -362,7 +358,6 @@ async fn tsk_scrcpy_audio(
     audio_tx: flume::Sender<Packet>,
     max_unack:u32,
     sid:u8,
-    registry: FixedBufRegistry<Vec<u8>>,
 ) -> Result<()> {
     info!("Starting audio server!");
     //codec metadata
@@ -381,7 +376,6 @@ async fn tsk_scrcpy_audio(
     let mut act_unack =0;
     let mut dbg_count=0;
     let mut frame_counter=0;
-    let mut buf = registry.check_out(1).expect("buffer 1 in use");
     loop {
         //Read video frames from SCRCPY server
         match read_scrcpy_packet(&mut stream).await {
@@ -995,12 +989,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                 {
                     video_max_unack_mpsc =video_codec_params.max_unack as usize;
                 }
-                //Create a registry with 2 pre-allocated buffers (not registered yet).
-                let buf_registry = FixedBufRegistry::new(iter::repeat_with(|| vec![0u8; 0xFFFF]).take(2),);
-                buf_registry.register()?;
-                let registry_for_video = buf_registry.clone();
-                let registry_for_audio = buf_registry.clone();
-                
+                                
                 //let notify_audio = Arc::new(Notify::new());
                 //let notify_video = Arc::new(Notify::new());
                 //let ack_audio=notify_audio.clone();
@@ -1015,7 +1004,6 @@ pub(crate) async fn tsk_adb_scrcpy(
                         video_tx,
                         video_codec_params.max_unack,
                         video_codec_params.sid,
-                        registry_for_video,
                     ).await;
                     let _ = done_th_tx_video.send(res);
 
@@ -1027,7 +1015,6 @@ pub(crate) async fn tsk_adb_scrcpy(
                         audio_tx,
                         audio_codec_params.max_unack,
                         audio_codec_params.sid,
-                        registry_for_audio,
                     ).await;
                     let _ = done_th_tx_audio.send(res);
                 });
