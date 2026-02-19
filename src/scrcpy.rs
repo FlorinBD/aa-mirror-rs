@@ -12,6 +12,7 @@ use tokio::process::Command;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::{mpsc, oneshot, Notify};
 use tokio_uring::net::TcpStream;
+use tokio_uring::buf::fixed::FixedBufRegistry;
 use tokio_util::bytes::BytesMut;
 use crate::aa_services::{AudioStreamingParams, MediaCodec, VideoStreamingParams};
 use crate::{adb, channel_manager};
@@ -988,9 +989,11 @@ pub(crate) async fn tsk_adb_scrcpy(
                 {
                     video_max_unack_mpsc =video_codec_params.max_unack as usize;
                 }
-                //let (tx_ack_audio, rx_ack_audio) = flume::bounded::<u32>(1);
-                //let (tx_ack_video, rx_ack_video) = flume::bounded::<u32>(1);
-
+                // 1) Create a registry with 2 pre-allocated buffers (not registered yet).
+                let buf_registry = FixedBufRegistry::new(iter::repeat_with(|| vec![0u8; 0xFFFF]).take(2),);
+                buf_registry.register()?;
+                let registry_for_video = buf_registry.clone();
+                
                 //let notify_audio = Arc::new(Notify::new());
                 //let notify_video = Arc::new(Notify::new());
                 //let ack_audio=notify_audio.clone();
