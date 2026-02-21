@@ -348,6 +348,7 @@ pub async fn io_loop(
                     error!("{} 🔴 Error opening USB accessory: {}", NAME, e);
                     //tokio::time::sleep(Duration::from_secs(2)).await;
                     let _ = need_restart.send(None);//restart usb detection
+                    tokio::time::sleep(Duration::from_secs(1)).await;
                     continue;//we can't break the loop because we can't recover ADB task
                     // notify main loop to restart if HU is lost to prevent connection loop, upon restart, USB is re-initialized
                     //let _ = need_restart.send(None);
