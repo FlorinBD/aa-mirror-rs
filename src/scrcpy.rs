@@ -242,7 +242,7 @@ async fn tsk_scrcpy_video(
                         {
                             if !config_frame
                             {
-                                debug!("scrcpy_video packet took {} ms to read",start.elapsed());
+                                debug!("scrcpy_video packet took {} ms to read",start.elapsed().as_millis());
                                 //wait for ACK
                                 match ack_notify.send(()).await {
                                     Ok(()) => {}
