@@ -154,67 +154,6 @@ impl Packet {
         Ok(())
     }
 
-    /// payload split into chunks and return array of packets
-    pub(crate) async fn split(
-        &mut self,
-    ) -> Result<(Vec<Packet>)> {
-
-        let mut packets:Vec<Packet> = vec![];
-        if self.payload.len()>MAX_DATA_LEN
-        {
-            let num_iterations = (self.payload.len() + MAX_DATA_LEN - 1) / MAX_DATA_LEN;
-            //segmented data
-            for (i, chunk) in self.payload.chunks(MAX_DATA_LEN).enumerate() {
-                if i==0
-                {
-                    //first frame
-                    let frame = Packet {
-                        channel: self.channel,
-                        flags: (self.flags & 0xFC) | FRAME_TYPE_FIRST,
-                        final_length: Some(self.payload.len() as u32),
-                        payload: chunk.to_vec(),
-                    };
-                    packets.push(frame);
-                }
-                else if i== num_iterations - 1
-                {
-                    //last frame
-                    let frame = Packet {
-                        channel: self.channel,
-                        flags: (self.flags & 0xFC) | FRAME_TYPE_LAST,
-                        final_length: None,
-                        payload: chunk.to_vec(),
-                    };
-                    packets.push(frame);
-                }
-                else
-                {
-                    //consecutive frame
-                    let frame = Packet {
-                        channel: self.channel,
-                        flags: self.flags & 0xFC,
-                        final_length: None,
-                        payload: chunk.to_vec(),
-                    };
-                    packets.push(frame);
-                }
-            }
-        }
-        else
-        {
-            //whole data
-            let frame= Packet
-            {
-                channel : self.channel,
-                flags : self.flags,
-                final_length: None,
-                payload : self.payload.clone(),
-            };
-            packets.push(frame);
-        }
-
-        Ok(packets)
-    }
 
     /// composes a final frame and transmits it to endpoint device (HU/MD)
     async fn transmit<A: Endpoint<A>>(
