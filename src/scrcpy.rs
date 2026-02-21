@@ -186,63 +186,90 @@ pub struct ScrcpyMediaHeader {
     pub config:bool,
     pub keyframe:bool,
 }
-pub struct ScrcpyMediaReader<R> {
-    reader: R,
+pub struct ScrcpyMediaReader {
+    stream: TcpStream,
     buf: BytesMut,   // reusable buffer
 }
 
-impl<R: AsyncRead + Unpin> ScrcpyMediaReader<R> {
-    pub fn new(reader: R) -> Self {
+impl<R: AsyncRead + Unpin> ScrcpyMediaReader {
+    pub fn new(stream: TcpStream) -> Self {
         Self {
-            reader,
+            stream,
             buf: BytesMut::with_capacity(256 * 1024),
         }
     }
 
+    async fn read_exact_into(
+        &mut self,
+        len: usize,
+    ) -> io::Result<()> {
+        if self.buf.capacity() < len {
+            self.buf.reserve(len - self.buf.capacity());
+        }
+
+        // Ensure buffer has enough space
+        self.buf.resize(len, 0);
+
+        let mut read_total = 0;
+
+        while read_total < len {
+            let slice = &mut self.buf[read_total..len];
+
+            let (res, buf) = self.stream.read(slice).await;
+            let n = res?;
+
+            if n == 0 {
+                return Err(io::Error::from(io::ErrorKind::UnexpectedEof));
+            }
+
+            read_total += n;
+        }
+
+        Ok(())
+    }
     pub async fn read_chunks(&mut self) -> tokio::io::Result<Option<(ScrcpyMediaHeader, Vec<Bytes>)>> {
         // 1. Read header
-        let mut header = [0u8; SCRCPY_METADATA_HEADER_LEN];
+        self.read_exact_into(SCRCPY_METADATA_HEADER_LEN).await?;
 
-        if let Err(e) = self.reader.read_exact(&mut header).await {
-            if e.kind() == std::io::ErrorKind::UnexpectedEof {
-                return Ok(None);
-            }
-            return Err(e);
-        }
+        let header = self.parse_header(&self.buf[..SCRCPY_METADATA_HEADER_LEN]);
 
-        let pts = u64::from_be_bytes(header[..8].try_into().unwrap());
-        let size = u32::from_be_bytes(header[8..12].try_into().unwrap()) as usize;
-        let key_frame = (pts & 0x4000_0000_0000_0000u64) != 0;
-        let rec_ts = pts & 0x3FFF_FFFF_FFFF_FFFFu64;
-        let config_frame = (pts & 0x8000_0000_0000_0000u64) != 0;
-        let header = ScrcpyMediaHeader {size:size, timestamp: rec_ts, config: config_frame, keyframe: key_frame };
+        // 2. Read payload exactly
+        let payload_size = header.size as usize;
+        let total = SCRCPY_METADATA_HEADER_LEN + payload_size;
 
-        // 2. Ensure capacity (no realloc if enough)
-        if self.buf.capacity() < size {
-            self.buf.reserve(size - self.buf.capacity());
-        }
+        self.read_exact_into(total).await?;
 
-        // 3. Prepare buffer length
-        self.buf.clear();
-        self.buf.resize(size, 0);
+        // 3. Split payload (zero-copy)
+        let payload = &self.buf[SCRCPY_METADATA_HEADER_LEN..total];
 
-        // 4. Read payload exactly into reused buffer
-        self.reader.read_exact(&mut self.buf).await?;
-
-        // 5. Convert to Bytes WITHOUT COPY
-        let data = self.buf.split().freeze();
-
-        // 6. Chunk it
-        let mut chunks = Vec::with_capacity((size + MAX_DATA_LEN - 1) / MAX_DATA_LEN);
+        let mut chunks = Vec::with_capacity(
+            (payload.len() + MAX_DATA_LEN - 1) / MAX_DATA_LEN,
+        );
 
         let mut offset = 0;
-        while offset < size {
-            let end = (offset + MAX_DATA_LEN).min(size);
-            chunks.push(data.slice(offset..end));
+
+        while offset < payload.len() {
+            let end = (offset + MAX_DATA_LEN).min(payload.len());
+
+            // zero-copy slice
+            let chunk = Bytes::copy_from_slice(&payload[offset..end]);
+
+            chunks.push(chunk);
+
             offset = end;
         }
 
         Ok(Some((header, chunks)))
+    }
+
+    fn parse_header(buf: &[u8]) -> ScrcpyMediaHeader {
+        use std::convert::TryInto;
+        let pts = u64::from_be_bytes(buf[..8].try_into().unwrap());
+        let size = u32::from_be_bytes(buf[8..12].try_into().unwrap()) as usize;
+        let key_frame = (pts & 0x4000_0000_0000_0000u64) != 0;
+        let rec_ts = pts & 0x3FFF_FFFF_FFFF_FFFFu64;
+        let config_frame = (pts & 0x8000_0000_0000_0000u64) != 0;
+        ScrcpyMediaHeader {size:size, timestamp: rec_ts, config: config_frame, keyframe: key_frame };
     }
 
     pub async fn read_video_codec_info(&mut self) -> tokio::io::Result<Option<(ScrcpyVideoCodecInfo)>> {
@@ -250,7 +277,7 @@ impl<R: AsyncRead + Unpin> ScrcpyMediaReader<R> {
         // 1. Read header
         let mut header = [0u8; codec_metainfo_len];
 
-        if let Err(e) = self.reader.read_exact(&mut header).await {
+        if let Err(e) = self.stream.read_exact(&mut header).await {
             if e.kind() == std::io::ErrorKind::UnexpectedEof {
                 return Ok(None);
             }
