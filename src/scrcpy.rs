@@ -332,7 +332,6 @@ async fn tsk_scrcpy_video(
 
     loop {
         //Read video frames from SCRCPY server
-        let start = Instant::now();
         match reader.read_chunks().await {
             Ok(Some((header, chunks))) => {
                 //let rd_len = header.size ;
@@ -350,7 +349,6 @@ async fn tsk_scrcpy_video(
                 }
                 if !header.config
                 {
-                    debug!("scrcpy_video packet took {} ms to read",start.elapsed().as_millis());
                     //wait for ACK
                     match ack_notify.send(()).await {
                         Ok(()) => {}
