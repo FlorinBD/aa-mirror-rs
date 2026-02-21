@@ -290,6 +290,21 @@ impl ScrcpyMediaReader {
             height,
         })
     }
+
+    pub async fn read_audio_codec_info(&mut self)  -> io::Result<String> {
+        const META_SIZE: usize = 4;
+        // Fill internal buffer (no allocation)
+        self.read_exact_into_buf(META_SIZE).await?;
+
+        let metadata = &self.buf[..META_SIZE];
+
+        let mut codec_id=String::from_utf8_lossy(&metadata[0..4]).to_string();
+        codec_id=codec_id.chars()
+            .filter(|c| c.is_ascii_graphic() || *c == ' ')
+            .collect();
+
+        Ok(codec_id)
+    }
 }
 async fn tsk_scrcpy_video(
     mut stream: TcpStream,
@@ -298,24 +313,24 @@ async fn tsk_scrcpy_video(
     sid:u8,
 ) -> Result<()> {
     info!("Starting video server!");
+    let mut reader=ScrcpyMediaReader::new(stream);
     //codec metadata
-    let metadata=read_exact(&mut stream, 12).await?;
-    debug!("SCRCPY Video codec metadata: {:02x?}", &metadata);
-    let mut codec_id=String::from_utf8_lossy(&metadata[0..4]).to_string();
-    codec_id=codec_id.chars()
-        .filter(|c| c.is_ascii_graphic() || *c == ' ')
-        .collect();
-    let video_res_w = u32::from_be_bytes(metadata[4..8].try_into().unwrap());
-    let video_res_h = u32::from_be_bytes(metadata[8..12].try_into().unwrap());
-    info!("SCRCPY Video metadata decoded: id={}, res_w={}, res_h={}", codec_id, video_res_w, video_res_h);
-    if (codec_id != "h264".to_string()) || (video_res_w != 800) || (video_res_h != 480) {
-        error!("SCRCPY Invalid Video codec configuration");
-        return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY Invalid Video codec configuration")));
+    match reader.read_video_codec_info().await {
+        Ok(info) => {
+            info!("SCRCPY Video metadata decoded: id={}, res_w={}, res_h={}", info.codec, info.width, info.height);
+            if (info.codec != "h264".to_string()) || (info.width != 800) || (info.height != 480) {
+                error!("SCRCPY Invalid Video codec configuration");
+                return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY Invalid Video codec configuration")));
+            }
+        }
+        Err(e) => {
+            return Err(Box::new(io::Error::new(io::ErrorKind::Other, e)));
+        }
     }
     debug!("SCRCPY Video entering main loop");
     //let mut reassembler = NalReassembler::new();
     let mut dbg_count=0;
-    let mut reader=ScrcpyMediaReader::new(stream);
+
     loop {
         //Read video frames from SCRCPY server
         let start = Instant::now();
@@ -394,71 +409,6 @@ async fn tsk_scrcpy_video(
     }
     //reassembler.flush();
     return Ok(());
-
-    async fn read_exact(
-        stream: &mut TcpStream,
-        size: usize,
-    ) -> io::Result<Vec<u8>> {
-        let mut buf = Vec::with_capacity(size);
-
-        while buf.len() < size {
-            let to_read = size - buf.len();
-            let mut chunk = vec![0u8; to_read];
-
-            let (res, nchunk) = stream.read(chunk).await;
-            chunk=nchunk;
-            let rd=res?;
-
-            if rd == 0 {
-                return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "EOF"));
-            }
-
-            buf.extend_from_slice(&chunk[..rd]);
-        }
-
-        Ok(buf)
-    }
-    /// Read one scrcpy packet (with metadata)
-    async fn read_scrcpy_packet(stream: &mut TcpStream) -> io::Result<(u64, Vec<u8>)> {
-
-        match read_exact(stream, SCRCPY_METADATA_HEADER_LEN).await {
-            // First 12 bytes = packet metadata
-            Ok(metadata) => {
-                //info!("SCRCPY video packet metadata: {:02x?}",&metadata);
-                if metadata.len() != SCRCPY_METADATA_HEADER_LEN {
-                    error!("read_scrcpy_packet data len error, wanted {} but got {} bytes", SCRCPY_METADATA_HEADER_LEN, metadata.len());
-                }
-                let pts = u64::from_be_bytes(metadata[0..8].try_into().unwrap());
-                let packet_size = u32::from_be_bytes(metadata[8..].try_into().unwrap()) as usize;
-                match read_exact(stream, packet_size).await {
-                    Ok(h264_data) => {
-                        // Read full packet
-                        if h264_data.len() != packet_size {
-                            error!("read_scrcpy_packet data len error, wanted {} but got {} bytes", packet_size, h264_data.len());
-                        }
-                        Ok((pts, h264_data))
-                    }
-                    Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
-                        error!("scrcpy stream ended");
-                        return Err(e);
-                    }
-                    Err(e) => {
-                        error!("scrcpy read failed: {}", e);
-                        return Err(e);
-                    }
-                }
-            }
-            Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
-                error!("scrcpy stream ended");
-                return Err(e);
-            }
-            Err(e) => {
-                error!("scrcpy read failed: {}", e);
-                return Err(e);
-            }
-        }
-
-    }
 }
 
 async fn tsk_scrcpy_audio(
