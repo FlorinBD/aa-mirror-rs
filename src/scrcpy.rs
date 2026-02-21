@@ -173,6 +173,12 @@ impl ScrcpySize {
     }
 }
 
+#[derive(Serialize, Deserialize, Copy, Clone, Debug, Default)]
+pub struct ScrcpyVideoCodecInfo<'a> {
+    pub codec: &'a str,
+    pub width: u32,
+    pub height: u32,
+}
 #[derive(Debug, Clone, Copy)]
 pub struct ScrcpyMediaHeader {
     pub size:usize,
@@ -237,6 +243,37 @@ impl<R: AsyncRead + Unpin> ScrcpyMediaReader<R> {
         }
 
         Ok(Some((header, chunks)))
+    }
+
+    pub async fn read_video_codec_info(&mut self) -> tokio::io::Result<Option<(ScrcpyVideoCodecInfo)>> {
+        let codec_metainfo_len=12;
+        // 1. Read header
+        let mut header = [0u8; codec_metainfo_len];
+
+        if let Err(e) = self.reader.read_exact(&mut header).await {
+            if e.kind() == std::io::ErrorKind::UnexpectedEof {
+                return Ok(None);
+            }
+            return Err(e);
+        }
+
+        // 2. Ensure capacity (no realloc if enough)
+        if self.buf.capacity() < codec_metainfo_len {
+            self.buf.reserve(codec_metainfo_len - self.buf.capacity());
+        }
+
+        // 3. Prepare buffer length
+        self.buf.clear();
+        self.buf.resize(codec_metainfo_len, 0);
+
+        // 4. Read payload exactly into reused buffer
+        self.reader.read_exact(&mut self.buf).await?;
+
+        // 5. Convert to Bytes WITHOUT COPY
+        let data = self.buf.split().freeze();
+        let info = ScrcpyVideoCodecInfo{codec: &*String::from_utf8_lossy(&data[0..4]), width: u32::from_be_bytes(data[4..8].try_into().unwrap()), height: u32::from_be_bytes(data[8..12].try_into().unwrap()) };
+
+        Ok(Some((info)))
     }
 }
 async fn tsk_scrcpy_video(
