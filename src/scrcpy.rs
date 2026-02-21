@@ -8,6 +8,7 @@ use bytes::{BytesMut, Bytes, Buf};
 use flume::SendError;
 use libc::sigdelset;
 use log::debug;
+use openssl::pkey::Public;
 use serde::{Deserialize, Serialize};
 use simplelog::{error, info};
 use tokio::process::Command;
@@ -172,12 +173,19 @@ impl ScrcpySize {
     }
 }
 
-pub struct ScrcpyReader<R> {
+#[derive(Debug, Clone, Copy)]
+pub struct ScrcpyMediaHeader {
+    pub size:usize,
+    pub timestamp: u64,
+    pub config:bool,
+    pub keyframe:bool,
+}
+pub struct ScrcpyMediaReader<R> {
     reader: R,
     buf: BytesMut,   // reusable buffer
 }
 
-impl<R: AsyncRead + Unpin> ScrcpyReader<R> {
+impl<R: AsyncRead + Unpin> ScrcpyMediaReader<R> {
     pub fn new(reader: R) -> Self {
         Self {
             reader,
@@ -185,7 +193,7 @@ impl<R: AsyncRead + Unpin> ScrcpyReader<R> {
         }
     }
 
-    pub async fn read_chunks(&mut self) -> tokio::io::Result<Option<Vec<Bytes>>> {
+    pub async fn read_chunks(&mut self) -> tokio::io::Result<Option<(ScrcpyMediaHeader, Vec<Bytes>)>> {
         // 1. Read header
         let mut header = [0u8; SCRCPY_METADATA_HEADER_LEN];
 
@@ -198,6 +206,10 @@ impl<R: AsyncRead + Unpin> ScrcpyReader<R> {
 
         let pts = u64::from_be_bytes(header[..8].try_into().unwrap());
         let size = u32::from_be_bytes(header[8..12].try_into().unwrap()) as usize;
+        let key_frame = (pts & 0x4000_0000_0000_0000u64) != 0;
+        let rec_ts = pts & 0x3FFF_FFFF_FFFF_FFFFu64;
+        let config_frame = (pts & 0x8000_0000_0000_0000u64) != 0;
+        let header = ScrcpyMediaHeader {size:size, timestamp: rec_ts, config: config_frame, keyframe: key_frame };
 
         // 2. Ensure capacity (no realloc if enough)
         if self.buf.capacity() < size {
@@ -220,13 +232,11 @@ impl<R: AsyncRead + Unpin> ScrcpyReader<R> {
         let mut offset = 0;
         while offset < size {
             let end = (offset + MAX_DATA_LEN).min(size);
-
             chunks.push(data.slice(offset..end));
-
             offset = end;
         }
 
-        Ok(Some(chunks))
+        Ok(Some((header, chunks)))
     }
 }
 async fn tsk_scrcpy_video(
@@ -253,94 +263,75 @@ async fn tsk_scrcpy_video(
     debug!("SCRCPY Video entering main loop");
     //let mut reassembler = NalReassembler::new();
     let mut dbg_count=0;
-
+    let mut reader=ScrcpyMediaReader::new(&mut stream);
     loop {
-
         //Read video frames from SCRCPY server
         let start = Instant::now();
-        match read_scrcpy_packet(&mut stream).await {
-            Ok((pts, h264_data)) => {
-                let mut payload: Vec<u8>=Vec::new();
-                let key_frame = (pts & 0x4000_0000_0000_0000u64) != 0;
-                let rec_ts = pts & 0x3FFF_FFFF_FFFF_FFFFu64;
-                let config_frame = (pts & 0x8000_0000_0000_0000u64) != 0;
-                let rd_len = h264_data.len();
+        match reader.read_chunks().await? {
+            Some((header, chunks)) => {
+                let rd_len = header.size ;
                 let dbg_len = min(rd_len, 16);
                 if dbg_count <  10
                 {
                     if rd_len > dbg_len
                     {
                         let end_offset = rd_len - dbg_len;
-                        debug!("Video task got frame config={:?}, ts={}, act size: {}, raw slice: {:02x?}...{:02x?}",config_frame, rec_ts, rd_len, &h264_data[..dbg_len], &h264_data[end_offset..]);
+                        debug!("Video task got frame config={:?}, ts={}, act size: {}, raw slice: {:02x?}...{:02x?}",header.config, header.timestamp, rd_len, &chunks[0][..dbg_len], &chunks[0][end_offset..]);
                     } else {
-                        debug!("Video task got frame config={:?}, ts={}, act size: {}, raw bytes: {:02x?}",config_frame, rec_ts, rd_len, &h264_data[..dbg_len]);
+                        debug!("Video task got frame config={:?}, ts={}, act size: {}, raw bytes: {:02x?}",header.config, header.timestamp, rd_len, &chunks[0][..dbg_len]);
                     }
                     dbg_count += 1;
                 }
-                if config_frame
+                if !header.config
                 {
-                    payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
-                    payload.extend_from_slice(&h264_data);
-                }
-                else
-                {
-                    payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
-                    payload.extend_from_slice(&rec_ts.to_be_bytes());
-                    payload.extend_from_slice(&h264_data);
-                }
-
-                let mut pkt_rsp = Packet {
-                    channel: sid,
-                    flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                    final_length: None,
-                    payload,
-                };
-                match pkt_rsp.split().await
-                {
-                    Ok(chunks)=>
-                        {
-                            if !config_frame
-                            {
-                                debug!("scrcpy_video packet took {} ms to read",start.elapsed().as_millis());
-                                //wait for ACK
-                                match ack_notify.send(()).await {
-                                    Ok(()) => {}
-                                    Err(e) => {
-                                        error!("scrcpy video ack send failed: {:?}", e);
-                                        return Err(Box::from(e));
-                                    }
-                                }
-                            }
-
-                            //send all chunks
-                            for chunk in chunks
-                            {
-                                match video_tx.send_async(chunk).await
-                                {
-                                    Ok(_) => {
-                                        //tokio::task::yield_now().await;
-                                    }
-                                    Err(e) => {
-                                        error!("Error sending video chunk: {:?}",e);
-                                        return Err(Box::new(io::Error::new(io::ErrorKind::Other, "Error sending video chunk")));
-                                    }
-                                }
-                            }
+                    debug!("scrcpy_video packet took {} ms to read",start.elapsed().as_millis());
+                    //wait for ACK
+                    match ack_notify.send(()).await {
+                        Ok(()) => {}
+                        Err(e) => {
+                            error!("scrcpy video ack send failed: {:?}", e);
+                            return Err(Box::from(e));
                         }
-                    _ =>
-                        {
-                            error!("Video task failed to split packet");
-                        }
+                    }
                 }
 
+                //send all chunks
+                for chunk in chunks
+                {
+                    let mut payload: Vec<u8>=Vec::new();
+                    if header.config
+                    {
+                        payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
+                        payload.extend_from_slice(&chunk);
+                    }
+                    else
+                    {
+                        payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
+                        payload.extend_from_slice(&header.timestamp.to_be_bytes());
+                        payload.extend_from_slice(&chunk);
+                    }
+
+                    let mut pkt_rsp = Packet {
+                        channel: sid,
+                        flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                        final_length: None,
+                        payload,
+                    };
+                    match video_tx.send_async(pkt_rsp).await
+                    {
+                        Ok(_) => {
+                            //tokio::task::yield_now().await;
+                        }
+                        Err(e) => {
+                            error!("Error sending video chunk: {:?}",e);
+                            return Err(Box::new(io::Error::new(io::ErrorKind::Other, "Error sending video chunk")));
+                        }
+                    }
+                }
             }
-            Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
-                error!("scrcpy video stream ended");
-                return Err(Box::from(e));
-            }
-            Err(e) => {
-                error!("scrcpy video read failed: {}", e);
-                return Err(Box::from(e));
+            None() => {
+                error!("scrcpy video read failed");
+                return Err(Box::from("scrcpy video read failed"));
             }
         }
 
