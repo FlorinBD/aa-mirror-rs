@@ -73,7 +73,7 @@ pub struct ScrcpyTouchEvent {
 impl ScrcpyTouchEvent {
     /// Serialize struct into big-endian bytes using BytesMut
     fn to_be_bytes(&self) -> Vec<u8> {
-        let mut buf = TokioBytesMut::new();
+        let mut buf = BytesMut::new();
         buf.extend_from_slice(&self.action.to_be_bytes());
         buf.extend_from_slice(&self.pointer_id.to_be_bytes());
         buf.extend_from_slice(&self.position.to_be_bytes());
@@ -105,7 +105,7 @@ pub struct ScrcpyScrollEvent {
 impl ScrcpyKeyEvent {
     /// Serialize struct into big-endian bytes using BytesMut
     fn to_be_bytes(&self) -> Vec<u8> {
-        let mut buf = TokioBytesMut::new();
+        let mut buf = BytesMut::new();
         buf.extend_from_slice(&self.action.to_be_bytes());
         buf.extend_from_slice(&self.key_code.to_be_bytes());
         buf.extend_from_slice(&self.repeat.to_be_bytes());
@@ -117,7 +117,7 @@ impl ScrcpyKeyEvent {
 impl ScrcpyScrollEvent {
     /// Serialize struct into big-endian bytes using BytesMut
     fn to_be_bytes(&self) -> Vec<u8> {
-        let mut buf = TokioBytesMut::new();
+        let mut buf = BytesMut::new();
         buf.extend_from_slice(&self.position.to_be_bytes());
         buf.extend_from_slice(&self.hscroll.to_be_bytes());
         buf.extend_from_slice(&self.vscroll.to_be_bytes());
@@ -135,7 +135,7 @@ pub struct ScrcpyPosition {
 impl ScrcpyPosition {
     /// Serialize struct into big-endian bytes using BytesMut
     fn to_be_bytes(&self) -> Vec<u8> {
-        let mut buf = TokioBytesMut::new();
+        let mut buf = BytesMut::new();
         buf.extend_from_slice(&self.point.to_be_bytes());
         buf.extend_from_slice(&self.screen_size.to_be_bytes());
         buf.to_vec() // convert BytesMut to Vec<u8>
@@ -151,7 +151,7 @@ pub struct ScrcpyPoint {
 impl ScrcpyPoint {
     /// Serialize struct into big-endian bytes using BytesMut
     fn to_be_bytes(&self) -> Vec<u8> {
-        let mut buf = TokioBytesMut::new();
+        let mut buf = BytesMut::new();
         buf.extend_from_slice(&self.x.to_be_bytes());
         buf.extend_from_slice(&self.y.to_be_bytes());
         buf.to_vec() // convert BytesMut to Vec<u8>
@@ -166,7 +166,7 @@ pub struct ScrcpySize {
 impl ScrcpySize {
     /// Serialize struct into big-endian bytes using BytesMut
     fn to_be_bytes(&self) -> Vec<u8> {
-        let mut buf = TokioBytesMut::new();
+        let mut buf = BytesMut::new();
         buf.extend_from_slice(&self.width.to_be_bytes());
         buf.extend_from_slice(&self.height.to_be_bytes());
         buf.to_vec() // convert BytesMut to Vec<u8>
