@@ -418,17 +418,19 @@ async fn tsk_scrcpy_audio(
     sid:u8,
 ) -> Result<()> {
     info!("Starting audio server!");
+    let mut reader=ScrcpyMediaReader::new(stream);
     //codec metadata
-    let metadata=read_exact(&mut stream, 4).await?;
-    debug!("SCRCPY Audio codec metadata: {:02x?}", &metadata);
-    let mut codec_id=String::from_utf8_lossy(&metadata[0..4]).to_string();
-    codec_id=codec_id.chars()
-        .filter(|c| c.is_ascii_graphic() || *c == ' ')
-        .collect();
-    debug!("SCRCPY Audio codec id: {}", codec_id);
-    if codec_id != "raw" && codec_id != "aac" {
-        error!("SCRCPY Unsupported audio codec configuration detected");
-        return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY Invalid audio codec configuration")));
+    match reader.read_audio_codec_info().await {
+        Ok(codec_id) => {
+            info!("SCRCPY Audio metadata decoded: id={}", codec_id);
+            if codec_id != "raw" && codec_id != "aac" {
+                error!("SCRCPY Unsupported audio codec configuration detected");
+                return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY Invalid audio codec configuration")));
+            }
+        }
+        Err(e) => {
+            return Err(Box::new(io::Error::new(io::ErrorKind::Other, e)));
+        }
     }
     debug!("SCRCPY Audio entering main loop");
     let mut act_unack =0;
@@ -436,159 +438,78 @@ async fn tsk_scrcpy_audio(
     let mut frame_counter=0;
     loop {
         //Read video frames from SCRCPY server
-        match read_scrcpy_packet(&mut stream).await {
-            Ok((pts, data)) => {
-                let mut payload: Vec<u8>=Vec::new();
-                let rd_len = data.len();
+        match reader.read_chunks().await {
+            Ok(Some((header, chunks))) => {
+                let rd_len = header.size ;
                 let dbg_len = min(rd_len, 16);
-                let rec_ts = pts & 0x3FFF_FFFF_FFFF_FFFFu64;
-                let config_frame = (pts & 0x8000_0000_0000_0000u64) != 0;
                 if dbg_count <  10
                 {
                     if rd_len > dbg_len
                     {
                         let end_offset = rd_len - dbg_len;
-                        debug!("Audio task got packet, ts={}, act size: {}, raw slice: {:02x?}...{:02x?}",rec_ts, rd_len, &data[..dbg_len], &data[end_offset..]);
+                        debug!("Audio task got frame config={:?}, ts={}, act size: {}, raw slice: {:02x?}...{:02x?}",header.config, header.timestamp, rd_len, &chunks[0][..dbg_len], &chunks[0][end_offset..]);
                     } else {
-                        debug!("Audio task got packet, ts={}, act size: {}, raw bytes: {:02x?}",rec_ts, rd_len, &data[..dbg_len]);
+                        debug!("Audio task got frame config={:?}, ts={}, act size: {}, raw bytes: {:02x?}",header.config, header.timestamp, rd_len, &chunks[0][..dbg_len]);
                     }
-                    dbg_count+=1;
+                    dbg_count += 1;
                 }
-                if config_frame
+                if !header.config
                 {
-                    payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
-                    payload.extend_from_slice(&data);
-                }
-                else
-                {
-                    payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
-                    payload.extend_from_slice(&rec_ts.to_be_bytes());
-                    payload.extend_from_slice(&data);
+                    //wait for ACK
+                    match ack_notify.send(()).await {
+                        Ok(()) => {}
+                        Err(e) => {
+                            error!("scrcpy audio ack send failed: {:?}", e);
+                            return Err(Box::from(e));
+                        }
+                    }
                 }
 
-                let mut pkt_rsp = Packet {
-                    channel: sid,
-                    flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                    final_length: None,
-                    payload,
-                };
-                match pkt_rsp.split().await
+                //send all chunks
+                for chunk in chunks
                 {
-                    Ok(chunks)=>
-                        {
-                            if !config_frame
-                            {
-                                match ack_notify.send(()).await {
-                                    Ok(()) => {}
-                                    Err(e) => {
-                                        error!("scrcpy audio ack send failed: {:?}", e);
-                                        return Err(Box::from(e));
-                                    }
-                                }
-                            }
-                            for chunk in chunks
-                            {
-                                match audio_tx.send_async(chunk).await
-                                {
-                                    Ok(_) => {
-                                        //tokio::task::yield_now().await;
-                                    }
-                                    Err(e) => {
-                                        error!("Error sending audio chunk: {:?}", e);
-                                        return Err(Box::new(io::Error::new(io::ErrorKind::Other, "Error sending audio chunk")));
-                                    }
-                                }
-                            }
-                            act_unack+=1;
+                    let mut payload: Vec<u8>=Vec::new();
+                    if header.config
+                    {
+                        payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
+                        payload.extend_from_slice(&chunk);
+                    }
+                    else
+                    {
+                        payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
+                        payload.extend_from_slice(&header.timestamp.to_be_bytes());
+                        payload.extend_from_slice(&chunk);
+                    }
+
+                    let mut pkt_rsp = Packet {
+                        channel: sid,
+                        flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                        final_length: None,
+                        payload,
+                    };
+                    match audio_tx.send_async(pkt_rsp).await
+                    {
+                        Ok(_) => {
+                            //tokio::task::yield_now().await;
                         }
-                    _ =>
-                        {
-                            error!("Audio task failed to split packet");
+                        Err(e) => {
+                            error!("Error sending audio chunk: {:?}",e);
+                            return Err(Box::new(io::Error::new(io::ErrorKind::Other, "Error sending audio chunk")));
                         }
+                    }
                 }
-                /*frame_counter+=1;
-                if frame_counter == (max_unack-1)
-                {
-                    frame_counter=0;
-                    debug!("Audio max_unack reached")
-                }*/
             }
-            Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
-                error!("scrcpy audio stream ended");
-                return Err(Box::from(e));
+            Ok(None) => {
+                error!("scrcpy audio read failed");
+                return Err(Box::from("scrcpy video read failed"));
             }
             Err(e) => {
                 error!("scrcpy audio read failed: {}", e);
-                return Err(Box::from(e));
+                break;
             }
         }
     }
     return Ok(());
-
-    async fn read_exact(
-        stream: &mut TcpStream,
-        size: usize,
-    ) -> io::Result<Vec<u8>> {
-        let mut buf = Vec::with_capacity(size);
-
-        while buf.len() < size {
-            let to_read = size - buf.len();
-            let mut chunk = vec![0u8; to_read];
-
-            let (res, nchunk) = stream.read(chunk).await;
-            chunk=nchunk;
-            let rd=res?;
-
-            if rd == 0 {
-                return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "EOF"));
-            }
-
-            buf.extend_from_slice(&chunk[..rd]);
-        }
-
-        Ok(buf)
-    }
-    /// Read one scrcpy packet (with metadata)
-    async fn read_scrcpy_packet(stream: &mut TcpStream) -> io::Result<(u64, Vec<u8>)> {
-
-        match read_exact(stream, SCRCPY_METADATA_HEADER_LEN).await {
-            // First 12 bytes = packet metadata
-            Ok(metadata) => {
-                //info!("SCRCPY video packet metadata: {:02x?}",&metadata);
-                if metadata.len() != SCRCPY_METADATA_HEADER_LEN {
-                    error!("read_scrcpy_packet data len error, wanted {} but got {} bytes", SCRCPY_METADATA_HEADER_LEN, metadata.len());
-                }
-                let pts = u64::from_be_bytes(metadata[0..8].try_into().unwrap());
-                let packet_size = u32::from_be_bytes(metadata[8..].try_into().unwrap()) as usize;
-                match read_exact(stream, packet_size).await {
-                    Ok(data) => {
-                        // Read full packet
-                        if data.len() != packet_size {
-                            error!("read_scrcpy_packet data len error, wanted {} but got {} bytes", packet_size, data.len());
-                        }
-                        Ok((pts, data))
-                    }
-                    Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
-                        error!("scrcpy audio stream ended");
-                        return Err(e);
-                    }
-                    Err(e) => {
-                        error!("scrcpy audio read failed: {}", e);
-                        return Err(e);
-                    }
-                }
-            }
-            Err(e) if e.kind() == io::ErrorKind::UnexpectedEof => {
-                error!("scrcpy audio stream ended");
-                return Err(e);
-            }
-            Err(e) => {
-                error!("scrcpy audio read failed: {}", e);
-                return Err(e);
-            }
-        }
-
-    }
 }
 
 async fn tsk_scrcpy_control(
