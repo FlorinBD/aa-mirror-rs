@@ -233,7 +233,7 @@ impl ScrcpyMediaReader {
         let header = ScrcpyMediaReader::parse_header(&self.buf[..SCRCPY_METADATA_HEADER_LEN]);
 
         // 2. Read payload exactly
-        self.read_exact_into(header.size).await?;
+        self.read_exact_into_buf(header.size).await?;
 
         // 3. Split into chunks WITHOUT copying (zero-copy via Bytes)
         let mut chunks = Vec::with_capacity((header.size + MAX_DATA_LEN - 1) / MAX_DATA_LEN);
@@ -319,8 +319,8 @@ async fn tsk_scrcpy_video(
     loop {
         //Read video frames from SCRCPY server
         let start = Instant::now();
-        match reader.read_chunks().await? {
-            Some((header, chunks)) => {
+        match reader.read_chunks().await {
+            Ok(Some((header, chunks))) => {
                 let rd_len = header.size ;
                 let dbg_len = min(rd_len, 16);
                 if dbg_count <  10
@@ -381,7 +381,7 @@ async fn tsk_scrcpy_video(
                     }
                 }
             }
-            None() => {
+            Ok(None) => {
                 error!("scrcpy video read failed");
                 return Err(Box::from("scrcpy video read failed"));
             }
