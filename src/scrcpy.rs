@@ -360,28 +360,74 @@ async fn tsk_scrcpy_video(
                         }
                     }
                 }
-
+                let header_size = if header.config {
+                    2
+                } else {
+                    2 + 8
+                };
                 //send all chunks
-                for chunk in chunks
+                if chunks.len() > 1
                 {
-                    let header_size = if header.config {
-                        2
-                    } else {
-                        2 + 8
-                    };
-                    let mut payload = Vec::with_capacity(header_size + chunk.len());
+                    //fragmented packet
+                    for (i,chunk) in chunks.iter().enumerate()
+                    {
+                        let mut payload = Vec::with_capacity(header_size + chunk.len());
+                        let mut flags:u8;
+                        if i==0
+                        {
+                            flags = ENCRYPTED | FRAME_TYPE_FIRST;
+                        }
+                        else if i== (chunks.len() - 1)
+                        {
+                            flags = ENCRYPTED | FRAME_TYPE_LAST;
+                        }
+                        else {
+                            flags = ENCRYPTED;
+                        }
+                        if header.config
+                        {
+                            payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
+                            payload.extend_from_slice(&chunk);
+                        }
+                        else
+                        {
+                            payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
+                            payload.extend_from_slice(&header.timestamp.to_be_bytes());
+                            payload.extend_from_slice(&chunk);
+                        }
+
+                        let pkt_rsp = Packet {
+                            channel: sid,
+                            flags: flags,
+                            final_length: None,
+                            payload,
+                        };
+                        match video_tx.send_async(pkt_rsp).await
+                        {
+                            Ok(_) => {
+                                //tokio::task::yield_now().await;
+                            }
+                            Err(e) => {
+                                error!("Error sending video chunk: {:?}",e);
+                                return Err(Box::new(io::Error::new(io::ErrorKind::Other, "Error sending video chunk")));
+                            }
+                        }
+                    }
+                }
+                else {
+                    //single packet
+                    let mut payload = Vec::with_capacity(header_size + chunks[0].len());
                     if header.config
                     {
                         payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
-                        payload.extend_from_slice(&chunk);
+                        payload.extend_from_slice(&chunks[0]);
                     }
                     else
                     {
                         payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
                         payload.extend_from_slice(&header.timestamp.to_be_bytes());
-                        payload.extend_from_slice(&chunk);
+                        payload.extend_from_slice(&chunk[0]);
                     }
-
                     let pkt_rsp = Packet {
                         channel: sid,
                         flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
@@ -399,6 +445,7 @@ async fn tsk_scrcpy_video(
                         }
                     }
                 }
+
             }
             Ok(None) => {
                 error!("scrcpy video read failed");
@@ -469,28 +516,76 @@ async fn tsk_scrcpy_audio(
                     }
                 }
 
+                let header_size = if header.config {
+                    2
+                } else {
+                    2 + 8
+                };
                 //send all chunks
-                for chunk in chunks
+                if chunks.len()>1
                 {
-                    let header_size = if header.config {
-                        2
-                    } else {
-                        2 + 8
-                    };
-                    let mut payload = Vec::with_capacity(header_size + chunk.len());
+                    for (i,chunk) in chunks.iter().enumerate()
+                    {
+                        let mut flags:u8;
+                        if i==0
+                        {
+                            flags = ENCRYPTED | FRAME_TYPE_FIRST;
+                        }
+                        else if i== (chunks.len() - 1)
+                        {
+                            flags = ENCRYPTED | FRAME_TYPE_LAST;
+                        }
+                        else {
+                            flags = ENCRYPTED;
+                        }
+
+                        let mut payload = Vec::with_capacity(header_size + chunk.len());
+                        if header.config
+                        {
+                            payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
+                            payload.extend_from_slice(&chunk);
+                        }
+                        else
+                        {
+                            payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
+                            payload.extend_from_slice(&header.timestamp.to_be_bytes());
+                            payload.extend_from_slice(&chunk);
+                        }
+
+                        let mut pkt_rsp = Packet {
+                            channel: sid,
+                            flags: flags,
+                            final_length: None,
+                            payload,
+                        };
+                        match audio_tx.send_async(pkt_rsp).await
+                        {
+                            Ok(_) => {
+                                //tokio::task::yield_now().await;
+                            }
+                            Err(e) => {
+                                error!("Error sending audio chunk: {:?}",e);
+                                return Err(Box::new(io::Error::new(io::ErrorKind::Other, "Error sending audio chunk")));
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    //single packet
+                    let mut payload = Vec::with_capacity(header_size + chunks[0].len());
                     if header.config
                     {
                         payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
-                        payload.extend_from_slice(&chunk);
+                        payload.extend_from_slice(&chunks[0]);
                     }
                     else
                     {
                         payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
                         payload.extend_from_slice(&header.timestamp.to_be_bytes());
-                        payload.extend_from_slice(&chunk);
+                        payload.extend_from_slice(&chunk[0]);
                     }
-
-                    let mut pkt_rsp = Packet {
+                    let pkt_rsp = Packet {
                         channel: sid,
                         flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                         final_length: None,
@@ -507,6 +602,7 @@ async fn tsk_scrcpy_audio(
                         }
                     }
                 }
+
             }
             Ok(None) => {
                 error!("scrcpy audio read failed");
