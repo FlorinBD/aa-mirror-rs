@@ -11,6 +11,7 @@ dependencies = [
  "backon",
  "bluer",
  "byteorder",
+ "bytes",
  "bytesize",
  "chrono",
  "clap",

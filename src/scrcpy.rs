@@ -4,6 +4,7 @@ use std::io;
 use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
+use bytes::{BytesMut, Bytes, Buf};
 use flume::SendError;
 use libc::sigdelset;
 use log::debug;
@@ -13,16 +14,16 @@ use tokio::process::Command;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::{mpsc, oneshot, Notify};
 use tokio_uring::net::TcpStream;
-use tokio_util::bytes::BytesMut;
+use tokio_util::bytes::BytesMut as TokioBytesMut;
 use crate::aa_services::{AudioStreamingParams, MediaCodec, VideoStreamingParams};
 use crate::{adb, channel_manager};
 use crate::channel_manager::{Packet, ENCRYPTED, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
-use crate::config::{AppConfig, SCRCPY_METADATA_HEADER_LEN, SCRCPY_PORT, SCRCPY_VERSION};
+use crate::config::{AppConfig, MAX_DATA_LEN, SCRCPY_METADATA_HEADER_LEN, SCRCPY_PORT, SCRCPY_VERSION};
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use protos::*;
 use protos::ControlMessageType::{self, *};
 use protobuf::{Message};
-use tokio::io::AsyncReadExt;
+use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio::sync::mpsc::Sender;
 use crate::config_types::HexdumpLevel;
 
@@ -71,7 +72,7 @@ pub struct ScrcpyTouchEvent {
 impl ScrcpyTouchEvent {
     /// Serialize struct into big-endian bytes using BytesMut
     fn to_be_bytes(&self) -> Vec<u8> {
-        let mut buf = BytesMut::new();
+        let mut buf = TokioBytesMut::new();
         buf.extend_from_slice(&self.action.to_be_bytes());
         buf.extend_from_slice(&self.pointer_id.to_be_bytes());
         buf.extend_from_slice(&self.position.to_be_bytes());
@@ -103,7 +104,7 @@ pub struct ScrcpyScrollEvent {
 impl ScrcpyKeyEvent {
     /// Serialize struct into big-endian bytes using BytesMut
     fn to_be_bytes(&self) -> Vec<u8> {
-        let mut buf = BytesMut::new();
+        let mut buf = TokioBytesMut::new();
         buf.extend_from_slice(&self.action.to_be_bytes());
         buf.extend_from_slice(&self.key_code.to_be_bytes());
         buf.extend_from_slice(&self.repeat.to_be_bytes());
@@ -115,7 +116,7 @@ impl ScrcpyKeyEvent {
 impl ScrcpyScrollEvent {
     /// Serialize struct into big-endian bytes using BytesMut
     fn to_be_bytes(&self) -> Vec<u8> {
-        let mut buf = BytesMut::new();
+        let mut buf = TokioBytesMut::new();
         buf.extend_from_slice(&self.position.to_be_bytes());
         buf.extend_from_slice(&self.hscroll.to_be_bytes());
         buf.extend_from_slice(&self.vscroll.to_be_bytes());
@@ -133,7 +134,7 @@ pub struct ScrcpyPosition {
 impl ScrcpyPosition {
     /// Serialize struct into big-endian bytes using BytesMut
     fn to_be_bytes(&self) -> Vec<u8> {
-        let mut buf = BytesMut::new();
+        let mut buf = TokioBytesMut::new();
         buf.extend_from_slice(&self.point.to_be_bytes());
         buf.extend_from_slice(&self.screen_size.to_be_bytes());
         buf.to_vec() // convert BytesMut to Vec<u8>
@@ -149,7 +150,7 @@ pub struct ScrcpyPoint {
 impl ScrcpyPoint {
     /// Serialize struct into big-endian bytes using BytesMut
     fn to_be_bytes(&self) -> Vec<u8> {
-        let mut buf = BytesMut::new();
+        let mut buf = TokioBytesMut::new();
         buf.extend_from_slice(&self.x.to_be_bytes());
         buf.extend_from_slice(&self.y.to_be_bytes());
         buf.to_vec() // convert BytesMut to Vec<u8>
@@ -164,10 +165,68 @@ pub struct ScrcpySize {
 impl ScrcpySize {
     /// Serialize struct into big-endian bytes using BytesMut
     fn to_be_bytes(&self) -> Vec<u8> {
-        let mut buf = BytesMut::new();
+        let mut buf = TokioBytesMut::new();
         buf.extend_from_slice(&self.width.to_be_bytes());
         buf.extend_from_slice(&self.height.to_be_bytes());
         buf.to_vec() // convert BytesMut to Vec<u8>
+    }
+}
+
+pub struct ScrcpyReader<R> {
+    reader: R,
+    buf: BytesMut,   // reusable buffer
+}
+
+impl<R: AsyncRead + Unpin> ScrcpyReader<R> {
+    pub fn new(reader: R) -> Self {
+        Self {
+            reader,
+            buf: BytesMut::with_capacity(256 * 1024),
+        }
+    }
+
+    pub async fn read_chunks(&mut self) -> tokio::io::Result<Option<Vec<Bytes>>> {
+        // 1. Read header
+        let mut header = [0u8; SCRCPY_METADATA_HEADER_LEN];
+
+        if let Err(e) = self.reader.read_exact(&mut header).await {
+            if e.kind() == std::io::ErrorKind::UnexpectedEof {
+                return Ok(None);
+            }
+            return Err(e);
+        }
+
+        let pts = u64::from_be_bytes(header[..8].try_into().unwrap());
+        let size = u32::from_be_bytes(header[8..12].try_into().unwrap()) as usize;
+
+        // 2. Ensure capacity (no realloc if enough)
+        if self.buf.capacity() < size {
+            self.buf.reserve(size - self.buf.capacity());
+        }
+
+        // 3. Prepare buffer length
+        self.buf.clear();
+        self.buf.resize(size, 0);
+
+        // 4. Read payload exactly into reused buffer
+        self.reader.read_exact(&mut self.buf).await?;
+
+        // 5. Convert to Bytes WITHOUT COPY
+        let data = self.buf.split().freeze();
+
+        // 6. Chunk it
+        let mut chunks = Vec::with_capacity((size + MAX_DATA_LEN - 1) / MAX_DATA_LEN);
+
+        let mut offset = 0;
+        while offset < size {
+            let end = (offset + MAX_DATA_LEN).min(size);
+
+            chunks.push(data.slice(offset..end));
+
+            offset = end;
+        }
+
+        Ok(Some(chunks))
     }
 }
 async fn tsk_scrcpy_video(
