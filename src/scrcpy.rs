@@ -333,21 +333,21 @@ async fn tsk_scrcpy_video(
     loop {
         //Read video frames from SCRCPY server
         match reader.read_chunks().await {
-            Ok(Some((header, chunks))) => {
+            Ok(Some((media_header, chunks))) => {
                 //let rd_len = header.size ;
-                let dbg_len = min(header.size, 16);
+                let dbg_len = min(media_header.size, 16);
                 if dbg_count <  10
                 {
-                    if header.size > dbg_len
+                    if media_header.size > dbg_len
                     {
-                        let end_offset = header.size - dbg_len;
-                        debug!("Video task got frame config={:?}, ts={}, act size: {}, raw slice: {:02x?}...{:02x?}",header.config, header.timestamp, header.size, &chunks[0][..dbg_len], &chunks[0][end_offset..]);
+                        let end_offset = media_header.size - dbg_len;
+                        debug!("Video task got frame config={:?}, ts={}, act size: {}, raw slice: {:02x?}...{:02x?}",media_header.config, media_header.timestamp, media_header.size, &chunks[0][..dbg_len], &chunks[0][end_offset..]);
                     } else {
-                        debug!("Video task got frame config={:?}, ts={}, act size: {}, raw bytes: {:02x?}",header.config, header.timestamp, header.size, &chunks[0][..dbg_len]);
+                        debug!("Video task got frame config={:?}, ts={}, act size: {}, raw bytes: {:02x?}",media_header.config, media_header.timestamp, media_header.size, &chunks[0][..dbg_len]);
                     }
                     dbg_count += 1;
                 }
-                if !header.config
+                if !media_header.config
                 {
                     //wait for ACK
                     match ack_notify.send(()).await {
@@ -358,7 +358,7 @@ async fn tsk_scrcpy_video(
                         }
                     }
                 }
-                let header_size = if header.config {
+                let pk_header_size = if media_header.config {
                     2
                 } else {
                     2 + 8
@@ -369,32 +369,37 @@ async fn tsk_scrcpy_video(
                     //fragmented packet
                     for (i,chunk) in chunks.iter().enumerate()
                     {
-                        let mut payload = Vec::with_capacity(header_size + chunk.len());
+
                         let mut flags:u8;
                         let mut total_len =None;
+                        let mut payload;
                         if i==0
                         {
                             flags = ENCRYPTED | FRAME_TYPE_FIRST;
-                            total_len=Some(header.size as u32);
+                            total_len=Some((media_header.size + pk_header_size) as u32);
+                            payload = Vec::with_capacity(pk_header_size + chunk.len());
+                            if media_header.config
+                            {
+                                payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
+                                payload.extend_from_slice(&chunk);
+                            }
+                            else
+                            {
+                                payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
+                                payload.extend_from_slice(&media_header.timestamp.to_be_bytes());
+                                payload.extend_from_slice(&chunk);
+                            }
                         }
                         else if i== (chunks.len() - 1)
                         {
                             flags = ENCRYPTED | FRAME_TYPE_LAST;
+                            payload = chunk.to_vec();
                         }
                         else {
                             flags = ENCRYPTED;
+                            payload = chunk.to_vec();
                         }
-                        if header.config
-                        {
-                            payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
-                            payload.extend_from_slice(&chunk);
-                        }
-                        else
-                        {
-                            payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
-                            payload.extend_from_slice(&header.timestamp.to_be_bytes());
-                            payload.extend_from_slice(&chunk);
-                        }
+
 
                         let pkt_rsp = Packet {
                             channel: sid,
@@ -416,8 +421,8 @@ async fn tsk_scrcpy_video(
                 }
                 else {
                     //single packet
-                    let mut payload = Vec::with_capacity(header_size + chunks[0].len());
-                    if header.config
+                    let mut payload = Vec::with_capacity(pk_header_size + chunks[0].len());
+                    if media_header.config
                     {
                         payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
                         payload.extend_from_slice(&chunks[0]);
@@ -425,7 +430,7 @@ async fn tsk_scrcpy_video(
                     else
                     {
                         payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
-                        payload.extend_from_slice(&header.timestamp.to_be_bytes());
+                        payload.extend_from_slice(&media_header.timestamp.to_be_bytes());
                         payload.extend_from_slice(&chunks[0]);
                     }
                     let pkt_rsp = Packet {
@@ -490,21 +495,21 @@ async fn tsk_scrcpy_audio(
     loop {
         //Read video frames from SCRCPY server
         match reader.read_chunks().await {
-            Ok(Some((header, chunks))) => {
-                let rd_len = header.size ;
+            Ok(Some((media_header, chunks))) => {
+                let rd_len = media_header.size ;
                 let dbg_len = min(rd_len, 16);
                 if dbg_count <  10
                 {
                     if rd_len > dbg_len
                     {
                         let end_offset = rd_len - dbg_len;
-                        debug!("Audio task got frame config={:?}, ts={}, act size: {}, raw slice: {:02x?}...{:02x?}",header.config, header.timestamp, rd_len, &chunks[0][..dbg_len], &chunks[0][end_offset..]);
+                        debug!("Audio task got frame config={:?}, ts={}, act size: {}, raw slice: {:02x?}...{:02x?}",media_header.config, media_header.timestamp, rd_len, &chunks[0][..dbg_len], &chunks[0][end_offset..]);
                     } else {
-                        debug!("Audio task got frame config={:?}, ts={}, act size: {}, raw bytes: {:02x?}",header.config, header.timestamp, rd_len, &chunks[0][..dbg_len]);
+                        debug!("Audio task got frame config={:?}, ts={}, act size: {}, raw bytes: {:02x?}",media_header.config, media_header.timestamp, rd_len, &chunks[0][..dbg_len]);
                     }
                     dbg_count += 1;
                 }
-                if !header.config
+                if !media_header.config
                 {
                     //wait for ACK
                     match ack_notify.send(()).await {
@@ -515,7 +520,7 @@ async fn tsk_scrcpy_audio(
                         }
                     }
                 }
-                let header_size = if header.config {
+                let pk_header_size = if media_header.config {
                     2
                 } else {
                     2 + 8
@@ -527,30 +532,32 @@ async fn tsk_scrcpy_audio(
                     {
                         let mut flags:u8;
                         let mut total_len =None;
+                        let mut payload;
                         if i==0
                         {
                             flags = ENCRYPTED | FRAME_TYPE_FIRST;
-                            total_len=Some(header.size as u32);
+                            total_len=Some((media_header.size + pk_header_size) as u32);
+                            payload = Vec::with_capacity(pk_header_size + chunk.len());
+                            if media_header.config
+                            {
+                                payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
+                                payload.extend_from_slice(&chunk);
+                            }
+                            else
+                            {
+                                payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
+                                payload.extend_from_slice(&media_header.timestamp.to_be_bytes());
+                                payload.extend_from_slice(&chunk);
+                            }
                         }
                         else if i== (chunks.len() - 1)
                         {
                             flags = ENCRYPTED | FRAME_TYPE_LAST;
+                            payload = chunk.to_vec();
                         }
                         else {
                             flags = ENCRYPTED;
-                        }
-
-                        let mut payload = Vec::with_capacity(header_size + chunk.len());
-                        if header.config
-                        {
-                            payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
-                            payload.extend_from_slice(&chunk);
-                        }
-                        else
-                        {
-                            payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
-                            payload.extend_from_slice(&header.timestamp.to_be_bytes());
-                            payload.extend_from_slice(&chunk);
+                            payload = chunk.to_vec();
                         }
 
                         let mut pkt_rsp = Packet {
@@ -574,8 +581,8 @@ async fn tsk_scrcpy_audio(
                 else
                 {
                     //single packet
-                    let mut payload = Vec::with_capacity(header_size + chunks[0].len());
-                    if header.config
+                    let mut payload = Vec::with_capacity(pk_header_size + chunks[0].len());
+                    if media_header.config
                     {
                         payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
                         payload.extend_from_slice(&chunks[0]);
@@ -583,7 +590,7 @@ async fn tsk_scrcpy_audio(
                     else
                     {
                         payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
-                        payload.extend_from_slice(&header.timestamp.to_be_bytes());
+                        payload.extend_from_slice(&media_header.timestamp.to_be_bytes());
                         payload.extend_from_slice(&chunks[0]);
                     }
                     let pkt_rsp = Packet {
