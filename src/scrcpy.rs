@@ -3,6 +3,7 @@ use std::future::Future;
 use std::io;
 use std::sync::Arc;
 use std::time::Duration;
+use std::time::Instant;
 use flume::SendError;
 use libc::sigdelset;
 use log::debug;
@@ -173,7 +174,6 @@ async fn tsk_scrcpy_video(
     mut stream: TcpStream,
     ack_notify:Sender<()>,
     video_tx: flume::Sender<Packet>,
-    max_unack:u32,
     sid:u8,
 ) -> Result<()> {
     info!("Starting video server!");
@@ -194,9 +194,11 @@ async fn tsk_scrcpy_video(
     debug!("SCRCPY Video entering main loop");
     //let mut reassembler = NalReassembler::new();
     let mut dbg_count=0;
+
     loop {
 
         //Read video frames from SCRCPY server
+        let start = Instant::now();
         match read_scrcpy_packet(&mut stream).await {
             Ok((pts, h264_data)) => {
                 let mut payload: Vec<u8>=Vec::new();
@@ -240,6 +242,7 @@ async fn tsk_scrcpy_video(
                         {
                             if !config_frame
                             {
+                                debug!("scrcpy_video packet took {} ms to read",start.elapsed());
                                 //wait for ACK
                                 match ack_notify.send(()).await {
                                     Ok(()) => {}
@@ -356,7 +359,6 @@ async fn tsk_scrcpy_audio(
     mut stream: TcpStream,
     mut ack_notify:Sender<()>,
     audio_tx: flume::Sender<Packet>,
-    max_unack:u32,
     sid:u8,
 ) -> Result<()> {
     info!("Starting audio server!");
@@ -1002,7 +1004,6 @@ pub(crate) async fn tsk_adb_scrcpy(
                         video_stream,
                         ack_video_tx,
                         video_tx,
-                        video_codec_params.max_unack,
                         video_codec_params.sid,
                     ).await;
                     let _ = done_th_tx_video.send(res);
@@ -1013,7 +1014,6 @@ pub(crate) async fn tsk_adb_scrcpy(
                         audio_stream,
                         ack_audio_tx,
                         audio_tx,
-                        audio_codec_params.max_unack,
                         audio_codec_params.sid,
                     ).await;
                     let _ = done_th_tx_audio.send(res);
