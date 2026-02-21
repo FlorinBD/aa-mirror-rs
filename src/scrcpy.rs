@@ -385,6 +385,10 @@ async fn tsk_scrcpy_video(
                 error!("scrcpy video read failed");
                 return Err(Box::from("scrcpy video read failed"));
             }
+            Err(e) => {
+                error!("scrcpy video read failed: {}", e);
+                break;
+            }
         }
 
     }
