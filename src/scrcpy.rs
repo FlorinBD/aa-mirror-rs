@@ -315,7 +315,7 @@ async fn tsk_scrcpy_video(
     debug!("SCRCPY Video entering main loop");
     //let mut reassembler = NalReassembler::new();
     let mut dbg_count=0;
-    let mut reader=ScrcpyMediaReader::new(&mut stream);
+    let mut reader=ScrcpyMediaReader::new(stream);
     loop {
         //Read video frames from SCRCPY server
         let start = Instant::now();
