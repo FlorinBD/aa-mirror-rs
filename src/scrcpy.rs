@@ -373,9 +373,11 @@ async fn tsk_scrcpy_video(
                     {
                         let mut payload = Vec::with_capacity(header_size + chunk.len());
                         let mut flags:u8;
+                        let mut total_len =None;
                         if i==0
                         {
                             flags = ENCRYPTED | FRAME_TYPE_FIRST;
+                            total_len=Some(header.size as u32);
                         }
                         else if i== (chunks.len() - 1)
                         {
@@ -399,7 +401,7 @@ async fn tsk_scrcpy_video(
                         let pkt_rsp = Packet {
                             channel: sid,
                             flags: flags,
-                            final_length: None,
+                            final_length: total_len,
                             payload,
                         };
                         match video_tx.send_async(pkt_rsp).await
@@ -527,9 +529,11 @@ async fn tsk_scrcpy_audio(
                     for (i,chunk) in chunks.iter().enumerate()
                     {
                         let mut flags:u8;
+                        let mut total_len =None;
                         if i==0
                         {
                             flags = ENCRYPTED | FRAME_TYPE_FIRST;
+                            total_len=Some(header.size as u32);
                         }
                         else if i== (chunks.len() - 1)
                         {
@@ -555,7 +559,7 @@ async fn tsk_scrcpy_audio(
                         let mut pkt_rsp = Packet {
                             channel: sid,
                             flags: flags,
-                            final_length: None,
+                            final_length: total_len,
                             payload,
                         };
                         match audio_tx.send_async(pkt_rsp).await
