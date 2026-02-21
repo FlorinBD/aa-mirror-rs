@@ -191,7 +191,7 @@ pub struct ScrcpyMediaReader {
     buf: BytesMut,   // reusable buffer
 }
 
-impl<R: AsyncRead + Unpin> ScrcpyMediaReader {
+impl ScrcpyMediaReader {
     pub fn new(stream: TcpStream) -> Self {
         Self {
             stream,
@@ -228,9 +228,9 @@ impl<R: AsyncRead + Unpin> ScrcpyMediaReader {
 
     pub async fn read_chunks(&mut self) -> tokio::io::Result<Option<(ScrcpyMediaHeader, Vec<Bytes>)>> {
         // 1. Read header
-        self.read_exact_into(SCRCPY_METADATA_HEADER_LEN).await?;
+        self.read_exact_into_buf(SCRCPY_METADATA_HEADER_LEN).await?;
 
-        let header = self.parse_header(&self.buf[..SCRCPY_METADATA_HEADER_LEN]);
+        let header = ScrcpyMediaReader::parse_header(&self.buf[..SCRCPY_METADATA_HEADER_LEN]);
 
         // 2. Read payload exactly
         self.read_exact_into(header.size).await?;
