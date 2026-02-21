@@ -335,16 +335,16 @@ async fn tsk_scrcpy_video(
         let start = Instant::now();
         match reader.read_chunks().await {
             Ok(Some((header, chunks))) => {
-                let rd_len = header.size ;
-                let dbg_len = min(rd_len, 16);
+                //let rd_len = header.size ;
+                let dbg_len = min(header.size, 16);
                 if dbg_count <  10
                 {
-                    if rd_len > dbg_len
+                    if header.size > dbg_len
                     {
-                        let end_offset = rd_len - dbg_len;
-                        debug!("Video task got frame config={:?}, ts={}, act size: {}, raw slice: {:02x?}...{:02x?}",header.config, header.timestamp, rd_len, &chunks[0][..dbg_len], &chunks[0][end_offset..]);
+                        let end_offset = header.size - dbg_len;
+                        debug!("Video task got frame config={:?}, ts={}, act size: {}, raw slice: {:02x?}...{:02x?}",header.config, header.timestamp, header.size, &chunks[0][..dbg_len], &chunks[0][end_offset..]);
                     } else {
-                        debug!("Video task got frame config={:?}, ts={}, act size: {}, raw bytes: {:02x?}",header.config, header.timestamp, rd_len, &chunks[0][..dbg_len]);
+                        debug!("Video task got frame config={:?}, ts={}, act size: {}, raw bytes: {:02x?}",header.config, header.timestamp, header.size, &chunks[0][..dbg_len]);
                     }
                     dbg_count += 1;
                 }
@@ -364,7 +364,12 @@ async fn tsk_scrcpy_video(
                 //send all chunks
                 for chunk in chunks
                 {
-                    let mut payload: Vec<u8>=Vec::new();
+                    let header_size = if header.config {
+                        2
+                    } else {
+                        2 + 8
+                    };
+                    let mut payload = Vec::with_capacity(header_size + chunk.len());
                     if header.config
                     {
                         payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
@@ -377,7 +382,7 @@ async fn tsk_scrcpy_video(
                         payload.extend_from_slice(&chunk);
                     }
 
-                    let mut pkt_rsp = Packet {
+                    let pkt_rsp = Packet {
                         channel: sid,
                         flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                         final_length: None,
@@ -467,7 +472,12 @@ async fn tsk_scrcpy_audio(
                 //send all chunks
                 for chunk in chunks
                 {
-                    let mut payload: Vec<u8>=Vec::new();
+                    let header_size = if header.config {
+                        2
+                    } else {
+                        2 + 8
+                    };
+                    let mut payload = Vec::with_capacity(header_size + chunk.len());
                     if header.config
                     {
                         payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
