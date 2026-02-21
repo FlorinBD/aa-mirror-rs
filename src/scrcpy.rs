@@ -517,7 +517,6 @@ async fn tsk_scrcpy_audio(
                         }
                     }
                 }
-
                 let header_size = if header.config {
                     2
                 } else {
