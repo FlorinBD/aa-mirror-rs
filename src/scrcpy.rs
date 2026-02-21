@@ -258,7 +258,7 @@ impl ScrcpyMediaReader {
         let key_frame = (pts & 0x4000_0000_0000_0000u64) != 0;
         let rec_ts = pts & 0x3FFF_FFFF_FFFF_FFFFu64;
         let config_frame = (pts & 0x8000_0000_0000_0000u64) != 0;
-        ScrcpyMediaHeader {size:size, timestamp: rec_ts, config: config_frame, keyframe: key_frame };
+        ScrcpyMediaHeader {size:size, timestamp: rec_ts, config: config_frame, keyframe: key_frame }
     }
 
     pub async fn read_video_codec_info(&mut self)  -> io::Result<ScrcpyVideoCodecInfo> {
