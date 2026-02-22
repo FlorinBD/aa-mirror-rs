@@ -1302,7 +1302,6 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                                     final_length: None,
                                     payload: payload.clone(),
                                 };
-                                //scrcpy_cmd.send_async(pkt_rsp).await?;
                                 if let Err(_) = scrcpy_cmd.send_async(pkt_rsp).await{
                                     error!( "{} mpsc send error",get_name());
                                 };
