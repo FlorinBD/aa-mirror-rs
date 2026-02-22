@@ -1668,6 +1668,7 @@ pub async fn th_media_sink_audio_guidance(ch_id: i32, enabled:bool, tx_srv: Send
 pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, scrcpy_cmd: flume::Sender<Packet>, acfg:AudioConfig, mut audio_params:AudioStreamingParams) -> Result<()>{
     info!( "{}: Starting...", get_name());
     let mut audio_stream_started:bool=false;
+    let mut audio_stream_paused=false;
     let mut md_connected=false;
     let mut audio_focus=false;
     let mut config_recived=false;
@@ -1862,7 +1863,72 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                     debug!("{} Received {} message: MEDIA_MESSAGE_AUDIO_UNDERFLOW_NOTIFICATION", ch_id.to_string(), message_id);
                 }
                 else {
-                    error!("{}: Unable to deserialize MEDIA_MESSAGE_AUDIO_UNDERFLOW_NOTIFICATION", ch_id.to_string())
+                    error!("{}: Unable to deserialize AudioUnderflowNotification", ch_id.to_string())
+                }
+            }
+            else if message_id == ControlMessageType::MESSAGE_AUDIO_FOCUS_NOTIFICATION
+            {
+                //Proxy msg from Control channel
+                let data = &pkt.payload[2..]; // start of message data, without message_id
+                if let Ok(msg) = AudioFocusNotification::parse_from_bytes(&data) {
+                    debug!("{} Received {} message: MESSAGE_AUDIO_FOCUS_NOTIFICATION", ch_id.to_string(), message_id);
+                    if (msg.focus_state() == AudioFocusStateType::AUDIO_FOCUS_STATE_GAIN) || (msg.focus_state() == AudioFocusStateType::AUDIO_FOCUS_STATE_GAIN_TRANSIENT) || (msg.focus_state() == AudioFocusStateType::AUDIO_FOCUS_STATE_GAIN_MEDIA_ONLY)
+                    {
+                        audio_focus=true;
+                        if audio_stream_started
+                        {
+                            if audio_stream_paused
+                            {
+                                debug!("{}: Resuming audio stream", get_name());
+                                audio_stream_paused=false;
+                                start_media(&tx_srv, ch_id as u8, session_id).await?;
+                                let mut payload = Vec::new();
+                                payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+                                payload.extend_from_slice(&(CustomCommand::CMD_RESUME_AUDIO_RECORDING as u16).to_be_bytes());
+
+                                let pkt_rsp = Packet {
+                                    channel: ch_id as u8,
+                                    flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                                    final_length: None,
+                                    payload: payload.clone(),
+                                };
+                                if let Err(_) = scrcpy_cmd.send_async(pkt_rsp).await{
+                                    error!( "{} mpsc send error",get_name());
+                                };
+                            }
+                        }
+                        else {
+                            error!("{}: Audio stream not started, ignoring message", get_name());
+                        }
+                    }
+                    else {
+                        audio_focus=false;
+                        if audio_stream_started
+                        {
+                            if !audio_stream_paused
+                            {
+                                debug!("{}: Pausing audio stream", get_name());
+                                audio_stream_paused=true;
+                                stop_media(&tx_srv, ch_id as u8).await?;
+                                let mut payload = Vec::new();
+                                payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+                                payload.extend_from_slice(&(CustomCommand::CMD_PAUSE_AUDIO_RECORDING as u16).to_be_bytes());
+
+                                let pkt_rsp = Packet {
+                                    channel: ch_id as u8,
+                                    flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                                    final_length: None,
+                                    payload: payload.clone(),
+                                };
+                                if let Err(_) = scrcpy_cmd.send_async(pkt_rsp).await{
+                                    error!( "{} mpsc send error",get_name());
+                                };
+                            }
+                        }
+                    }
+                }
+                else {
+                    error!("{}: Unable to deserialize AudioFocusNotification", ch_id.to_string())
                 }
             }
             else
