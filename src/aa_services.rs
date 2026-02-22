@@ -1902,6 +1902,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                         }
                     }
                     else {
+                        //focus lost
                         audio_focus=false;
                         if audio_stream_started
                         {
