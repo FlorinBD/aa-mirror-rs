@@ -371,7 +371,7 @@ async fn tsk_scrcpy_video(
                     {
 
                         let mut flags:u8;
-                        let mut total_len =None;
+                        let mut total_len = None;
                         let mut payload;
                         if i==0
                         {
@@ -395,7 +395,8 @@ async fn tsk_scrcpy_video(
                             flags = ENCRYPTED | FRAME_TYPE_LAST;
                             payload = chunk.to_vec();
                         }
-                        else {
+                        else
+                        {
                             flags = ENCRYPTED;
                             payload = chunk.to_vec();
                         }
@@ -555,7 +556,8 @@ async fn tsk_scrcpy_audio(
                             flags = ENCRYPTED | FRAME_TYPE_LAST;
                             payload = chunk.to_vec();
                         }
-                        else {
+                        else
+                        {
                             flags = ENCRYPTED;
                             payload = chunk.to_vec();
                         }
