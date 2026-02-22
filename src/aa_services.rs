@@ -1160,6 +1160,25 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                             stop_media(&tx_srv, ch_id as u8).await?;
                             tokio::time::sleep(Duration::from_millis(100)).await;
                             start_media(&tx_srv, ch_id as u8, session_id).await?;
+                            //FIXME this is for TEST ONLY, check if we need some confirmation from HU, try to start video wo. confirmation ATM
+                            debug!( "{}, channel {:?}: MD connected, starting video streaming", get_name(), pkt.channel);
+                            video_stream_started=true;
+                            video_stream_paused=false;
+                            let bytes: Vec<u8> = postcard::to_stdvec(&video_params)?;
+                            let mut payload = Vec::new();
+                            payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+                            payload.extend_from_slice(&(CustomCommand::CMD_START_VIDEO_RECORDING as u16).to_be_bytes());
+                            payload.extend_from_slice(&bytes);
+
+                            let pkt_rsp = Packet {
+                                channel: ch_id as u8,
+                                flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                                final_length: None,
+                                payload: payload.clone(),
+                            };
+                            if let Err(_) = scrcpy_cmd.send_async(pkt_rsp).await{
+                                error!( "{} mpsc send error",get_name());
+                            };
                         }
                         else
                         {
@@ -1182,25 +1201,9 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         stop_media(&tx_srv, ch_id as u8).await?;
                         tokio::time::sleep(Duration::from_millis(100)).await;
                         start_media(&tx_srv, ch_id as u8, session_id).await?;
-                        //FIXME this is for TEST ONLY, check if we need some confirmation from HU, try to start video wo. confirmation ATM
-                        debug!( "{}, channel {:?}: MD connected, starting video streaming", get_name(), pkt.channel);
-                        video_stream_started=true;
-                        video_stream_paused=false;
-                        let bytes: Vec<u8> = postcard::to_stdvec(&video_params)?;
-                        let mut payload = Vec::new();
-                        payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
-                        payload.extend_from_slice(&(CustomCommand::CMD_START_VIDEO_RECORDING as u16).to_be_bytes());
-                        payload.extend_from_slice(&bytes);
+                        //Send first screen again
+                        show_first_screen(&tx_srv, ch_id as u8, &wait_screen_config_frame, &wait_screen_first_frame).await?;
 
-                        let pkt_rsp = Packet {
-                            channel: ch_id as u8,
-                            flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                            final_length: None,
-                            payload: payload.clone(),
-                        };
-                        if let Err(_) = scrcpy_cmd.send_async(pkt_rsp).await{
-                            error!( "{} mpsc send error",get_name());
-                        };
                     }
                     md_connected=false;
                 }
@@ -1259,43 +1262,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                             if !first_screen_sent
                             {
                                 info!( "{}, channel {:?}: MD not connected yet, showing startup screen", get_name(), pkt.channel);
-                                //Send config frame
-                                let mut payload=wait_screen_config_frame.to_vec();
-                                payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16) >> 8) as u8);
-                                payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16) & 0xff) as u8);
-
-                                let pkt_rsp = Packet {
-                                    channel: ch_id as u8,
-                                    flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                                    final_length: None,
-                                    payload: payload,
-                                };
-                                //tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
-                                if let Err(_) = tx_srv.send(pkt_rsp).await{
-                                    error!( "{} mpsc send error",get_name());
-                                };
-                                //Send first frame
-                                let mut payload=wait_screen_first_frame.to_vec();
-                                payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) >> 8) as u8);
-                                payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_DATA as u16) & 0xff) as u8);
-                                payload.insert(2, 0);//timestamp 0.0
-                                payload.insert(3, 0);
-                                payload.insert(4, 0);
-                                payload.insert(5, 0);
-                                payload.insert(6, 0);
-                                payload.insert(7, 0);
-                                payload.insert(8, 0);
-                                payload.insert(9, 0);
-                                let pkt_rsp = Packet {
-                                    channel: ch_id as u8,
-                                    flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                                    final_length: None,
-                                    payload: payload,
-                                };
-                                //tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
-                                if let Err(_) = tx_srv.send(pkt_rsp).await{
-                                    error!( "{} mpsc send error",get_name());
-                                };
+                                show_first_screen(&tx_srv, ch_id as u8, &wait_screen_config_frame, &wait_screen_first_frame).await?;
                                 first_screen_sent=true;
                             }
                             else {
@@ -1485,6 +1452,39 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
         format!("<i><bright-black> aa-mirror/{}: </>", dev)
     }
 
+    async fn show_first_screen(tx: &Sender<Packet>, ch_id: u8, cfg_frame:&Vec<u8>, first_frame:&Vec<u8>)
+    {
+        info!( "{}, channel {:?}: MD not connected yet, showing startup screen", get_name(), pkt.channel);
+        //Send config frame
+        let mut payload = Vec::with_capacity(cfg_frame.len() + 2);
+        payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
+        payload.extend_from_slice(&cfg_frame);
+
+        let pkt_rsp = Packet {
+            channel: ch_id,
+            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+            final_length: None,
+            payload: payload,
+        };
+
+        if let Err(_) = tx.send(pkt_rsp).await{
+            error!( "{} mpsc send error",get_name());
+        };
+        //Send first frame
+        let mut payload = Vec::with_capacity(first_frame.len() + 10);
+        payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
+        payload.extend_from_slice(&0u64.to_be_bytes());
+        payload.extend_from_slice(&first_frame);
+        let pkt_rsp = Packet {
+            channel: ch_id,
+            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+            final_length: None,
+            payload: payload,
+        };
+        if let Err(_) = tx.send(pkt_rsp).await{
+            error!( "{} mpsc send error",get_name());
+        };
+    }
 
     async fn start_media(tx: &Sender<Packet>, ch_id: u8, session_id:i32)->Result<()> {
         info!( "{}, channel {:?}: Sending START command", get_name(), ch_id);
