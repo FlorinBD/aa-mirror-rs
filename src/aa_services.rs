@@ -1074,7 +1074,8 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
     info!( "{}: Starting...", get_name());
     let mut md_connected=false;
     let mut first_screen_sent=false;
-    let mut video_stream_started:bool=false;
+    let mut video_stream_started=false;
+    let mut video_stream_paused=false;
     let mut video_focus=false;
     let mut config_recived=false;
     let mut session_id=1;
@@ -1156,7 +1157,9 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                             session_id +=1;
                             video_stream_started=false;
                             first_screen_sent=false;
-                            stop_start_media(&tx_srv, ch_id as u8, session_id).await?;
+                            stop_media(&tx_srv, ch_id as u8).await?;
+                            tokio::time::sleep(Duration::from_millis(100)).await;
+                            start_media(&tx_srv, ch_id as u8, session_id).await?;
                         }
                         else
                         {
@@ -1176,7 +1179,9 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         session_id +=1;
                         video_stream_started=false;
                         first_screen_sent=false;
-                        stop_start_media(&tx_srv, ch_id as u8, session_id).await?;
+                        stop_media(&tx_srv, ch_id as u8).await?;
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                        start_media(&tx_srv, ch_id as u8, session_id).await?;
                     }
                     md_connected=false;
                 }
@@ -1302,8 +1307,32 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                                     error!( "{} mpsc send error",get_name());
                                 };
                             }
-                            else {
-                                info!("{}, channel {:?}: video streaming already started, ignoring packet", get_name(), pkt.channel);
+                            else
+                            {
+                                if video_stream_paused
+                                {
+                                    debug!("{}, channel {:?}: resuming video streaming", get_name(), pkt.channel);
+                                    video_stream_paused=false;
+                                    let mut payload = Vec::new();
+                                    payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+                                    payload.extend_from_slice(&(CustomCommand::CMD_RESUME_VIDEO_RECORDING as u16).to_be_bytes());
+
+                                    let pkt_rsp = Packet {
+                                        channel: ch_id as u8,
+                                        flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                                        final_length: None,
+                                        payload: payload.clone(),
+                                    };
+                                    if let Err(_) = scrcpy_cmd.send_async(pkt_rsp).await{
+                                        error!( "{} mpsc send error",get_name());
+                                    };
+                                    start_media(&tx_srv, ch_id as u8, session_id).await?;
+                                }
+                                else
+                                {
+                                    debug!("{}, channel {:?}: video streaming already started, ignoring packet", get_name(), pkt.channel);
+                                }
+
                             }
                         }
 
@@ -1312,6 +1341,25 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                     {
                         video_focus=false;
                         debug!( "{} video focus lost",get_name());
+                        if video_stream_started
+                        {
+                            debug!("{}, channel {:?}: pausing video streaming", get_name(), pkt.channel);
+                            video_stream_paused=true;
+                            let mut payload = Vec::new();
+                            payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+                            payload.extend_from_slice(&(CustomCommand::CMD_PAUSE_VIDEO_RECORDING as u16).to_be_bytes());
+
+                            let pkt_rsp = Packet {
+                                channel: ch_id as u8,
+                                flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                                final_length: None,
+                                payload: payload.clone(),
+                            };
+                            if let Err(_) = scrcpy_cmd.send_async(pkt_rsp).await{
+                                error!( "{} mpsc send error",get_name());
+                            };
+                            stop_media(&tx_srv, ch_id as u8).await?;
+                        }
                     }
                 }
                 else
@@ -1417,22 +1465,9 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
         let dev = "MediaSinkService Video";
         format!("<i><bright-black> aa-mirror/{}: </>", dev)
     }
-    async fn stop_start_media(tx: &Sender<Packet>, ch_id: u8, session_id:i32)->Result<()> {
-        info!( "{}, channel {:?}: Sending STOP command", get_name(), ch_id);
-        let media_stop= Stop::new();
-        let mut payload: Vec<u8>=Vec::new();
-        payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_STOP as u16).to_be_bytes());
-        payload.extend_from_slice(&(media_stop.write_to_bytes()?));
-        let pkt_rsp = Packet {
-            channel: ch_id,
-            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-            final_length: None,
-            payload: payload,
-        };
-        if let Err(_) = tx.send(pkt_rsp).await{
-            error!( "{} send error",get_name());
-        };
-        tokio::time::sleep(Duration::from_millis(100)).await;
+
+
+    async fn start_media(tx: &Sender<Packet>, ch_id: u8, session_id:i32)->Result<()> {
         info!( "{}, channel {:?}: Sending START command", get_name(), ch_id);
         let mut start_req = Start::new();
         start_req.set_session_id(session_id);
@@ -1449,6 +1484,24 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
         };
         if let Err(_) = tx.send(pkt_rsp).await{
             error!( "{} response send error",get_name());
+        };
+        Ok(())
+    }
+
+    async fn stop_media(tx: &Sender<Packet>, ch_id: u8)->Result<()> {
+        info!( "{}, channel {:?}: Sending STOP command", get_name(), ch_id);
+        let media_stop= Stop::new();
+        let mut payload: Vec<u8>=Vec::new();
+        payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_STOP as u16).to_be_bytes());
+        payload.extend_from_slice(&(media_stop.write_to_bytes()?));
+        let pkt_rsp = Packet {
+            channel: ch_id,
+            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+            final_length: None,
+            payload: payload,
+        };
+        if let Err(_) = tx.send(pkt_rsp).await{
+            error!( "{} send error",get_name());
         };
         Ok(())
     }

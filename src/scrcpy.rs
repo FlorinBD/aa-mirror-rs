@@ -2,6 +2,7 @@ use std::cmp::min;
 use std::future::Future;
 use std::io;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use std::time::Instant;
 use bytes::{BytesMut, Bytes, Buf};
@@ -309,6 +310,7 @@ async fn tsk_scrcpy_video(
     stream: TcpStream,
     ack_notify:Sender<()>,
     video_tx: flume::Sender<Packet>,
+    pause_mode: Arc<AtomicBool>,
     sid:u8,
 ) -> Result<()> {
     info!("Starting video server!");
@@ -346,6 +348,10 @@ async fn tsk_scrcpy_video(
                         debug!("Video task got frame config={:?}, ts={}, act size: {}, raw bytes: {:02x?}",media_header.config, media_header.timestamp, media_header.size, &chunks[0][..dbg_len]);
                     }
                     dbg_count += 1;
+                }
+                if pause_mode.load(Ordering::Relaxed)
+                {
+                    continue;
                 }
                 if !media_header.config
                 {
@@ -472,6 +478,7 @@ async fn tsk_scrcpy_audio(
     stream: TcpStream,
     mut ack_notify:Sender<()>,
     audio_tx: flume::Sender<Packet>,
+    pause_mode: Arc<AtomicBool>,
     sid:u8,
 ) -> Result<()> {
     info!("Starting audio server!");
@@ -509,6 +516,10 @@ async fn tsk_scrcpy_audio(
                         debug!("Audio task got frame config={:?}, ts={}, act size: {}, raw bytes: {:02x?}",media_header.config, media_header.timestamp, rd_len, &chunks[0][..dbg_len]);
                     }
                     dbg_count += 1;
+                }
+                if pause_mode.load(Ordering::Relaxed)
+                {
+                    continue;
                 }
                 if !media_header.config
                 {
@@ -1091,11 +1102,19 @@ pub(crate) async fn tsk_adb_scrcpy(
                 let (ack_audio_tx, mut ack_audio_rx) = mpsc::channel::<()>(audio_max_unack_mpsc);
                 let (ack_video_tx, mut ack_video_rx) = mpsc::channel::<()>(video_max_unack_mpsc);
                 let (tx_ctrl, rx_ctrl)=flume::bounded::<Packet>(5);
+                //Pause/Resume streaming control
+                let pause_mode_audio = Arc::new(AtomicBool::new(false));
+                let pause_mode_rd_audio = pause_mode_audio.clone();
+                let pause_mode_ctrl_audio = pause_mode_audio.clone();
+                let pause_mode_video = Arc::new(AtomicBool::new(false));
+                let pause_mode_rd_video = pause_mode_video.clone();
+                let pause_mode_ctrl_video = pause_mode_video.clone();
                 hnd_scrcpy_video = tokio_uring::spawn(async move {
                     let res = tsk_scrcpy_video(
                         video_stream,
                         ack_video_tx,
                         video_tx,
+                        pause_mode_rd_video,
                         video_codec_params.sid,
                     ).await;
                     let _ = done_th_tx_video.send(res);
@@ -1106,6 +1125,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                         audio_stream,
                         ack_audio_tx,
                         audio_tx,
+                        pause_mode_rd_audio,
                         audio_codec_params.sid,
                     ).await;
                     let _ = done_th_tx_audio.send(res);
@@ -1155,7 +1175,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                                 else if cmd_id == CustomCommand::CANCEL as i32
                                 {
 
-                                    info!("tsk_scrcpy CANCEL CMD received, stopping all tasks");
+                                    debug!("tsk_scrcpy CANCEL CMD received, stopping all tasks");
                                     hnd_scrcpy_audio.abort();
                                     hnd_scrcpy_video.abort();
                                     //drop(tx_ack_audio);
@@ -1165,6 +1185,34 @@ pub(crate) async fn tsk_adb_scrcpy(
                                         error!( "tsk_scrcpy control proxy send error, buffer full?");
                                     };
                                     break;
+                                }
+                                else if cmd_id == CustomCommand::CMD_PAUSE_AUDIO_RECORDING as i32
+                                {
+                                    debug!("tsk_scrcpy CMD_PAUSE_AUDIO_RECORDING recived");
+                                    pause_mode_ctrl_audio.store(true, Ordering::Relaxed);
+                                    continue;
+                                }
+                                else if cmd_id == CustomCommand::CMD_RESUME_AUDIO_RECORDING as i32
+                                {
+                                    debug!("tsk_scrcpy CMD_RESUME_AUDIO_RECORDING recived");
+                                    pause_mode_ctrl_audio.store(false, Ordering::Relaxed);
+                                    continue;
+                                }
+                                else if cmd_id == CustomCommand::CMD_PAUSE_VIDEO_RECORDING as i32
+                                {
+                                    debug!("tsk_scrcpy CMD_PAUSE_VIDEO_RECORDING recived");
+                                    pause_mode_ctrl_video.store(true, Ordering::Relaxed);
+                                    continue;
+                                }
+                                else if cmd_id == CustomCommand::CMD_RESUME_VIDEO_RECORDING as i32
+                                {
+                                    debug!("tsk_scrcpy CMD_RESUME_VIDEO_RECORDING recived");
+                                    pause_mode_ctrl_video.store(false, Ordering::Relaxed);
+                                    continue;
+                                }
+                                else
+                                {
+                                    error!("tsk_scrcpy unmanaged custom command received: {}",cmd_id);
                                 }
                             }
                             else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK as i32
