@@ -966,7 +966,7 @@ pub async fn ch_proxy(
                             let data = &pkt.payload[2..]; // start of message data, without message_id
                             if let Ok(msg) = AudioFocusNotification::parse_from_bytes(&data) {
                                 info!( "{} AUDIO_FOCUS_STATE received is: {:?}",get_name(), msg.focus_state());
-                                if msg.focus_state() == AudioFocusStateType::AUDIO_FOCUS_STATE_GAIN
+                                if (msg.focus_state() == AudioFocusStateType::AUDIO_FOCUS_STATE_GAIN) || (msg.focus_state() == AudioFocusStateType::AUDIO_FOCUS_STATE_GAIN_TRANSIENT)
                                 {
                                     if !ch_opened
                                     {
@@ -992,12 +992,23 @@ pub async fn ch_proxy(
                                             };
                                         }
                                         ch_opened=true;
+                                        continue;
                                     }
 
                                 }
-                                else 
+                                if ch_opened
                                 {
-                                    //Audio focus lost
+                                    //proxy to Audio channel, we have to manage focus there not in control channel
+                                    let idx=get_service_index(&channel_status, pkt.channel as i32);
+                                    if idx !=255
+                                    {
+                                        if let Err(_) = srv_senders[idx].send(pkt).await{
+                                            error!( "{} srv send error",get_name());
+                                        };
+                                    }
+                                    else {
+                                        error!( "{} Invalid channel {}",get_name(), pkt.channel);
+                                    }
                                 }
 
                             }
