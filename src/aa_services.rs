@@ -1163,7 +1163,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         }
                         else
                         {
-                            info!("{} MD connected, but video is streaming, ignoring CMD",get_name());
+                            error!("{} MD connected, but video is streaming already?, ignoring CMD",get_name());
                         }
                     }
                     else
@@ -1182,6 +1182,25 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         stop_media(&tx_srv, ch_id as u8).await?;
                         tokio::time::sleep(Duration::from_millis(100)).await;
                         start_media(&tx_srv, ch_id as u8, session_id).await?;
+                        //FIXME this is for TEST ONLY, check if we need some confirmation from HU, try to start video wo. confirmation ATM
+                        debug!( "{}, channel {:?}: MD connected, starting video streaming", get_name(), pkt.channel);
+                        video_stream_started=true;
+                        video_stream_paused=false;
+                        let bytes: Vec<u8> = postcard::to_stdvec(&video_params)?;
+                        let mut payload = Vec::new();
+                        payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+                        payload.extend_from_slice(&(CustomCommand::CMD_START_VIDEO_RECORDING as u16).to_be_bytes());
+                        payload.extend_from_slice(&bytes);
+
+                        let pkt_rsp = Packet {
+                            channel: ch_id as u8,
+                            flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                            final_length: None,
+                            payload: payload.clone(),
+                        };
+                        if let Err(_) = scrcpy_cmd.send_async(pkt_rsp).await{
+                            error!( "{} mpsc send error",get_name());
+                        };
                     }
                     md_connected=false;
                 }
@@ -1290,6 +1309,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                             {
                                 debug!( "{}, channel {:?}: MD connected, starting video streaming", get_name(), pkt.channel);
                                 video_stream_started=true;
+                                video_stream_paused=false;
                                 let bytes: Vec<u8> = postcard::to_stdvec(&video_params)?;
                                 let mut payload = Vec::new();
                                 payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
