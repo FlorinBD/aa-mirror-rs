@@ -914,6 +914,7 @@ pub async fn ch_proxy(
         return Err(Box::new("ServiceDiscoveryResponse couldn't be parsed")).expect("ServiceDiscoveryResponse");
     }
     info!( "{} ServiceDiscovery done, starting AA Mirror loop",get_name());
+    let mut ch_opened=false;
     loop
     {
         //check service messages
@@ -967,27 +968,36 @@ pub async fn ch_proxy(
                                 info!( "{} AUDIO_FOCUS_STATE received is: {:?}",get_name(), msg.focus_state());
                                 if msg.focus_state() == AudioFocusStateType::AUDIO_FOCUS_STATE_GAIN
                                 {
-                                    info!( "{} CMD OPEN_CHANNEL will be done next",get_name());
-                                    tokio::time::sleep(Duration::from_millis(HU_CONFIG_DELAY_MS)).await; //reconfiguration time for HU
-                                    //Open CH for all
-                                    for (idx, _) in srv_senders.iter().enumerate()
+                                    if !ch_opened
                                     {
-                                        info!( "{} Send custom CMD_OPEN_CH for ch {}",get_name(), channel_status[idx].ch_id);
+                                        info!( "{} CMD OPEN_CHANNEL will be done next",get_name());
+                                        tokio::time::sleep(Duration::from_millis(HU_CONFIG_DELAY_MS)).await; //reconfiguration time for HU
+                                        //Open CH for all
+                                        for (idx, _) in srv_senders.iter().enumerate()
+                                        {
+                                            info!( "{} Send custom CMD_OPEN_CH for ch {}",get_name(), channel_status[idx].ch_id);
 
-                                        let mut payload= Vec::new();
-                                        payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
-                                        payload.extend_from_slice(&(CustomCommand::CMD_OPEN_CH as u16).to_be_bytes());
-                                        let pkt_rsp = Packet {
-                                            channel: (channel_status[idx].ch_id) as u8,
-                                            flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                                            final_length: None,
-                                            payload: payload.clone(),
-                                        };
-                                        channel_status[idx].open_ch_cmd = CommandState::InProgress;
-                                        if let Err(_) = srv_senders[idx].send(pkt_rsp).await{
-                                            error!( "{} custom command send error",get_name());
-                                        };
+                                            let mut payload= Vec::new();
+                                            payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+                                            payload.extend_from_slice(&(CustomCommand::CMD_OPEN_CH as u16).to_be_bytes());
+                                            let pkt_rsp = Packet {
+                                                channel: (channel_status[idx].ch_id) as u8,
+                                                flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                                                final_length: None,
+                                                payload: payload.clone(),
+                                            };
+                                            channel_status[idx].open_ch_cmd = CommandState::InProgress;
+                                            if let Err(_) = srv_senders[idx].send(pkt_rsp).await{
+                                                error!( "{} custom command send error",get_name());
+                                            };
+                                        }
+                                        ch_opened=true;
                                     }
+
+                                }
+                                else 
+                                {
+                                    //Audio focus lost
                                 }
 
                             }

@@ -1202,7 +1202,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         tokio::time::sleep(Duration::from_millis(100)).await;
                         start_media(&tx_srv, ch_id as u8, session_id).await?;
                         //Send first screen again
-                        show_first_screen(&tx_srv, ch_id as u8, &wait_screen_config_frame, &wait_screen_first_frame).await?;
+                        show_first_screen(&tx_srv, ch_id as u8, &wait_screen_config_frame, &wait_screen_first_frame).await;
 
                     }
                     md_connected=false;
@@ -1262,7 +1262,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                             if !first_screen_sent
                             {
                                 info!( "{}, channel {:?}: MD not connected yet, showing startup screen", get_name(), pkt.channel);
-                                show_first_screen(&tx_srv, ch_id as u8, &wait_screen_config_frame, &wait_screen_first_frame).await?;
+                                show_first_screen(&tx_srv, ch_id as u8, &wait_screen_config_frame, &wait_screen_first_frame).await;
                                 first_screen_sent=true;
                             }
                             else {
@@ -1454,7 +1454,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
 
     async fn show_first_screen(tx: &Sender<Packet>, ch_id: u8, cfg_frame:&Vec<u8>, first_frame:&Vec<u8>)
     {
-        info!( "{}, channel {:?}: MD not connected yet, showing startup screen", get_name(), pkt.channel);
+        info!( "{}, channel {:?}: Showing startup screen", get_name(), ch_id);
         //Send config frame
         let mut payload = Vec::with_capacity(cfg_frame.len() + 2);
         payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
