@@ -306,7 +306,7 @@ impl ScrcpyMediaReader {
     }
 }
 async fn tsk_scrcpy_video(
-    mut stream: TcpStream,
+    stream: TcpStream,
     ack_notify:Sender<()>,
     video_tx: flume::Sender<Packet>,
     sid:u8,
@@ -469,7 +469,7 @@ async fn tsk_scrcpy_video(
 }
 
 async fn tsk_scrcpy_audio(
-    mut stream: TcpStream,
+    stream: TcpStream,
     mut ack_notify:Sender<()>,
     audio_tx: flume::Sender<Packet>,
     sid:u8,
