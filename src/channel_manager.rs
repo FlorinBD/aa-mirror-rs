@@ -999,7 +999,7 @@ pub async fn ch_proxy(
                                 if ch_opened
                                 {
                                     //proxy to Audio channel, we have to manage focus there not in control channel
-                                    let idx=get_service_index(&channel_status, pkt.channel as i32);
+                                    let idx=get_service_index(&channel_status, audio_codec_params.sid as i32);
                                     if idx !=255
                                     {
                                         if let Err(_) = srv_senders[idx].send(pkt).await{
