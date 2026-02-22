@@ -1866,7 +1866,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                     error!("{}: Unable to deserialize AudioUnderflowNotification", ch_id.to_string())
                 }
             }
-            else if message_id == ControlMessageType::MESSAGE_AUDIO_FOCUS_NOTIFICATION
+            else if message_id == ControlMessageType::MESSAGE_AUDIO_FOCUS_NOTIFICATION as i32
             {
                 //Proxy msg from Control channel
                 let data = &pkt.payload[2..]; // start of message data, without message_id
