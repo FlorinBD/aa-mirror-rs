@@ -43,7 +43,9 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>
 // module name for logging engine
 const NAME: &str = "<i><bright-black> main: </>";
 const HOSTAPD_CONF_IN: &str = "/etc/hostapd.conf.in";
+const WPA_SUPPLICANT_CONF_IN: &str = "/etc/wpa_supplicant.conf.in";
 const HOSTAPD_CONF_OUT: &str = "/var/run/hostapd.conf";
+const WPA_SUPPLICANT_CONF_OUT: &str = "/var/run/wpa_supplicant.conf";
 const UMTPRD_CONF_IN: &str = "/etc/umtprd/umtprd.conf.in";
 const UMTPRD_CONF_OUT: &str = "/var/run/umtprd.conf";
 const GADGET_INIT_IN: &str = "/etc/S92usb_gadget.in";
@@ -355,6 +357,31 @@ fn generate_hostapd_conf(config: AppConfig) -> std::io::Result<()> {
     fs::write(HOSTAPD_CONF_OUT, rendered)
 }
 
+fn generate_wpa_supplicant_conf(config: AppConfig) -> std::io::Result<()> {
+    info!(
+        "{} 🗃️ Generating config from input template: <bold><green>{}</>",
+        NAME, WPA_SUPPLICANT_CONF_IN
+    );
+
+
+    let template = fs::read_to_string(WPA_SUPPLICANT_CONF_IN)?;
+
+    // Eventually: For 6 GHz, we will need more options like opclass.
+    let rendered = render_template(
+        &template,
+        &[
+            ("STA_SSID", "AndroidAP356b"),//FIXME add these two in config file
+            ("STA_PWD", "florinN9"),
+        ],
+    );
+
+    info!(
+        "{} 💾 Saving generated file as: <bold><green>{}</>",
+        NAME, WPA_SUPPLICANT_CONF_OUT
+    );
+    fs::write(WPA_SUPPLICANT_CONF_OUT, rendered)
+}
+
 fn generate_usb_strings(input: &str, output: &str) -> std::io::Result<()> {
     info!(
         "{} 🗃️ Generating config from input template: <bold><green>{}</>",
@@ -430,7 +457,8 @@ fn main() -> Result<()> {
 
     // generate system configs from template and exit
     if args.generate_system_config {
-        generate_hostapd_conf(config).expect("error generating config from template");
+        //generate_hostapd_conf(config).expect("error generating config from template");
+        generate_wpa_supplicant_conf(config).expect("error generating config from template");
 
         generate_usb_strings(UMTPRD_CONF_IN, UMTPRD_CONF_OUT)
             .expect("error generating config from template");

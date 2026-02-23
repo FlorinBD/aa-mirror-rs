@@ -107,6 +107,7 @@ pub struct AppConfig {
     pub udc: Option<String>,
     pub iface: String,
     pub hostapd_conf: PathBuf,
+    pub wpa_supplicant_conf: PathBuf,
     #[serde(default, deserialize_with = "empty_string_as_none")]
     pub btalias: Option<String>,
     pub timeout_secs: u16,
@@ -233,6 +234,7 @@ impl Default for AppConfig {
             udc: None,
             iface: "wlan0".to_string(),
             hostapd_conf: "/var/run/hostapd.conf".into(),
+            wpa_supplicant_conf: "/var/run/wpa_supplicant.conf".into(),
             btalias: None,
             timeout_secs: 10,
             webserver: webserver_default_bind(),
@@ -314,6 +316,7 @@ impl AppConfig {
         }
         doc["iface"] = value(&self.iface);
         doc["hostapd_conf"] = value(self.hostapd_conf.display().to_string());
+        doc["wpa_supplicant_conf"] = value(self.wpa_supplicant_conf.display().to_string());
         if let Some(alias) = &self.btalias {
             doc["btalias"] = value(alias);
         }
