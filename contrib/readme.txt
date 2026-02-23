@@ -21,6 +21,7 @@ implement night/day switch for sensor_channel with:  "adb shell cmd uimode night
 signal all tasks that must be finished in a clean way
 implement media ack sliding window using tokio::sync::Semaphore;
 solve ADB connection when dev state is STALE, is connected but not REACHABLE
+in STA mode dhcp is not providing host name
 
 NOTES:
 HU doesn't send ACK for config frames?? (video frames)
