@@ -19,7 +19,7 @@ use std::panic;
 use std::fs;
 use std::fs::OpenOptions;
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
@@ -503,6 +503,18 @@ fn main() -> Result<()> {
         );
     }
     debug!("{} ⚙️ startup configuration: {:#?}", NAME, config);
+
+    if config.enable_ftp
+    {
+        // Spawn vsftpd as a background process
+        let _child = Command::new("vsftpd")
+            .arg("/etc/vsftpd.conf")
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()?;                     // just spawn, don't await
+        debug!("FTP server started with PID: {}", _child.id());
+    }
 
     if let Some(ref wired) = config.wired {
         info!(
