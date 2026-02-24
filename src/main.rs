@@ -45,7 +45,8 @@ const NAME: &str = "<i><bright-black> main: </>";
 const HOSTAPD_CONF_IN: &str = "/etc/hostapd.conf.in";
 const WPA_SUPPLICANT_CONF_IN: &str = "/etc/wpa_supplicant.conf.in";
 const HOSTAPD_CONF_OUT: &str = "/var/run/hostapd.conf";
-const WPA_SUPPLICANT_CONF_OUT: &str = "/var/run/wpa_supplicant.conf";
+const WPA_SUPPLICANT_TEMP_CONF_OUT: &str = "/var/run/wpa_supplicant.conf";
+const WPA_SUPPLICANT_CONF_OUT: &str = "/etc/wpa_supplicant.conf";
 const UMTPRD_CONF_IN: &str = "/etc/umtprd/umtprd.conf.in";
 const UMTPRD_CONF_OUT: &str = "/var/run/umtprd.conf";
 const GADGET_INIT_IN: &str = "/etc/S92usb_gadget.in";
@@ -379,6 +380,7 @@ fn generate_wpa_supplicant_conf(config: AppConfig) -> std::io::Result<()> {
         "{} 💾 Saving generated file as: <bold><green>{}</>",
         NAME, WPA_SUPPLICANT_CONF_OUT
     );
+    fs::write(WPA_SUPPLICANT_TEMP_CONF_OUT, rendered.clone()).expect("error writing config file");
     fs::write(WPA_SUPPLICANT_CONF_OUT, rendered)
 }
 
