@@ -256,7 +256,6 @@ pub async fn io_loop(
     need_restart: BroadcastSender<Option<Action>>,
     config: SharedConfig,
     tx: Arc<Mutex<Option<Sender<Packet>>>>,
-    accessory_started: Arc<Notify>,
 ) -> Result<()> {
     let shared_config = config.clone();
     #[allow(unused_variables)]
@@ -333,16 +332,10 @@ pub async fn io_loop(
                 continue;
             }
         } else {
-            if config.legacy
-            {
-                debug!("{} Waiting for USB accessory device",NAME);
-                accessory_started.notified().await;
-                debug!("{} 📂 USB accessory device received, trying to open: <u>{}</u>", NAME, USB_ACCESSORY_PATH);
-            }
-            else {
-                debug!("{} 📂 Trying to open USB accessory device: <u>{}</u>", NAME, USB_ACCESSORY_PATH);
-            }
-
+            info!(
+                "{} 📂 Opening USB accessory device: <u>{}</u>",
+                NAME, USB_ACCESSORY_PATH
+            );
             match OpenOptions::new()
                 .read(true)
                 .write(true)
