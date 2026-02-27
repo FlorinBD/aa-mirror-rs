@@ -225,7 +225,7 @@ impl Default for AppConfig {
             debug: true,
             hexdump_level: HexdumpLevel::Disabled,
             disable_console_debug: false,
-            legacy: false,
+            legacy: true,
             scrcpy_screen_off:true,
             video_bitrate:4_000_000,
             connect: BluetoothAddressList::default(),
