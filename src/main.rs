@@ -561,7 +561,7 @@ fn main() -> Result<()> {
             tx_cloned,
             sensor_channel_cloned,
             led_support,
-            accessory_started_1.clone(),
+            accessory_started_1,
         )
         .await
     });
@@ -571,7 +571,7 @@ fn main() -> Result<()> {
         restart_tx,
         config,
         tx,
-        accessory_started_2.clone(),
+        accessory_started_2,
     ));
 
     info!(
