@@ -37,7 +37,7 @@ pub fn uevent_listener(accessory_started: Arc<tokio::sync::Notify>) {
             && u.env.get("ACCESSORY").is_some_and(|x| x == "START")
         {
             debug!("got uevent: {:#?}", u);
-            accessory_started.notify_one();
+            accessory_started.notify_waiters();
         }
     }
 }

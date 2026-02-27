@@ -10,7 +10,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::broadcast::Sender as BroadcastSender;
 use tokio::sync::mpsc::{Receiver, Sender};
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::{mpsc, Mutex, Notify};
 use tokio::task::JoinHandle;
 use tokio::time::{sleep, timeout};
 use tokio_uring::buf::BoundedBuf;
@@ -256,6 +256,7 @@ pub async fn io_loop(
     need_restart: BroadcastSender<Option<Action>>,
     config: SharedConfig,
     tx: Arc<Mutex<Option<Sender<Packet>>>>,
+    accessory_started: Arc<Notify>,
 ) -> Result<()> {
     let shared_config = config.clone();
     #[allow(unused_variables)]
@@ -332,10 +333,9 @@ pub async fn io_loop(
                 continue;
             }
         } else {
-            info!(
-                "{} 📂 Opening USB accessory device: <u>{}</u>",
-                NAME, USB_ACCESSORY_PATH
-            );
+            debug!("{} Waiting for USB accessory device",NAME);
+            accessory_started.notified().await;
+            debug!("{} 📂 USB accessory device received, opening: <u>{}</u>", NAME, USB_ACCESSORY_PATH);
             match OpenOptions::new()
                 .read(true)
                 .write(true)
@@ -347,7 +347,7 @@ pub async fn io_loop(
                 Err(e) => {
                     error!("{} 🔴 Error opening USB accessory: {}", NAME, e);
                     let _ = need_restart.send(None);//restart usb detection
-                    tokio::time::sleep(Duration::from_secs(1)).await;
+                    //tokio::time::sleep(Duration::from_secs(1)).await;
                     continue;//we can't break the loop because we can't recover ADB task
                     // notify main loop to restart if HU is lost to prevent connection loop, upon restart, USB is re-initialized
                     //let _ = need_restart.send(None);
