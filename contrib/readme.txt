@@ -19,10 +19,10 @@ remove clone for structs that dosen't need to be clonable because is expensive, 
 improve scrcpy audio/video reader to not re-alocate buf every time, use a single buffer, like payload
 implement night/day switch for sensor_channel with:  "adb shell cmd uimode night yes"
 signal all tasks that must be finished in a clean way
-implement media ack sliding window using tokio::sync::Semaphore;
+done: implement media ack sliding window using tokio::sync::Semaphore;
 solve ADB connection when dev state is STALE, is connected but not REACHABLE
 in STA mode dhcp is not providing host name
 
 NOTES:
-HU doesn't send ACK for config frames?? (video frames)
+HU doesn't send ACK for config frames (video frames)
 transfer_monitor() must be used because TcpStream dosen't close when HU/DHU is disconnected and we can't re-connect
