@@ -56,6 +56,10 @@
           "typ": "integer",
           "description": "Data transfer timeout [seconds], after this idle time the session will be reconnected"
         },
+        "hu_detect_timeout_secs": {
+          "typ": "integer",
+          "description": "USB HU detection timeout [seconds], after this time USB will be re-initialized"
+        },
         "webserver": {
           "typ": "string",
           "description": "Webserver bind address/port, empty = disabled"
