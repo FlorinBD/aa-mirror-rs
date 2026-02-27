@@ -321,6 +321,8 @@ impl AppConfig {
             doc["udc"] = value(udc);
         }
         doc["iface"] = value(&self.iface);
+        doc["ap_ssid"] = value(&self.ap_ssid);
+        doc["ap_psw"] = value(&self.ap_psw);
         doc["hostapd_conf"] = value(self.hostapd_conf.display().to_string());
         doc["wpa_supplicant_conf"] = value(self.wpa_supplicant_conf.display().to_string());
         if let Some(alias) = &self.btalias {
