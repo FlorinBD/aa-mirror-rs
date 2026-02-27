@@ -333,9 +333,16 @@ pub async fn io_loop(
                 continue;
             }
         } else {
-            debug!("{} Waiting for USB accessory device",NAME);
-            accessory_started.notified().await;
-            debug!("{} 📂 USB accessory device received, opening: <u>{}</u>", NAME, USB_ACCESSORY_PATH);
+            if cfg.legacy
+            {
+                debug!("{} Waiting for USB accessory device",NAME);
+                accessory_started.notified().await;
+                debug!("{} 📂 USB accessory device received, opening: <u>{}</u>", NAME, USB_ACCESSORY_PATH);
+            }
+            else {
+                debug!("{} 📂 Trying to open USB accessory device: <u>{}</u>", NAME, USB_ACCESSORY_PATH);
+            }
+
             match OpenOptions::new()
                 .read(true)
                 .write(true)
