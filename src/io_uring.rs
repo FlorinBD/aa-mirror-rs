@@ -8,6 +8,7 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use nix::sys::prctl::get_name;
 use tokio::sync::broadcast::Sender as BroadcastSender;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::{mpsc, Mutex, Notify};
@@ -252,6 +253,31 @@ async fn tcp_wait_for_hu_connection(listener: & TcpListener) -> Result<TcpStream
     Ok(stream)
 }
 
+pub async fn usb_wait_for_hu_connection(timeout_secs: u64) -> Result<()> {
+    let path = "/sys/class/android_usb/android0/state";
+
+    let fut = async {
+        loop {
+            match std::fs::read_to_string(path) {
+                Ok(state) => {
+                    let state = state.trim();
+                    debug!("{} USB state: {}", get_name(), state);
+
+                    if state == "CONFIGURED" {
+                        return Ok(());
+                    }
+                }
+                Err(e) => {
+                    debug!("{}: USB state read error: {}", get_name(), e);
+                }
+            }
+
+            sleep(Duration::from_millis(200)).await;
+        }
+    };
+    timeout(Duration::from_secs(timeout_secs), fut).await.unwrap_or_else(|_| Err("timeout".into()))
+}
+
 pub async fn io_loop(
     need_restart: BroadcastSender<Option<Action>>,
     config: SharedConfig,
@@ -321,7 +347,7 @@ pub async fn io_loop(
         if config.dhu {
             //info!("{} 🛰️ DHU TCP server: bind to local address",NAME);
             //dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
-            info!("{} 🛰️ DHU TCP server: listening for `Desktop Head Unit` connection...",NAME);
+            debug!("{} 🛰️ DHU TCP server: listening for `Desktop Head Unit` connection...",NAME);
             if let Ok(s) = tcp_wait_for_hu_connection(& dhu_listener.as_mut().unwrap()).await {
                 hu_tcp = Some(s);
             } else {
@@ -332,30 +358,32 @@ pub async fn io_loop(
                 continue;
             }
         } else {
-            info!(
-                "{} 📂 Opening USB accessory device: <u>{}</u>",
-                NAME, USB_ACCESSORY_PATH
-            );
-            match OpenOptions::new()
-                .read(true)
-                .write(true)
-                .create(false)
-                .open(USB_ACCESSORY_PATH)
-                .await
+            debug!("{} 🛰️ Waiting for `Head Unit` connection on USB...",NAME);
+            if let Ok(_)=usb_wait_for_hu_connection(config.hu_detect_timeout_secs as u64).await
             {
-                Ok(s) => hu_usb = Some(s),
-                Err(e) => {
-                    error!("{} 🔴 Error opening USB accessory: {}", NAME, e);
-                    let _ = need_restart.send(None);//restart usb detection
-                    //tokio::time::sleep(Duration::from_secs(1)).await;
-                    continue;//we can't break the loop because we can't recover ADB task
-                    // notify main loop to restart if HU is lost to prevent connection loop, upon restart, USB is re-initialized
-                    //let _ = need_restart.send(None);
-                    //tokio::time::sleep(Duration::from_secs(2)).await;
-                    //break;
-                    //return Err(Box::new(e));
+                debug!("{} 📂 Opening USB accessory device: <u>{}</u>",NAME, USB_ACCESSORY_PATH);
+                match OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .create(false)
+                    .open(USB_ACCESSORY_PATH)
+                    .await
+                {
+                    Ok(s) => hu_usb = Some(s),
+                    Err(e) => {
+                        error!("{} 🔴 Error opening USB accessory: {}", NAME, e);
+                        let _ = need_restart.send(None);//restart usb detection
+                        continue;//we can't break the loop because we can't recover ADB task
+                    }
                 }
             }
+            else
+            {
+                error!("{} 🔴 Timeout waiting USB accessory", NAME);
+                let _ = need_restart.send(None);//restart usb detection
+                continue;//we can't break the loop because we can't recover ADB task
+            }
+
         }
 
         info!("{} ♾️ Starting to proxy data between HU and MD...", NAME);

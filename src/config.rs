@@ -111,6 +111,7 @@ pub struct AppConfig {
     #[serde(default, deserialize_with = "empty_string_as_none")]
     pub btalias: Option<String>,
     pub timeout_secs: u16,
+    pub hu_detect_timeout_secs: u16,
     #[serde(
         default = "webserver_default_bind",
         deserialize_with = "empty_string_as_none"
@@ -237,6 +238,7 @@ impl Default for AppConfig {
             wpa_supplicant_conf: "/var/run/wpa_supplicant.conf".into(),
             btalias: None,
             timeout_secs: 10,
+            hu_detect_timeout_secs:100,
             webserver: webserver_default_bind(),
             bt_timeout_secs: 0,
             action_requested: None,
@@ -320,6 +322,7 @@ impl AppConfig {
         if let Some(alias) = &self.btalias {
             doc["btalias"] = value(alias);
         }
+        doc["hu_detect_timeout_secs"] = value(self.hu_detect_timeout_secs as i64);
         doc["timeout_secs"] = value(self.timeout_secs as i64);
         if let Some(webserver) = &self.webserver {
             doc["webserver"] = value(webserver);
