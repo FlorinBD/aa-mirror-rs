@@ -1223,20 +1223,20 @@ pub(crate) async fn tsk_adb_scrcpy(
                                 {
                                     if pkt.channel == video_sid
                                     {
-                                        if ack.ack.is_some()
+                                        /*if ack.ack.is_some()
                                         {
                                             debug!("tsk_scrcpy: video ACK recived: {:?}", ack.ack());
                                         }
                                         else
                                         {
                                             debug!("tsk_scrcpy: video ACK recived");
-                                        }
+                                        }*/
                                         //ack_video.notify_one();
                                         ack_video_rx.try_recv();
                                     }
                                     else if pkt.channel == audio_sid
                                     {
-                                       if ack.ack.is_some()
+                                       /*if ack.ack.is_some()
                                         {
                                             debug!("tsk_scrcpy: audio ACK recived: {:?}", ack.ack());
                                         }
@@ -1247,7 +1247,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                                         if ack.receive_timestamp_ns.len()>0
                                         {
                                             debug!("tsk_scrcpy: audio ACK recived ts[0]: {:?}", ack.receive_timestamp_ns[0]);
-                                        }
+                                        }*/
                                         ack_audio_rx.try_recv();
                                     }
                                     else
