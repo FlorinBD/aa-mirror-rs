@@ -106,6 +106,8 @@ pub struct AppConfig {
     #[serde(default, deserialize_with = "empty_string_as_none")]
     pub udc: Option<String>,
     pub iface: String,
+    pub ap_ssid: String,
+    pub ap_psw: String,
     pub hostapd_conf: PathBuf,
     pub wpa_supplicant_conf: PathBuf,
     #[serde(default, deserialize_with = "empty_string_as_none")]
@@ -234,6 +236,8 @@ impl Default for AppConfig {
             stats_interval: 0,
             udc: None,
             iface: "wlan0".to_string(),
+            ap_ssid: "AndroidAP356b".to_string(),
+            ap_psw: "florinN9".to_string(),
             hostapd_conf: "/var/run/hostapd.conf".into(),
             wpa_supplicant_conf: "/var/run/wpa_supplicant.conf".into(),
             btalias: None,

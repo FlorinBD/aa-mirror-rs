@@ -372,8 +372,8 @@ fn generate_wpa_supplicant_conf(config: AppConfig) -> std::io::Result<()> {
     let rendered = render_template(
         &template,
         &[
-            ("STA_SSID", "\"AndroidAP356b\""),//FIXME add these two in config file
-            ("STA_PWD", "\"florinN9\""),
+            ("STA_SSID", &format!("\"{}\"", config.ap_ssid)),
+            ("STA_PWD",  &format!("\"{}\"", config.ap_psw)),
         ],
     );
 

@@ -29,11 +29,19 @@
         },
         "ssid": {
           "typ": "string",
-          "description": "Wi-Fi SSID"
+          "description": "Wi-Fi SSID in STA mode"
         },
         "wpa_passphrase": {
           "typ": "string",
           "description": "Wi-Fi password used as the WPA pre-shared key (WPA-PSK)"
+        },
+        "ap_ssid": {
+          "typ": "string",
+          "description": "Wi-Fi AP SSID to connect"
+        },
+        "ap_psw": {
+          "typ": "string",
+          "description": "Wi-Fi AP password used to connect"
         },
         "ble_password": {
           "typ": "string",
