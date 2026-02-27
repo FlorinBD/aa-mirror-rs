@@ -261,14 +261,14 @@ pub async fn usb_wait_for_hu_connection(timeout_secs: u64) -> Result<()> {
             match std::fs::read_to_string(path) {
                 Ok(state) => {
                     let state = state.trim();
-                    debug!("{} USB state: {:?}", get_name(), state);
+                    debug!("{} USB state: {:?}", NAME, state);
 
                     if state == "CONFIGURED" {
                         return Ok(());
                     }
                 }
                 Err(e) => {
-                    debug!("{}: USB state read error: {:?}", get_name(), e);
+                    debug!("{}: USB state read error: {:?}", NAME, e);
                 }
             }
 
