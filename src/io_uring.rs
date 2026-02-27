@@ -333,7 +333,7 @@ pub async fn io_loop(
                 continue;
             }
         } else {
-            if cfg.legacy
+            if config.legacy
             {
                 debug!("{} Waiting for USB accessory device",NAME);
                 accessory_started.notified().await;
