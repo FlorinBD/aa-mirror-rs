@@ -549,6 +549,8 @@ fn main() -> Result<()> {
     let runtime = Builder::new_multi_thread().enable_all().build().unwrap();
     let restart_tx_cloned = restart_tx.clone();
     let accessory_started = Arc::new(Notify::new());
+    let accessory_started_1 = accessory_started.clone();
+    let accessory_started_2 = accessory_started.clone();
 
     runtime.spawn(async move {
         tokio_main(
@@ -559,7 +561,7 @@ fn main() -> Result<()> {
             tx_cloned,
             sensor_channel_cloned,
             led_support,
-            accessory_started.clone(),
+            accessory_started_1.clone(),
         )
         .await
     });
@@ -569,7 +571,7 @@ fn main() -> Result<()> {
         restart_tx,
         config,
         tx,
-        accessory_started.clone(),
+        accessory_started_2.clone(),
     ));
 
     info!(
