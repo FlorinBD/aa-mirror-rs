@@ -337,7 +337,7 @@ pub async fn io_loop(
             {
                 debug!("{} Waiting for USB accessory device",NAME);
                 accessory_started.notified().await;
-                debug!("{} 📂 USB accessory device received, opening: <u>{}</u>", NAME, USB_ACCESSORY_PATH);
+                debug!("{} 📂 USB accessory device received, trying to open: <u>{}</u>", NAME, USB_ACCESSORY_PATH);
             }
             else {
                 debug!("{} 📂 Trying to open USB accessory device: <u>{}</u>", NAME, USB_ACCESSORY_PATH);
