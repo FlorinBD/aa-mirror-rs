@@ -317,13 +317,14 @@ pub async fn io_loop(
     //cmd scrcpy>srv channel
     let (tx_scrcpy_srv_cmd, rx_scrcpy_srv_cmd)=flume::bounded::<Packet>(5);
     let pp:PacketProxy;
+    let ppn:Arc<Mutex<PacketProxy>>;
     let mut tsk_adb;
     tsk_adb = tokio_uring::spawn(scrcpy::tsk_adb_scrcpy(
         tx_scrcpy,
         rx_scrcpy_cmd,
         tx_scrcpy_srv_cmd,
         cfg,
-        &pp,
+        ppn,
     ));
     loop {
         //drain scrcpy commands?

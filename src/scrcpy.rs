@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use simplelog::{error, info};
 use tokio::process::Command;
 use tokio::sync::mpsc::Receiver;
-use tokio::sync::{mpsc, oneshot, Notify};
+use tokio::sync::{mpsc, oneshot, Mutex, Notify};
 use tokio_uring::net::TcpStream;
 use crate::aa_services::{AudioStreamingParams, MediaCodec, VideoStreamingParams};
 use crate::{adb, channel_manager};
@@ -841,7 +841,7 @@ pub(crate) async fn tsk_adb_scrcpy(
     srv_cmd_rx_scrcpy: flume::Receiver<Packet>,
     srv_cmd_tx: flume::Sender<Packet>,
     config: AppConfig,
-    pp:&PacketProxy,
+    pp:Arc<Mutex<PacketProxy>>,
 ) -> Result<()> {
     info!("{}: ADB task started",NAME);
     let cmd_adb = Command::new("adb")
