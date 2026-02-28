@@ -1220,24 +1220,12 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         config_recived=true;
                         first_screen_sent=false;
                         video_params.max_unack=rsp.max_unacked();
-                        info!( "{}, channel {:?}: Sending START command", get_name(), pkt.channel);
-                        session_id +=1;
-                        let mut start_req = Start::new();
-                        start_req.set_session_id(session_id);
-                        start_req.set_configuration_index(0);
-                        let mut payload: Vec<u8> = start_req.write_to_bytes().expect("serialization failed");
-                        payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_START as u16) >> 8) as u8);
-                        payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_START as u16) & 0xff) as u8);
+                        if video_focus
+                        {
+                            session_id +=1;
+                            start_media(&tx_srv, ch_id as u8, session_id).await?;
+                        }
 
-                        let pkt_rsp = Packet {
-                            channel: ch_id as u8,
-                            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                            final_length: None,
-                            payload: payload,
-                        };
-                        if let Err(_) = tx_srv.send(pkt_rsp).await{
-                            error!( "{} response send error",get_name());
-                        };
                     }
                 }
                 else
