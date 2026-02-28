@@ -483,7 +483,7 @@ where
     }
 
     /// encapsulates SSL data into Packet
-    async fn ssl_encapsulate(self, mut mem_buf: SslMemBuf) -> Result<Packet> {
+    async fn ssl_encapsulate(&self, mut mem_buf: SslMemBuf) -> Result<Packet> {
         // read SSL-generated data
         let mut res: Vec<u8> = Vec::new();
         mem_buf.read_to(&mut res)?;
