@@ -317,7 +317,7 @@ pub async fn io_loop(
     //cmd scrcpy>srv channel
     let (tx_scrcpy_srv_cmd, rx_scrcpy_srv_cmd)=flume::bounded::<Packet>(5);
     let pp:PacketProxy;
-    let ppn:Arc<Mutex<PacketProxy>>;
+    let mut ppn:Arc<Mutex<PacketProxy>>;
     let mut tsk_adb;
     tsk_adb = tokio_uring::spawn(scrcpy::tsk_adb_scrcpy(
         tx_scrcpy,
@@ -437,8 +437,11 @@ pub async fn io_loop(
 
         //service packet proxy
         pp=PacketProxy::new( stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested);
+        ppn=Arc::new(Mutex::new(PacketProxy::new( stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested)));
+        let Some(p)=ppn;
+        tsk_packet_proxy=p.start(hu_w, rxr_hu, rxr_srv, tx_srv, rx_scrcpy.clone(),tx_scrcpy_cmd.clone());
         //tsk_packet_proxy = tokio_uring::spawn(packet_tls_proxy(hu_w, rxr_hu, rxr_srv, tx_srv, rx_scrcpy.clone(), stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested));
-        tsk_packet_proxy=pp.start(hu_w, rxr_hu, rxr_srv, tx_srv, rx_scrcpy.clone(),tx_scrcpy_cmd.clone());
+        //tsk_packet_proxy=pp.start(hu_w, rxr_hu, rxr_srv, tx_srv, rx_scrcpy.clone(),tx_scrcpy_cmd.clone());
         // main processing threads:
         tsk_ch_manager = tokio_uring::spawn(ch_proxy(
             rx_srv,
