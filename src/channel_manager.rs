@@ -258,7 +258,7 @@ where
         }
     }
 
-    async fn run(mut self) -> Result<()> {
+    pub async fn run(mut self) -> Result<()> {
         let ssl = self.ssl_builder().await?;
         let mut mem_buf = SslMemBuf {
             client_stream: Arc::new(Mutex::new(VecDeque::new())),
