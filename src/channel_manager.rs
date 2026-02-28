@@ -501,7 +501,7 @@ where
     }
 
     /// shows packet/message contents as pretty string for debug
-    pub async fn pkt_debug(self,
+    pub async fn pkt_debug(&self,
         hexdump: HexdumpLevel,
         hex_requested: HexdumpLevel,
         pkt: &Packet,
