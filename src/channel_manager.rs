@@ -450,7 +450,6 @@ where
         let mut ctx_builder = SslContextBuilder::new(SslMethod::tls())?;
 
         // for HU/headunit we need to act as a MD/mobiledevice, so load "md" key and cert
-        // and vice versa
         ctx_builder.set_certificate_file(format!("{KEYS_PATH}/md_cert.pem"), SslFiletype::PEM)?;
         ctx_builder.set_private_key_file(format!("{KEYS_PATH}/md_key.pem"), SslFiletype::PEM)?;
         ctx_builder.check_private_key()?;
