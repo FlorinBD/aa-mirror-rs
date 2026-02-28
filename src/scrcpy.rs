@@ -841,7 +841,7 @@ pub(crate) async fn tsk_adb_scrcpy(
     srv_cmd_rx_scrcpy: flume::Receiver<Packet>,
     srv_cmd_tx: flume::Sender<Packet>,
     config: AppConfig,
-    pp:Arc<Mutex<PacketProxy>>,
+    pp:Arc<PacketProxy>,
 ) -> Result<()> {
     info!("{}: ADB task started",NAME);
     let cmd_adb = Command::new("adb")
