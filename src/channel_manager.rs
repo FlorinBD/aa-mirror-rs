@@ -224,6 +224,9 @@ pub struct PacketProxy<A: Endpoint<A>> {
     r_statistics: Arc<AtomicUsize>,
     w_statistics: Arc<AtomicUsize>,
     dmp_level:HexdumpLevel,
+    //local vars
+    audio_sid:u8,
+    video_sid:u8,
 }
 
 impl<A> PacketProxy<A>
@@ -249,6 +252,9 @@ where
             r_statistics,
             w_statistics,
             dmp_level,
+            audio_sid:0,
+            video_sid:0,
+
         }
     }
 
