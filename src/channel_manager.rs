@@ -565,7 +565,7 @@ impl PacketProxy
         Ok(())
     }
 
-    fn get_name(self,) -> String {
+    fn get_name(&self,) -> String {
         "PacketProxy".to_string()
     }
     ///Used to detect SDR for audio/video SIDs
