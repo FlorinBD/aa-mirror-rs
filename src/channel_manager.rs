@@ -446,7 +446,7 @@ where
     }
 
     /// creates Ssl for HeadUnit (SSL server) and MobileDevice (SSL client)
-    async fn ssl_builder(self) -> Result<Ssl> {
+    async fn ssl_builder(&self) -> Result<Ssl> {
         let mut ctx_builder = SslContextBuilder::new(SslMethod::tls())?;
 
         // for HU/headunit we need to act as a MD/mobiledevice, so load "md" key and cert
