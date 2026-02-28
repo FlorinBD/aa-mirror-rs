@@ -214,6 +214,17 @@ impl fmt::Display for Packet {
     }
 }
 
+pub struct AckChannels {
+    pub(crate) audio_rx: Receiver<()>,
+    pub(crate) video_rx: Receiver<()>,
+    pub(crate) audio_sid:u8,
+    pub(crate) video_sid:u8,
+}
+pub struct ChannelProxyHandle {
+    pub(crate) ch_rx: Option<AckChannels>,
+    data: Option<Packet>,
+}
+
 pub struct PacketProxy {
     //params
     r_statistics: Arc<AtomicUsize>,
@@ -248,7 +259,7 @@ impl PacketProxy
                  mut hu_rx: Receiver<Packet>,
                  mut srv_rx: Receiver<Packet>,
                  srv_tx: Sender<Packet>,
-                 scrcpy_rx: flume::Receiver<Packet>,
+                 scrcpy_rx: flume::Receiver<ChannelProxyHandle>,
                  scrcpy_tx: flume::Sender<Packet>,
     ) -> Result<()> {
         let ssl = self.ssl_builder().await?;
@@ -264,40 +275,44 @@ impl PacketProxy
             biased;
 
             // 🔴 highest priority, SCRCPY>HU
-            Ok(mut msg) = scrcpy_rx.recv_async() => {
-            if !ssl_handshake_done
-                {
-                    error!( "{}: tls proxy error: received encrypted message from service before TLS handshake", get_name());
-                }
-                else
-                {
-                    /*let _ = pkt_debug(
-                        HexdumpLevel::DecryptedOutput,
-                        dmp_level,
-                        &msg,
-                        "SCRCPY".parse().unwrap()
-                    ).await;*/
-                    match msg.encrypt_payload(&mut mem_buf, &mut server).await {
-                        Ok(_) => {
-                            // Increment byte counters for statistics
-                            // fixme: compute final_len for precise stats
-                            self.w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
-                            if msg.payload.len() > MAX_PACKET_LEN {
-                                error!("tls_proxy SCRCPY>HU packet payload too big, got {}",msg.payload.len());
-                            }
-                            if let Err(e) = msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: SCRCPY transmit to HU failed", get_name())) {
-                                error!("SCRCPY>HU Transmission error: {:?}", e);
-                                return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY>HU channel closed")));
-                            }
-                            // yield so other tasks can run to release backpressure on TCP, this improves lag
-                            //tokio::task::yield_now().await;
+            Ok(mut hnd) = scrcpy_rx.recv_async() => {
+                    if let Some(mut msg)=hnd.data
+                    {
+                        if !ssl_handshake_done
+                        {
+                            error!( "{}: tls proxy error: received encrypted message from service before TLS handshake", get_name());
                         }
-                        Err(e) => {
-                            error!( "{} encrypt_payload error: {:?}", get_name(), e);
-                            return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY>HU encrypt_payload error")));
-                        },
+                        else
+                        {
+                            match msg.encrypt_payload(&mut mem_buf, &mut server).await {
+                                Ok(_) => {
+                                    // Increment byte counters for statistics
+                                    // fixme: compute final_len for precise stats
+                                    self.w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
+                                    if msg.payload.len() > MAX_PACKET_LEN {
+                                        error!("tls_proxy SCRCPY>HU packet payload too big, got {}",msg.payload.len());
+                                    }
+                                    if let Err(e) = msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: SCRCPY transmit to HU failed", get_name())) {
+                                        error!("SCRCPY>HU Transmission error: {:?}", e);
+                                        return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY>HU channel closed")));
+                                    }
+                                    // yield so other tasks can run to release backpressure on TCP, this improves lag
+                                    //tokio::task::yield_now().await;
+                                }
+                                Err(e) => {
+                                    error!( "{} encrypt_payload error: {:?}", get_name(), e);
+                                    return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY>HU encrypt_payload error")));
+                                },
+                            }
+                        }
                     }
-                }
+                    else if let Some(mut ch_data)=hnd.ch_rx
+                    {
+                        self.audio_ack_rx = Some(ch_data.audio_rx);
+                        self.video_ack_rx = Some(ch_data.video_rx);
+                        self.audio_sid = ch_data.audio_sid;
+                        self.video_sid = ch_data.video_sid;
+                    }
             }
             // medium priority, HU>Service
             Some(mut msg) = hu_rx.recv() => {
@@ -320,7 +335,6 @@ impl PacketProxy
                                     &msg,
                                     "HU".parse().unwrap()
                                 ).await;*/
-                                self.sdr_detect(&msg);
                                 //check if is media ack message
                                 if (self.audio_sid >0) && (self.video_sid>0) && ((msg.channel == self.audio_sid)||(msg.channel == self.video_sid))
                                 {
@@ -454,22 +468,12 @@ impl PacketProxy
                  hu_rx: Receiver<Packet>,
                  srv_rx: Receiver<Packet>,
                  srv_tx: Sender<Packet>,
-                 scrcpy_rx: flume::Receiver<Packet>,
+                 scrcpy_rx: flume::Receiver<ChannelProxyHandle>,
                  scrcpy_tx: flume::Sender<Packet>,
     ) -> JoinHandle<Result<()>> {
         tokio_uring::spawn(async move {
             self.run(hu_wr, hu_rx, srv_rx, srv_tx, scrcpy_rx, scrcpy_tx).await
         })
-    }
-
-    pub fn set_audio_ack_ch(&mut self, rx: Receiver<()>, sid:u8) {
-        self.audio_ack_rx = Some(rx);
-        self.audio_sid=sid;
-    }
-
-    pub fn set_video_ack_ch(&mut self, rx: Receiver<()>, sid:u8) {
-        self.video_ack_rx = Some(rx);
-        self.video_sid=sid;
     }
 
     /// creates Ssl for HeadUnit (SSL server) and MobileDevice (SSL client)
@@ -580,40 +584,6 @@ impl PacketProxy
 
     fn get_name(&self,) -> String {
         "PacketProxy".to_string()
-    }
-    ///Used to detect SDR for audio/video SIDs
-    fn sdr_detect(&mut self, pkt:&Packet,)
-    {
-        if pkt.channel==0
-        {
-            let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into().unwrap()).into();
-            if message_id == ControlMessageType::MESSAGE_SERVICE_DISCOVERY_RESPONSE as i32{
-                let data = &pkt.payload[2..]; // start of message data, without message_id
-                if  let Ok(msg) = ServiceDiscoveryResponse::parse_from_bytes(&data){
-                    info!( "{} ServiceDiscoveryResponse parsed ok",self.get_name());
-
-                    for (_,proto_srv) in msg.services.iter().enumerate() {
-                        let ch_id=i32::from(proto_srv.id());
-                        if proto_srv.media_sink_service.is_some()
-                        {
-                            if proto_srv.media_sink_service.audio_configs.len()>0
-                            {
-                                let srv_type=proto_srv.media_sink_service.audio_type();
-                                if srv_type == AUDIO_STREAM_MEDIA
-                                {
-                                   self.audio_sid=ch_id as u8;
-                                }
-                            }
-                            else if proto_srv.media_sink_service.video_configs.len()>0
-                            {
-                                self.video_sid=ch_id as u8;
-                            }
-                        }
-                    }
-
-                }
-            }
-        }
     }
 }
 /// shows packet/message contents as pretty string for debug

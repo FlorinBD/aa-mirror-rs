@@ -23,7 +23,7 @@ use tokio_uring::net::TcpStream;
 use tokio_uring::BufResult;
 use tokio_uring::UnsubmittedWrite;
 use crate::{scrcpy};
-use crate::channel_manager::{PacketProxy, KEYS_PATH};
+use crate::channel_manager::{ChannelProxyHandle, PacketProxy, KEYS_PATH};
 use crate::aa_services::{VideoStreamingParams, AudioStreamingParams};
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use protos::*;
@@ -311,20 +311,17 @@ pub async fn io_loop(
 
     //io channels for scrcpy
     //media frames channel, scrcpy>HU, TODO implement Arc<Packet> to solve copy
-    let (tx_scrcpy, rx_scrcpy)=flume::bounded::<Packet>(60);
+    let (tx_scrcpy, rx_scrcpy)=flume::bounded::<ChannelProxyHandle>(60);
     //cmd srv>scrcpy channel
     let (tx_scrcpy_cmd, rx_scrcpy_cmd)=flume::bounded::<Packet>(5);
     //cmd scrcpy>srv channel
     let (tx_scrcpy_srv_cmd, rx_scrcpy_srv_cmd)=flume::bounded::<Packet>(5);
-    //let pp:PacketProxy;
-    let mut ppn:Arc<PacketProxy>;
     let mut tsk_adb;
     tsk_adb = tokio_uring::spawn(scrcpy::tsk_adb_scrcpy(
         tx_scrcpy,
         rx_scrcpy_cmd,
         tx_scrcpy_srv_cmd,
         cfg,
-        ppn,
     ));
     loop {
         //drain scrcpy commands?
@@ -436,10 +433,8 @@ pub async fn io_loop(
         tsk_hu_read = tokio_uring::spawn(endpoint_reader(hu_r, txr_hu));
 
         //service packet proxy
-        //pp=PacketProxy::new( stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested);
-        ppn=Arc::new(PacketProxy::new( stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested));
-
-        tsk_packet_proxy=ppn.start(hu_w, rxr_hu, rxr_srv, tx_srv, rx_scrcpy.clone(),tx_scrcpy_cmd.clone());
+        let pp=PacketProxy::new( stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested);
+        tsk_packet_proxy=pp.start(hu_w, rxr_hu, rxr_srv, tx_srv, rx_scrcpy.clone(),tx_scrcpy_cmd.clone());
         //tsk_packet_proxy = tokio_uring::spawn(packet_tls_proxy(hu_w, rxr_hu, rxr_srv, tx_srv, rx_scrcpy.clone(), stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested));
         //tsk_packet_proxy=pp.start(hu_w, rxr_hu, rxr_srv, tx_srv, rx_scrcpy.clone(),tx_scrcpy_cmd.clone());
         // main processing threads:

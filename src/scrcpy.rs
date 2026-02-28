@@ -18,7 +18,7 @@ use tokio::sync::{mpsc, oneshot, Mutex, Notify};
 use tokio_uring::net::TcpStream;
 use crate::aa_services::{AudioStreamingParams, MediaCodec, VideoStreamingParams};
 use crate::{adb, channel_manager};
-use crate::channel_manager::{Packet, PacketProxy, ENCRYPTED, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
+use crate::channel_manager::{ChannelProxyHandle, Packet, PacketProxy, ENCRYPTED, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
 use crate::config::{AppConfig, MAX_DATA_LEN, SCRCPY_METADATA_HEADER_LEN, SCRCPY_PORT, SCRCPY_VERSION};
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use protos::*;
@@ -309,7 +309,7 @@ impl ScrcpyMediaReader {
 async fn tsk_scrcpy_video(
     stream: TcpStream,
     ack_notify:Sender<()>,
-    video_tx: flume::Sender<Packet>,
+    video_tx: flume::Sender<ChannelProxyHandle>,
     pause_mode: Arc<AtomicBool>,
     sid:u8,
 ) -> Result<()> {
@@ -477,7 +477,7 @@ async fn tsk_scrcpy_video(
 async fn tsk_scrcpy_audio(
     stream: TcpStream,
     mut ack_notify:Sender<()>,
-    audio_tx: flume::Sender<Packet>,
+    audio_tx: flume::Sender<ChannelProxyHandle>,
     pause_mode: Arc<AtomicBool>,
     sid:u8,
 ) -> Result<()> {
@@ -837,11 +837,10 @@ async fn tsk_scrcpy_control(
 }
 ///This task is not meant to be closed, it will always run
 pub(crate) async fn tsk_adb_scrcpy(
-    media_tx: flume::Sender<Packet>,
+    media_tx: flume::Sender<ChannelProxyHandle>,
     srv_cmd_rx_scrcpy: flume::Receiver<Packet>,
     srv_cmd_tx: flume::Sender<Packet>,
     config: AppConfig,
-    pp:Arc<PacketProxy>,
 ) -> Result<()> {
     info!("{}: ADB task started",NAME);
     let cmd_adb = Command::new("adb")
@@ -1098,6 +1097,13 @@ pub(crate) async fn tsk_adb_scrcpy(
                 
                 let (ack_audio_tx, mut ack_audio_rx) = mpsc::channel::<()>(audio_max_unack_mpsc);
                 let (ack_video_tx, mut ack_video_rx) = mpsc::channel::<()>(video_max_unack_mpsc);
+                let ack_ch=channel_manager::AckChannels{audio_rx:ack_audio_rx, video_rx:ack_video_rx, audio_sid:audio_codec_params.sid, video_sid:video_codec_params.sid };
+                let mut setup:channel_manager::ChannelProxyHandle;
+                setup.ch_rx=Some(ack_ch);
+                if let Err(_) = media_tx.send_async(setup).await{
+                    error!( "scrcpy setup send error");
+                };
+                tokio::time::sleep(Duration::from_millis(5)).await;//give time to PacketProxy to process it
                 let (tx_ctrl, rx_ctrl)=flume::bounded::<Packet>(5);
                 //Pause/Resume streaming control
                 let pause_mode_audio = Arc::new(AtomicBool::new(false));
