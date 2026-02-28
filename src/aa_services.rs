@@ -1415,7 +1415,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                     }
                 }
             }
-            else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK  as i32
+            else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK  as i32//now this is done by PacketProxy, not needed
             {
                 if video_stream_started
                 {
@@ -1834,7 +1834,7 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
                     error!( "{}, channel {:?}: Unable to parse received message", get_name(), pkt.channel);
                 }
             }
-            else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK  as i32
+            else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK  as i32 //now this is done by PacketProxy, not needed
             {
                 if audio_stream_started
                 {
