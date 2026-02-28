@@ -343,7 +343,7 @@ pub async fn endpoint_reader<A: Endpoint<A>>(
                         final_length,
                         payload: frame,
                     };
-                    debug!("Channel {} received {} bytes from HU", channel ,payload_size);
+                    //debug!("Channel {} received {} bytes from HU", channel ,payload_size);
                     // send packet to main thread for further process
                     tx.send(pkt).await?;
                     // check if we have another packet
