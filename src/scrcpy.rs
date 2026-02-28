@@ -1094,13 +1094,11 @@ pub(crate) async fn tsk_adb_scrcpy(
                 {
                     video_max_unack_mpsc =video_codec_params.max_unack as usize;
                 }
-                
+
                 let (ack_audio_tx, mut ack_audio_rx) = mpsc::channel::<()>(audio_max_unack_mpsc);
                 let (ack_video_tx, mut ack_video_rx) = mpsc::channel::<()>(video_max_unack_mpsc);
                 let ack_ch=channel_manager::AckChannels{audio_rx:ack_audio_rx, video_rx:ack_video_rx, audio_sid:audio_codec_params.sid, video_sid:video_codec_params.sid };
-                let mut setup:channel_manager::ChannelProxyHandle;
-                setup.ch_rx=Some(ack_ch);
-                if let Err(_) = media_tx.send_async(setup).await{
+                if let Err(_) = media_tx.send_async(ChannelProxyHandle{ch_rx:Some(ack_ch), data:None}).await{
                     error!( "scrcpy setup send error");
                 };
                 tokio::time::sleep(Duration::from_millis(5)).await;//give time to PacketProxy to process it
