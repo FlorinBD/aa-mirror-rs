@@ -222,6 +222,8 @@ pub struct PacketProxy {
     //local vars
     audio_sid:u8,
     video_sid:u8,
+    audio_ack_rx: Option<Receiver<()>>,
+    video_ack_rx: Option<Receiver<()>>,
 }
 
 impl PacketProxy
@@ -237,7 +239,8 @@ impl PacketProxy
             dmp_level,
             audio_sid:0,
             video_sid:0,
-
+            audio_ack_rx:None,
+            video_ack_rx:None,
         }
     }
 
@@ -457,6 +460,14 @@ impl PacketProxy
         tokio_uring::spawn(async move {
             self.run(hu_wr, hu_rx, srv_rx, srv_tx, scrcpy_rx, scrcpy_tx).await
         })
+    }
+
+    pub fn set_audio_ack_ch(&mut self, rx: Receiver<()>) {
+        self.audio_ack_rx = Some(rx);
+    }
+
+    pub fn set_video_ack_ch(&mut self, rx: Receiver<()>) {
+        self.video_ack_rx = Some(rx);
     }
 
     /// creates Ssl for HeadUnit (SSL server) and MobileDevice (SSL client)
