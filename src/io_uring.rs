@@ -434,9 +434,9 @@ pub async fn io_loop(
         tsk_hu_read = tokio_uring::spawn(endpoint_reader(hu_r, txr_hu));
 
         //service packet proxy
-        let pp=PacketProxy::new(hu_w, rxr_hu, rxr_srv, tx_srv, rx_scrcpy.clone(), stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested);
+        let pp=PacketProxy::new( stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested);
         //tsk_packet_proxy = tokio_uring::spawn(packet_tls_proxy(hu_w, rxr_hu, rxr_srv, tx_srv, rx_scrcpy.clone(), stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested));
-        tsk_packet_proxy=tokio::spawn(pp.run());
+        tsk_packet_proxy=pp.start(hu_w, rxr_hu, rxr_srv, tx_srv, rx_scrcpy.clone());
         // main processing threads:
         tsk_ch_manager = tokio_uring::spawn(ch_proxy(
             rx_srv,

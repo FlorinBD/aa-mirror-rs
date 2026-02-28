@@ -216,11 +216,6 @@ impl fmt::Display for Packet {
 
 pub struct PacketProxy<A: Endpoint<A>> {
     //params
-    hu_wr: IoDevice<A>,
-    hu_rx: Receiver<Packet>,
-    srv_rx: Receiver<Packet>,
-    srv_tx: Sender<Packet>,
-    scrcpy_rx: flume::Receiver<Packet>,
     r_statistics: Arc<AtomicUsize>,
     w_statistics: Arc<AtomicUsize>,
     dmp_level:HexdumpLevel,
@@ -234,21 +229,11 @@ where
     A: Endpoint<A> + Send + 'static,
 {
     pub fn new(
-        hu_wr: IoDevice<A>,
-        hu_rx: Receiver<Packet>,
-        srv_rx: Receiver<Packet>,
-        srv_tx: Sender<Packet>,
-        scrcpy_rx: flume::Receiver<Packet>,
         r_statistics: Arc<AtomicUsize>,
         w_statistics: Arc<AtomicUsize>,
         dmp_level: HexdumpLevel,
     ) -> Self {
         Self {
-            hu_wr,
-            hu_rx,
-            srv_rx,
-            srv_tx,
-            scrcpy_rx,
             r_statistics,
             w_statistics,
             dmp_level,
@@ -258,7 +243,11 @@ where
         }
     }
 
-    pub async fn run(mut self) -> Result<()> {
+    async fn run(mut self, mut hu_wr: IoDevice<A>,
+                 mut hu_rx: Receiver<Packet>,
+                 mut srv_rx: Receiver<Packet>,
+                 srv_tx: Sender<Packet>,
+                 scrcpy_rx: flume::Receiver<Packet>,) -> Result<()> {
         let ssl = self.ssl_builder().await?;
         let mut mem_buf = SslMemBuf {
             client_stream: Arc::new(Mutex::new(VecDeque::new())),
@@ -272,7 +261,7 @@ where
             biased;
 
             // 🔴 highest priority, SCRCPY>HU
-            Ok(mut msg) = self.scrcpy_rx.recv_async() => {
+            Ok(mut msg) = scrcpy_rx.recv_async() => {
             if !ssl_handshake_done
                 {
                     error!( "{}: tls proxy error: received encrypted message from service before TLS handshake", get_name());
@@ -293,7 +282,7 @@ where
                             if msg.payload.len() > MAX_PACKET_LEN {
                                 error!("tls_proxy SCRCPY>HU packet payload too big, got {}",msg.payload.len());
                             }
-                            if let Err(e) = msg.transmit(&mut self.hu_wr).await.with_context(|| format!("{}: SCRCPY transmit to HU failed", get_name())) {
+                            if let Err(e) = msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: SCRCPY transmit to HU failed", get_name())) {
                                 error!("SCRCPY>HU Transmission error: {:?}", e);
                                 return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY>HU channel closed")));
                             }
@@ -308,7 +297,7 @@ where
                 }
             }
             // medium priority, HU>Service
-            Some(mut msg) = self.hu_rx.recv() => {
+            Some(mut msg) = hu_rx.recv() => {
                 // Increment byte counters for statistics
                 // fixme: compute final_len for precise stats
                 self.r_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
@@ -328,7 +317,7 @@ where
                                     &msg,
                                     "HU".parse().unwrap()
                                 ).await;*/
-                                if let Err(_) = self.srv_tx.send(msg).await{
+                                if let Err(_) = srv_tx.send(msg).await{
                                     error!( "{} tls proxy send to service error",get_name());
                                 };
                             }
@@ -358,10 +347,10 @@ where
                             // Step2: send server hello
                             let pkt = self.ssl_encapsulate(mem_buf.clone()).await?;
                             let _ = self.pkt_debug(HexdumpLevel::RawOutput, self.dmp_level, &pkt,"MD".parse().unwrap()).await;
-                            pkt.transmit(&mut self.hu_wr).await.with_context(|| format!("{}: transmit failed", get_name()))?;
+                            pkt.transmit(&mut hu_wr).await.with_context(|| format!("{}: transmit failed", get_name()))?;
 
                             //Step3: ClientKeyExchange
-                            let pkt = self.hu_rx.recv().await.ok_or("hu reader channel hung up")?;
+                            let pkt = hu_rx.recv().await.ok_or("hu reader channel hung up")?;
                             let _ = self.pkt_debug(HexdumpLevel::RawInput, self.dmp_level, &pkt, "HU".parse().unwrap()).await;
                             pkt.ssl_decapsulate_write(&mut mem_buf).await?;
                             self.ssl_check_failure(server.accept())?;
@@ -383,10 +372,10 @@ where
                             //Step4: Change Cipher spec finished
                             let pkt = self.ssl_encapsulate(mem_buf.clone()).await?;
                             let _ = self.pkt_debug(HexdumpLevel::RawOutput, self.dmp_level, &pkt, "MD".parse().unwrap()).await;
-                            pkt.transmit(&mut self.hu_wr).await.with_context(|| format!("{}: transmit failed", get_name()))?;
+                            pkt.transmit(&mut hu_wr).await.with_context(|| format!("{}: transmit failed", get_name()))?;
                     }
                     else {
-                        if let Err(_) = self.srv_tx.send(msg).await{
+                        if let Err(_) = srv_tx.send(msg).await{
                             error!( "{} tls proxy send to service error",get_name());
                         };
                     }
@@ -394,7 +383,7 @@ where
                 }
             }
             //lower priority Service>HU
-            Some(mut msg) = self.srv_rx.recv() => {
+            Some(mut msg) = srv_rx.recv() => {
             if msg.flags&ENCRYPTED !=0
             {
                 if !ssl_handshake_done
@@ -413,7 +402,7 @@ where
                                 // Increment byte counters for statistics
                                 // fixme: compute final_len for precise stats
                                 self.w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
-                                msg.transmit(&mut self.hu_wr).await.with_context(|| format!("{}: Service transmit to HU failed", get_name()))?;
+                                msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: Service transmit to HU failed", get_name()))?;
                             }
                             Err(e) => {error!( "{} encrypt_payload error: {:?}", get_name(), e);},
                         }
@@ -430,7 +419,7 @@ where
                     // Increment byte counters for statistics
                     // fixme: compute final_len for precise stats
                     self.w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
-                    msg.transmit(&mut self.hu_wr).await.with_context(|| format!("{}: Service transmit to HU failed", get_name()))?;
+                    msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: Service transmit to HU failed", get_name()))?;
 
             }
             }
@@ -445,9 +434,13 @@ where
         Ok(())
     }
 
-    pub fn start(self) -> JoinHandle<Result<()>> {
+    pub fn start(self, hu_wr: IoDevice<A>,
+                 hu_rx: Receiver<Packet>,
+                 srv_rx: Receiver<Packet>,
+                 srv_tx: Sender<Packet>,
+                 scrcpy_rx: flume::Receiver<Packet>,) -> JoinHandle<Result<()>> {
         tokio_uring::spawn(async move {
-            self.run().await
+            self.run(hu_wr, hu_rx, srv_rx, srv_tx, scrcpy_rx).await
         })
     }
 
