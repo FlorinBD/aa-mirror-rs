@@ -224,8 +224,6 @@ pub struct PacketProxy<A: Endpoint<A>> {
     r_statistics: Arc<AtomicUsize>,
     w_statistics: Arc<AtomicUsize>,
     dmp_level:HexdumpLevel,
-    //local vars
-    ssl_handshake_done:bool,
 }
 
 impl<A> PacketProxy<A>
@@ -251,7 +249,6 @@ where
             r_statistics,
             w_statistics,
             dmp_level,
-            ssl_handshake_done:false,
         }
     }
 
@@ -261,6 +258,7 @@ where
             client_stream: Arc::new(Mutex::new(VecDeque::new())),
             server_stream: Arc::new(Mutex::new(VecDeque::new())),
         };
+        let mut ssl_handshake_done=false;
         let mut server = openssl::ssl::SslStream::new(ssl, mem_buf.clone())?;
         info!( "{}: Starting message proxy loop...", get_name());
         loop {
@@ -269,7 +267,7 @@ where
 
             // 🔴 highest priority, SCRCPY>HU
             Ok(mut msg) = self.scrcpy_rx.recv_async() => {
-            if !self.ssl_handshake_done
+            if !ssl_handshake_done
                 {
                     error!( "{}: tls proxy error: received encrypted message from service before TLS handshake", get_name());
                 }
@@ -311,7 +309,7 @@ where
 
                 if msg.flags&ENCRYPTED !=0
                 {
-                    if !self.ssl_handshake_done
+                    if !ssl_handshake_done
                     {
                         error!( "{}: tls proxy error: received encrypted message from HU before TLS handshake", get_name());
                     }
@@ -337,7 +335,7 @@ where
                     let _ = self.pkt_debug(HexdumpLevel::DecryptedInput, self.dmp_level, &msg, "HU".parse().unwrap()).await;
                     // message_id is the first 2 bytes of payload
                     let message_id: i32 = u16::from_be_bytes(msg.payload[0..=1].try_into()?).into();
-                    if !self.ssl_handshake_done && (message_id == ControlMessageType::MESSAGE_ENCAPSULATED_SSL as i32)
+                    if !ssl_handshake_done && (message_id == ControlMessageType::MESSAGE_ENCAPSULATED_SSL as i32)
                     {
                         // doing SSL handshake
                             //Step1: parse client hello
@@ -369,7 +367,7 @@ where
                                 server.ssl().state_string_long(),
                             );
                             if server.ssl().is_init_finished() {
-                                self.ssl_handshake_done=true;
+                                ssl_handshake_done=true;
                                 info!(
                                     "{} 🔒 SSL init complete, negotiated cipher: <b><blue>{}</>",
                                     get_name(),
@@ -393,7 +391,7 @@ where
             Some(mut msg) = self.srv_rx.recv() => {
             if msg.flags&ENCRYPTED !=0
             {
-                if !self.ssl_handshake_done
+                if !ssl_handshake_done
                 {
                         error!( "{}: tls proxy error: received encrypted message from service before TLS handshake", get_name());
                 }
