@@ -451,9 +451,8 @@ where
 
         // for HU/headunit we need to act as a MD/mobiledevice, so load "md" key and cert
         // and vice versa
-        let prefix = "md";
-        ctx_builder.set_certificate_file(format!("{KEYS_PATH}/{prefix}_cert.pem"), SslFiletype::PEM)?;
-        ctx_builder.set_private_key_file(format!("{KEYS_PATH}/{prefix}_key.pem"), SslFiletype::PEM)?;
+        ctx_builder.set_certificate_file(format!("{KEYS_PATH}/md_cert.pem"), SslFiletype::PEM)?;
+        ctx_builder.set_private_key_file(format!("{KEYS_PATH}/md_key.pem"), SslFiletype::PEM)?;
         ctx_builder.check_private_key()?;
         // trusted root certificates:
         ctx_builder.set_ca_file(format!("{KEYS_PATH}/galroot_cert.pem"))?;
