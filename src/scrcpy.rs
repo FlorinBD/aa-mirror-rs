@@ -1216,7 +1216,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                                     error!("tsk_scrcpy unmanaged custom command received: {}",cmd_id);
                                 }
                             }
-                            else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK as i32
+                            /*else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK as i32
                             {
                                 //info!("{} Received {} message", sid.to_string(), message_id);
                                 let data = &pkt.payload[2..]; // start of message data, without message_id
@@ -1260,7 +1260,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                                 {
                                     error!( "tsk_scrcpy Unable to parse MEDIA_MESSAGE_ACK message");
                                 }
-                            }
+                            }*/
                             else if message_id == InputMessageId::INPUT_MESSAGE_INPUT_REPORT  as i32
                             {
                                 if let Err(_) = tx_ctrl.send_async(pkt).await
