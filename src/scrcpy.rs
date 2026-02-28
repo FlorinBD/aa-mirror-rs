@@ -18,7 +18,7 @@ use tokio::sync::{mpsc, oneshot, Notify};
 use tokio_uring::net::TcpStream;
 use crate::aa_services::{AudioStreamingParams, MediaCodec, VideoStreamingParams};
 use crate::{adb, channel_manager};
-use crate::channel_manager::{Packet, ENCRYPTED, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
+use crate::channel_manager::{Packet, PacketProxy, ENCRYPTED, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
 use crate::config::{AppConfig, MAX_DATA_LEN, SCRCPY_METADATA_HEADER_LEN, SCRCPY_PORT, SCRCPY_VERSION};
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use protos::*;
@@ -841,6 +841,7 @@ pub(crate) async fn tsk_adb_scrcpy(
     srv_cmd_rx_scrcpy: flume::Receiver<Packet>,
     srv_cmd_tx: flume::Sender<Packet>,
     config: AppConfig,
+    pp:&PacketProxy,
 ) -> Result<()> {
     info!("{}: ADB task started",NAME);
     let cmd_adb = Command::new("adb")
@@ -1094,11 +1095,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                 {
                     video_max_unack_mpsc =video_codec_params.max_unack as usize;
                 }
-                                
-                //let notify_audio = Arc::new(Notify::new());
-                //let notify_video = Arc::new(Notify::new());
-                //let ack_audio=notify_audio.clone();
-                //let ack_video=notify_video.clone();
+                
                 let (ack_audio_tx, mut ack_audio_rx) = mpsc::channel::<()>(audio_max_unack_mpsc);
                 let (ack_video_tx, mut ack_video_rx) = mpsc::channel::<()>(video_max_unack_mpsc);
                 let (tx_ctrl, rx_ctrl)=flume::bounded::<Packet>(5);

@@ -462,12 +462,14 @@ impl PacketProxy
         })
     }
 
-    pub fn set_audio_ack_ch(&mut self, rx: Receiver<()>) {
+    pub fn set_audio_ack_ch(&mut self, rx: Receiver<()>, sid:u8) {
         self.audio_ack_rx = Some(rx);
+        self.audio_sid=sid;
     }
 
-    pub fn set_video_ack_ch(&mut self, rx: Receiver<()>) {
+    pub fn set_video_ack_ch(&mut self, rx: Receiver<()>, sid:u8) {
         self.video_ack_rx = Some(rx);
+        self.video_sid=sid;
     }
 
     /// creates Ssl for HeadUnit (SSL server) and MobileDevice (SSL client)
