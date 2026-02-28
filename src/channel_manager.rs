@@ -501,6 +501,59 @@ where
             payload: res,
         })
     }
+
+    /// shows packet/message contents as pretty string for debug
+    pub async fn pkt_debug(self,
+        hexdump: HexdumpLevel,
+        hex_requested: HexdumpLevel,
+        pkt: &Packet,
+        source:String,
+    ) -> Result<()> {
+        // don't run further if we are not in Debug mode
+        if !log_enabled!(Level::Debug) {
+            return Ok(());
+        }
+
+        // if for some reason we have too small packet, bail out
+        if pkt.payload.len() < 2 {
+            return Ok(());
+        }
+        // message_id is the first 2 bytes of payload
+        let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+
+        // trying to obtain an Enum from message_id
+        let control = protos::ControlMessageType::from_i32(message_id);
+        debug!("{}> ch: {} flags: {:04X} message_id = {:04X}, {:?}",source, pkt.channel,pkt.flags, message_id, control);
+        if hex_requested >= hexdump {
+            debug!("{} {:?} {}", get_name(), hexdump, pkt);
+        }
+
+        // parsing data
+        let data = &pkt.payload[2..]; // start of message data
+        let message: &dyn MessageDyn = match control.unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) {
+            MESSAGE_VERSION_REQUEST => &VersionRequest::parse_from_bytes(data)?,
+            MESSAGE_BYEBYE_REQUEST => &ByeByeRequest::parse_from_bytes(data)?,
+            MESSAGE_BYEBYE_RESPONSE => &ByeByeResponse::parse_from_bytes(data)?,
+            MESSAGE_AUTH_COMPLETE => &AuthResponse::parse_from_bytes(data)?,
+            MESSAGE_SERVICE_DISCOVERY_REQUEST => &ServiceDiscoveryRequest::parse_from_bytes(data)?,
+            MESSAGE_SERVICE_DISCOVERY_RESPONSE => &ServiceDiscoveryResponse::parse_from_bytes(data)?,
+            MESSAGE_PING_REQUEST => &PingRequest::parse_from_bytes(data)?,
+            MESSAGE_PING_RESPONSE => &PingResponse::parse_from_bytes(data)?,
+            MESSAGE_NAV_FOCUS_REQUEST => &NavFocusRequestNotification::parse_from_bytes(data)?,
+            MESSAGE_CHANNEL_OPEN_RESPONSE => &ChannelOpenResponse::parse_from_bytes(data)?,
+            MESSAGE_CHANNEL_OPEN_REQUEST => &ChannelOpenRequest::parse_from_bytes(data)?,
+            MESSAGE_AUDIO_FOCUS_REQUEST => &AudioFocusRequestNotification::parse_from_bytes(data)?,
+            MESSAGE_AUDIO_FOCUS_NOTIFICATION => &AudioFocusNotification::parse_from_bytes(data)?,
+            MEDIA_MESSAGE_SETUP =>&Setup::parse_from_bytes(data)?,
+            MEDIA_MESSAGE_START =>&Start::parse_from_bytes(data)?,
+            MEDIA_MESSAGE_CONFIG =>&ChConfig::parse_from_bytes(data)?,
+            _ => return Ok(()),
+        };
+        // show pretty string from the message
+        debug!("{}", print_to_string_pretty(message));
+
+        Ok(())
+    }
 }
 /// shows packet/message contents as pretty string for debug
 pub async fn pkt_debug(
