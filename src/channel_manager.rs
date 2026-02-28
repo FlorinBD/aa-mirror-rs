@@ -214,7 +214,7 @@ impl fmt::Display for Packet {
     }
 }
 
-pub struct PacketProxy<A: Endpoint<A>> {
+pub struct PacketProxy {
     //params
     r_statistics: Arc<AtomicUsize>,
     w_statistics: Arc<AtomicUsize>,
@@ -224,9 +224,7 @@ pub struct PacketProxy<A: Endpoint<A>> {
     video_sid:u8,
 }
 
-impl<A> PacketProxy<A>
-where
-    A: Endpoint<A> + Send + 'static,
+impl PacketProxy
 {
     pub fn new(
         r_statistics: Arc<AtomicUsize>,
@@ -243,7 +241,7 @@ where
         }
     }
 
-    async fn run(mut self, mut hu_wr: IoDevice<A>,
+    async fn run<A: Endpoint<A>>(mut self, mut hu_wr: IoDevice<A>,
                  mut hu_rx: Receiver<Packet>,
                  mut srv_rx: Receiver<Packet>,
                  srv_tx: Sender<Packet>,
@@ -434,7 +432,7 @@ where
         Ok(())
     }
 
-    pub fn start(self, hu_wr: IoDevice<A>,
+    pub fn start<A: Endpoint<A>>(self, hu_wr: IoDevice<A>,
                  hu_rx: Receiver<Packet>,
                  srv_rx: Receiver<Packet>,
                  srv_tx: Sender<Packet>,
