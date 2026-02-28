@@ -471,7 +471,7 @@ where
     /// Note that the error may not be fatal. For example if the underlying
     /// stream is an asynchronous one then `HandshakeError::WouldBlock` may
     /// just mean to wait for more I/O to happen later.
-    fn ssl_check_failure<T>(self, res: std::result::Result<T, openssl::ssl::Error>) -> Result<()> {
+    fn ssl_check_failure<T>(&self, res: std::result::Result<T, openssl::ssl::Error>) -> Result<()> {
         if let Err(err) = res {
             match err.code() {
                 ErrorCode::WANT_READ | ErrorCode::WANT_WRITE | ErrorCode::SYSCALL => Ok(()),
