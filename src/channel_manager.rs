@@ -432,7 +432,7 @@ impl PacketProxy
         Ok(())
     }
 
-    pub fn start<A: Endpoint<A>>(self, hu_wr: IoDevice<A>,
+    pub fn start<A: Endpoint<A> + 'static>(self, hu_wr: IoDevice<A>,
                  hu_rx: Receiver<Packet>,
                  srv_rx: Receiver<Packet>,
                  srv_tx: Sender<Packet>,
