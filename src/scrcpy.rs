@@ -414,7 +414,7 @@ async fn tsk_scrcpy_video(
                             final_length: total_len,
                             payload,
                         };
-                        match video_tx.send_async(pkt_rsp).await
+                        match video_tx.send_async(ChannelProxyHandle{ ch_rx: None, data:Some(pkt_rsp)}).await
                         {
                             Ok(_) => {
                                 //tokio::task::yield_now().await;
@@ -446,7 +446,7 @@ async fn tsk_scrcpy_video(
                         final_length: None,
                         payload,
                     };
-                    match video_tx.send_async(pkt_rsp).await
+                    match video_tx.send_async(ChannelProxyHandle{ ch_rx: None, data:Some(pkt_rsp)}).await
                     {
                         Ok(_) => {
                             //tokio::task::yield_now().await;
@@ -579,7 +579,7 @@ async fn tsk_scrcpy_audio(
                             final_length: total_len,
                             payload,
                         };
-                        match audio_tx.send_async(pkt_rsp).await
+                        match audio_tx.send_async(ChannelProxyHandle{ ch_rx: None, data:Some(pkt_rsp)}).await
                         {
                             Ok(_) => {
                                 //tokio::task::yield_now().await;
@@ -612,7 +612,7 @@ async fn tsk_scrcpy_audio(
                         final_length: None,
                         payload,
                     };
-                    match audio_tx.send_async(pkt_rsp).await
+                    match audio_tx.send_async(ChannelProxyHandle{ ch_rx: None, data:Some(pkt_rsp)}).await
                     {
                         Ok(_) => {
                             //tokio::task::yield_now().await;

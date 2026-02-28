@@ -222,7 +222,7 @@ pub struct AckChannels {
 }
 pub struct ChannelProxyHandle {
     pub(crate) ch_rx: Option<AckChannels>,
-    data: Option<Packet>,
+    pub(crate) data: Option<Packet>,
 }
 
 pub struct PacketProxy {
