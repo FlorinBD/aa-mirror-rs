@@ -245,7 +245,7 @@ impl PacketProxy
                  mut hu_rx: Receiver<Packet>,
                  mut srv_rx: Receiver<Packet>,
                  srv_tx: Sender<Packet>,
-                 scrcpy_rx: flume::Receiver<Packet>, 
+                 scrcpy_rx: flume::Receiver<Packet>,
                  scrcpy_tx: flume::Sender<Packet>,
     ) -> Result<()> {
         let ssl = self.ssl_builder().await?;
@@ -324,7 +324,7 @@ impl PacketProxy
                                     let message_id: i32 = u16::from_be_bytes(msg.payload[0..=1].try_into()?).into();
                                     if message_id == MediaMessageId::MEDIA_MESSAGE_ACK as i32
                                     {
-                                        if let Err(_) = scrcpy_tx.send(msg).await{
+                                        if let Err(_) = scrcpy_tx.send_async(msg).await{
                                             error!( "{} send to SCRCPY error",get_name());
                                         };
                                         continue;
@@ -451,7 +451,7 @@ impl PacketProxy
                  hu_rx: Receiver<Packet>,
                  srv_rx: Receiver<Packet>,
                  srv_tx: Sender<Packet>,
-                 scrcpy_rx: flume::Receiver<Packet>, 
+                 scrcpy_rx: flume::Receiver<Packet>,
                  scrcpy_tx: flume::Sender<Packet>,
     ) -> JoinHandle<Result<()>> {
         tokio_uring::spawn(async move {
@@ -583,7 +583,6 @@ impl PacketProxy
                         let ch_id=i32::from(proto_srv.id());
                         if proto_srv.media_sink_service.is_some()
                         {
-                            channel_status.push(ServiceStatus{service_type:ServiceType::MediaSink, ch_id, enabled:true, open_ch_cmd: CommandState::NotDone });
                             if proto_srv.media_sink_service.audio_configs.len()>0
                             {
                                 let srv_type=proto_srv.media_sink_service.audio_type();
@@ -598,7 +597,7 @@ impl PacketProxy
                             }
                         }
                     }
-                    
+
                 }
             }
         }
