@@ -245,7 +245,9 @@ impl PacketProxy
                  mut hu_rx: Receiver<Packet>,
                  mut srv_rx: Receiver<Packet>,
                  srv_tx: Sender<Packet>,
-                 scrcpy_rx: flume::Receiver<Packet>,) -> Result<()> {
+                 scrcpy_rx: flume::Receiver<Packet>, 
+                 scrcpy_tx: flume::Sender<Packet>,
+    ) -> Result<()> {
         let ssl = self.ssl_builder().await?;
         let mut mem_buf = SslMemBuf {
             client_stream: Arc::new(Mutex::new(VecDeque::new())),
@@ -315,6 +317,19 @@ impl PacketProxy
                                     &msg,
                                     "HU".parse().unwrap()
                                 ).await;*/
+                                self.sdr_detect(&msg);
+                                //check if is media ack message
+                                if (self.audio_sid >0) && (self.video_sid>0) && ((msg.channel == self.audio_sid)||(msg.channel == self.video_sid))
+                                {
+                                    let message_id: i32 = u16::from_be_bytes(msg.payload[0..=1].try_into()?).into();
+                                    if message_id == MediaMessageId::MEDIA_MESSAGE_ACK as i32
+                                    {
+                                        if let Err(_) = scrcpy_tx.send(msg).await{
+                                            error!( "{} send to SCRCPY error",get_name());
+                                        };
+                                        continue;
+                                    }
+                                }
                                 if let Err(_) = srv_tx.send(msg).await{
                                     error!( "{} tls proxy send to service error",get_name());
                                 };
@@ -436,9 +451,11 @@ impl PacketProxy
                  hu_rx: Receiver<Packet>,
                  srv_rx: Receiver<Packet>,
                  srv_tx: Sender<Packet>,
-                 scrcpy_rx: flume::Receiver<Packet>,) -> JoinHandle<Result<()>> {
+                 scrcpy_rx: flume::Receiver<Packet>, 
+                 scrcpy_tx: flume::Sender<Packet>,
+    ) -> JoinHandle<Result<()>> {
         tokio_uring::spawn(async move {
-            self.run(hu_wr, hu_rx, srv_rx, srv_tx, scrcpy_rx).await
+            self.run(hu_wr, hu_rx, srv_rx, srv_tx, scrcpy_rx, scrcpy_tx).await
         })
     }
 
@@ -546,6 +563,45 @@ impl PacketProxy
         debug!("{}", print_to_string_pretty(message));
 
         Ok(())
+    }
+
+    fn get_name(self,) -> String {
+        "PacketProxy".to_string()
+    }
+    ///Used to detect SDR for audio/video SIDs
+    fn sdr_detect(&mut self, pkt:&Packet,)
+    {
+        if pkt.channel==0
+        {
+            let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into().unwrap()).into();
+            if message_id == ControlMessageType::MESSAGE_SERVICE_DISCOVERY_RESPONSE as i32{
+                let data = &pkt.payload[2..]; // start of message data, without message_id
+                if  let Ok(msg) = ServiceDiscoveryResponse::parse_from_bytes(&data){
+                    info!( "{} ServiceDiscoveryResponse parsed ok",self.get_name());
+
+                    for (_,proto_srv) in msg.services.iter().enumerate() {
+                        let ch_id=i32::from(proto_srv.id());
+                        if proto_srv.media_sink_service.is_some()
+                        {
+                            channel_status.push(ServiceStatus{service_type:ServiceType::MediaSink, ch_id, enabled:true, open_ch_cmd: CommandState::NotDone });
+                            if proto_srv.media_sink_service.audio_configs.len()>0
+                            {
+                                let srv_type=proto_srv.media_sink_service.audio_type();
+                                if srv_type == AUDIO_STREAM_MEDIA
+                                {
+                                   self.audio_sid=ch_id as u8;
+                                }
+                            }
+                            else if proto_srv.media_sink_service.video_configs.len()>0
+                            {
+                                self.video_sid=ch_id as u8;
+                            }
+                        }
+                    }
+                    
+                }
+            }
+        }
     }
 }
 /// shows packet/message contents as pretty string for debug
