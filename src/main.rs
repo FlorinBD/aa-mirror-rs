@@ -280,7 +280,7 @@ async fn tokio_main(
         if let Some(ref mut leds) = led_manager {
             leds.set_led(LedColor::Blue, LedMode::On).await;
         }
-        info!("{} 📵 TCP/USB init done, waiting for restart...",NAME);
+        info!("{} 📵 USB init done, waiting for restart...",NAME);
         // wait for restart notification
         let _ = need_restart.recv().await;
         info!("{} 📵 TCP/USB connection closed or not started, trying again...",NAME);
