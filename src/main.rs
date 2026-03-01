@@ -283,10 +283,7 @@ async fn tokio_main(
         info!("{} 📵 TCP/USB init done, waiting for restart...",NAME);
         // wait for restart notification
         let _ = need_restart.recv().await;
-        info!(
-                "{} 📵 TCP/USB connection closed or not started, trying again...",
-                NAME
-            );
+        info!("{} 📵 TCP/USB connection closed or not started, trying again...",NAME);
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
         // TODO: make proper main loop with cancellation
