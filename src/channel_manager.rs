@@ -260,7 +260,6 @@ impl PacketProxy
                  mut srv_rx: Receiver<Packet>,
                  srv_tx: Sender<Packet>,
                  scrcpy_rx: flume::Receiver<ChannelProxyHandle>,
-                 scrcpy_tx: flume::Sender<Packet>,
     ) -> Result<()> {
         let ssl = self.ssl_builder().await?;
         let mut mem_buf = SslMemBuf {
@@ -341,10 +340,21 @@ impl PacketProxy
                                     let message_id: i32 = u16::from_be_bytes(msg.payload[0..=1].try_into()?).into();
                                     if message_id == MediaMessageId::MEDIA_MESSAGE_ACK as i32
                                     {
-                                        if let Err(_) = scrcpy_tx.send_async(msg).await{
-                                            error!( "{} send to SCRCPY error",get_name());
-                                        };
-                                        continue;
+                                        if let Some(scrcpy_tx)=self.audio_ack_rx && (msg.channel == self.audio_sid)
+                                        {
+                                            scrcpy_tx.try_recv();
+                                            continue;
+                                        }
+                                        else if let Some(scrcpy_tx)=self.video_ack_rx && (msg.channel == self.video_sid)
+                                        {
+                                            scrcpy_tx.try_recv();
+                                            continue;
+                                        }
+                                        else
+                                        {
+                                            error!( "{}: Media ACK unmanaged", get_name());
+                                        }
+                                                                                
                                     }
                                 }
                                 if let Err(_) = srv_tx.send(msg).await{
@@ -469,10 +479,9 @@ impl PacketProxy
                  srv_rx: Receiver<Packet>,
                  srv_tx: Sender<Packet>,
                  scrcpy_rx: flume::Receiver<ChannelProxyHandle>,
-                 scrcpy_tx: flume::Sender<Packet>,
     ) -> JoinHandle<Result<()>> {
         tokio_uring::spawn(async move {
-            self.run(hu_wr, hu_rx, srv_rx, srv_tx, scrcpy_rx, scrcpy_tx).await
+            self.run(hu_wr, hu_rx, srv_rx, srv_tx, scrcpy_rx,).await
         })
     }
 

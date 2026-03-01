@@ -1097,6 +1097,7 @@ pub(crate) async fn tsk_adb_scrcpy(
 
                 let (ack_audio_tx, mut ack_audio_rx) = mpsc::channel::<()>(audio_max_unack_mpsc);
                 let (ack_video_tx, mut ack_video_rx) = mpsc::channel::<()>(video_max_unack_mpsc);
+                //send RX channels for ACK to PacketProxy
                 let ack_ch=channel_manager::AckChannels{audio_rx:ack_audio_rx, video_rx:ack_video_rx, audio_sid:audio_codec_params.sid, video_sid:video_codec_params.sid };
                 if let Err(_) = media_tx.send_async(ChannelProxyHandle{ch_rx:Some(ack_ch), data:None}).await{
                     error!( "scrcpy setup send error");
@@ -1216,51 +1217,6 @@ pub(crate) async fn tsk_adb_scrcpy(
                                     error!("tsk_scrcpy unmanaged custom command received: {}",cmd_id);
                                 }
                             }
-                            /*else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK as i32
-                            {
-                                //info!("{} Received {} message", sid.to_string(), message_id);
-                                let data = &pkt.payload[2..]; // start of message data, without message_id
-                                if let Ok(ack) = Ack::parse_from_bytes(&data)
-                                {
-                                    if pkt.channel == video_sid
-                                    {
-                                        /*if ack.ack.is_some()
-                                        {
-                                            debug!("tsk_scrcpy: video ACK recived: {:?}", ack.ack());
-                                        }
-                                        else
-                                        {
-                                            debug!("tsk_scrcpy: video ACK recived");
-                                        }*/
-                                        //ack_video.notify_one();
-                                        ack_video_rx.try_recv();
-                                    }
-                                    else if pkt.channel == audio_sid
-                                    {
-                                       /*if ack.ack.is_some()
-                                        {
-                                            debug!("tsk_scrcpy: audio ACK recived: {:?}", ack.ack());
-                                        }
-                                        else
-                                        {
-                                            debug!("tsk_scrcpy: audio ACK recived");
-                                        }
-                                        if ack.receive_timestamp_ns.len()>0
-                                        {
-                                            debug!("tsk_scrcpy: audio ACK recived ts[0]: {:?}", ack.receive_timestamp_ns[0]);
-                                        }*/
-                                        ack_audio_rx.try_recv();
-                                    }
-                                    else
-                                    {
-                                        error!("tsk_scrcpy unexpected channel ID for ACK command");
-                                    }
-                                }
-                                else
-                                {
-                                    error!( "tsk_scrcpy Unable to parse MEDIA_MESSAGE_ACK message");
-                                }
-                            }*/
                             else if message_id == InputMessageId::INPUT_MESSAGE_INPUT_REPORT  as i32
                             {
                                 if let Err(_) = tx_ctrl.send_async(pkt).await
