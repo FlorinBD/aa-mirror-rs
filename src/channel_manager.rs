@@ -328,19 +328,12 @@ impl PacketProxy
                     else {
                         match msg.decrypt_payload(&mut mem_buf, &mut server).await {
                             Ok(_) => {
-                                /*let _ = pkt_debug(
-                                    HexdumpLevel::DecryptedInput,
-                                    dmp_level,
-                                    &msg,
-                                    "HU".parse().unwrap()
-                                ).await;*/
                                 //check if is media ack message
                                 if (self.audio_sid >0) && (self.video_sid>0) && ((msg.channel == self.audio_sid)||(msg.channel == self.video_sid))
                                 {
                                     let message_id: i32 = u16::from_be_bytes(msg.payload[0..=1].try_into()?).into();
                                     if message_id == MediaMessageId::MEDIA_MESSAGE_ACK as i32
                                     {
-
                                         if msg.channel == self.audio_sid
                                         {
                                             if let Some(mut scrcpy_tx)=self.audio_ack_rx
@@ -364,18 +357,19 @@ impl PacketProxy
                                             {
                                                 error!( "{}: Media ACK error, video_ack_rx is None", get_name());
                                             }
-
                                         }
                                         else
                                         {
                                             error!( "{}: Media ACK unmanaged", get_name());
                                         }
-
                                     }
                                 }
-                                if let Err(_) = srv_tx.send(msg).await{
-                                    error!( "{} tls proxy send to service error",get_name());
-                                };
+                                else
+                                {
+                                    if let Err(_) = srv_tx.send(msg).await{
+                                        error!( "{} tls proxy send to service error",get_name());
+                                    };
+                                }
                             }
                             Err(e) => {error!( "{} decrypt_payload error: {:?}", get_name(), e);},
                         }
