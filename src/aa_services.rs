@@ -1223,7 +1223,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         if video_focus
                         {
                             session_id +=1;
-                            start_media(&tx_srv, ch_id as u8, session_id).await?;
+                            //start_media(&tx_srv, ch_id as u8, session_id).await?;
                         }
 
                     }
@@ -1250,6 +1250,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                             if !first_screen_sent
                             {
                                 info!( "{}, channel {:?}: MD not connected yet, showing startup screen", get_name(), pkt.channel);
+                                start_media(&tx_srv, ch_id as u8, session_id).await?;
                                 show_first_screen(&tx_srv, ch_id as u8, &wait_screen_config_frame, &wait_screen_first_frame).await;
                                 first_screen_sent=true;
                             }
