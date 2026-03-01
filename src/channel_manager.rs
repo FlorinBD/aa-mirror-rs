@@ -340,15 +340,31 @@ impl PacketProxy
                                     let message_id: i32 = u16::from_be_bytes(msg.payload[0..=1].try_into()?).into();
                                     if message_id == MediaMessageId::MEDIA_MESSAGE_ACK as i32
                                     {
-                                        if let Some(mut scrcpy_tx)=self.audio_ack_rx && (msg.channel == self.audio_sid)
+
+                                        if msg.channel == self.audio_sid
                                         {
-                                            scrcpy_tx.try_recv();
-                                            continue;
+                                            if let Some(mut scrcpy_tx)=self.audio_ack_rx
+                                            {
+                                                scrcpy_tx.try_recv();
+                                                continue;
+                                            }
+                                            else
+                                            {
+                                                error!( "{}: Media ACK error, audio_ack_rx is None", get_name());
+                                            }
                                         }
-                                        else if let Some(mut scrcpy_tx)=self.video_ack_rx && (msg.channel == self.video_sid)
+                                        else msg.channel == self.video_sid
                                         {
-                                            scrcpy_tx.try_recv();
-                                            continue;
+                                            if let Some(mut scrcpy_tx)=self.video_ack_rx
+                                            {
+                                                scrcpy_tx.try_recv();
+                                                continue;
+                                            }
+                                            else
+                                            {
+                                                error!( "{}: Media ACK error, video_ack_rx is None", get_name());
+                                            }
+
                                         }
                                         else
                                         {
