@@ -1155,7 +1155,6 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         {
                             info!("{} MD connected, send media STOP to HU",get_name());
                             session_id +=1;
-                            video_stream_started=false;
                             first_screen_sent=false;
                             stop_media(&tx_srv, ch_id as u8).await?;
                             tokio::time::sleep(Duration::from_millis(100)).await;
@@ -1197,6 +1196,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                     {
                         session_id +=1;
                         video_stream_started=false;
+                        video_stream_paused=false;
                         first_screen_sent=false;
                         stop_media(&tx_srv, ch_id as u8).await?;
                         tokio::time::sleep(Duration::from_millis(100)).await;
