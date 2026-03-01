@@ -336,7 +336,7 @@ impl PacketProxy
                                     {
                                         if msg.channel == self.audio_sid
                                         {
-                                            if let Some(mut scrcpy_tx)=self.audio_ack_rx
+                                            if let Some(ref mut scrcpy_tx)=self.audio_ack_rx
                                             {
                                                 scrcpy_tx.try_recv();
                                                 continue;
@@ -346,9 +346,9 @@ impl PacketProxy
                                                 error!( "{}: Media ACK error, audio_ack_rx is None", get_name());
                                             }
                                         }
-                                        else msg.channel == self.video_sid
+                                        else if msg.channel == self.video_sid
                                         {
-                                            if let Some(mut scrcpy_tx)=self.video_ack_rx
+                                            if let Some(ref mut scrcpy_tx)=self.video_ack_rx
                                             {
                                                 scrcpy_tx.try_recv();
                                                 continue;

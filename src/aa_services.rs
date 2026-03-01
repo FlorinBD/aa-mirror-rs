@@ -1417,15 +1417,15 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
             }
             else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK  as i32//now this is done by PacketProxy, not needed
             {
-                if video_stream_started
+                error!("{}: Media ACK received by service, was not handled by PacketProxy", get_name())
+                /*if video_stream_started
                 {
-                    //info!( "{}, channel {:?}: video ACK received, proxy to SCRCPY", get_name(), pkt.channel);
-                    //scrcpy_cmd.send_async(pkt).await?;
+
                     if let Err(_) = scrcpy_cmd.send_async(pkt).await{
                         error!( "{} mpsc send error",get_name());
                     };
-                    //tokio::task::yield_now().await;
-                }
+
+                }*/
             }
             else
             {
@@ -1836,12 +1836,12 @@ pub async fn th_media_sink_audio_streaming(ch_id: i32, enabled:bool, tx_srv: Sen
             }
             else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK  as i32 //now this is done by PacketProxy, not needed
             {
-                if audio_stream_started
+                error!("{}: Media ACK received by service, was not handled by PacketProxy", get_name())
+                /*if audio_stream_started
                 {
                     //info!("{} Received {} message, proxy to SCRCPY", ch_id.to_string(), message_id);
                     scrcpy_cmd.send_async(pkt).await?;
-                    //tokio::task::yield_now().await;
-                }
+                }*/
             }
             else if message_id == MediaMessageId::MEDIA_MESSAGE_AUDIO_UNDERFLOW_NOTIFICATION  as i32
             {
