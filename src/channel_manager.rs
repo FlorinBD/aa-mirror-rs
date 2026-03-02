@@ -690,10 +690,15 @@ async fn read_input_data<A: Endpoint<A>>(
         }
         IoDevice::TcpStreamIo(device) => {
             let retval = device.read(newdata);
-            (n, newdata) = timeout(Duration::from_millis(15000), retval)
+            /*(n, newdata) = timeout(Duration::from_millis(15000), retval)
                 .await
                 .context("read_input_data: TcpStreamIo timeout")?;
-            len = n.context("read_input_data: TcpStreamIo read error")?;
+            len = n.context("read_input_data: TcpStreamIo read error")?;*/
+            let (nn, nd) = timeout(Duration::from_millis(15000), retval)
+                .await
+                .map_err(|e| anyhow::anyhow!("TcpStreamIo read timeout: {:?}", e))?;
+            len = nn?;
+            newdata = nd;
         }
         _ => todo!(),
     }
