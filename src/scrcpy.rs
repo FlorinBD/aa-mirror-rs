@@ -771,9 +771,9 @@ async fn tsk_scrcpy_control(
                                 }
                             }
                         }
-                        else if rsp.absolute_event.is_some()
+                        else if let Some(abs_event) = rsp.absolute_event.as_ref()
                         {
-                            for (_,key_ev) in rsp.absolute_event.data.iter().enumerate() {
+                            for (_,key_ev) in abs_event.data.iter().enumerate() {
                                 debug!("scrcpy_control received ABS event: keycode={:?}, value={:?}",key_ev.keycode(),key_ev.value())
                             }
                         }
