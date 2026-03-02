@@ -773,13 +773,13 @@ async fn tsk_scrcpy_control(
                         }
                         else if let Some(abs_event) = rsp.absolute_event.as_ref()
                         {
-                            for (_,key_ev) in abs_event.data.iter().enumerate() {
+                            for (key_ev) in abs_event.data.iter().enumerate() {
                                 debug!("scrcpy_control received ABS event: keycode={:?}, value={:?}",key_ev.keycode(),key_ev.value())
                             }
                         }
                         else if let Some(rel_event) = rsp.relative_event.as_ref()
                         {
-                            for (_,key_ev) in &rel_event.data {
+                            for (key_ev) in &rel_event.data {
                                 debug!("scrcpy_control received REL event: keycode={:?}, delta={:?}",key_ev.keycode(),key_ev.delta());
                                 if key_ev.keycode() == KeyCode::KEYCODE_ROTARY_CONTROLLER as u32
                                 {
