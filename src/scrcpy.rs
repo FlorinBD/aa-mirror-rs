@@ -773,7 +773,7 @@ async fn tsk_scrcpy_control(
                         }
                         else if let Some(abs_event) = rsp.absolute_event.as_ref()
                         {
-                            for (key_ev) in abs_event.data.iter().enumerate() {
+                            for (key_ev) in &abs_event.data{
                                 debug!("scrcpy_control received ABS event: keycode={:?}, value={:?}",key_ev.keycode(),key_ev.value())
                             }
                         }
