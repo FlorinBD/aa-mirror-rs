@@ -1276,6 +1276,8 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                                 if let Err(_) = scrcpy_cmd.send_async(pkt_rsp).await{
                                     error!( "{} mpsc send error",get_name());
                                 };
+                                session_id +=1;
+                                start_media(&tx_srv, ch_id as u8, session_id).await?;
                             }
                             else
                             {
@@ -1388,7 +1390,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                 {
                     if !video_stream_started
                     {
-                        info!( "{}, channel {:?}: MD connected, starting video streaming", get_name(), pkt.channel);
+                        debug!( "{}, channel {:?}: MD connected, starting video streaming", get_name(), pkt.channel);
                         video_stream_started=true;
                         let bytes: Vec<u8> = postcard::to_stdvec(&video_params)?;
                         let mut payload = Vec::new();
