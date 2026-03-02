@@ -664,7 +664,7 @@ async fn read_input_data<A: Endpoint<A>>(
     obj: &mut IoDevice<A>,
 ) -> Result<()> {
     let mut newdata = vec![0u8; BUFFER_LEN];
-    let n;
+    //let n;
     let len;
 
     match obj {
@@ -677,6 +677,7 @@ async fn read_input_data<A: Endpoint<A>>(
         }
         IoDevice::EndpointIo(device) => {
             let retval = device.read(newdata);
+
             /*(n, newdata) = timeout(Duration::from_millis(15000), retval)
                 .await
                 .context("read_input_data: EndpointIo timeout")?;
