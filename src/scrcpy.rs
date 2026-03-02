@@ -777,11 +777,10 @@ async fn tsk_scrcpy_control(
                                 debug!("scrcpy_control received ABS event: keycode={:?}, value={:?}",key_ev.keycode(),key_ev.value())
                             }
                         }
-                        else if let Some(rel_event) = &rsp.relative_event
+                        else if let Some(rel_event) = rsp.relative_event.as_ref()
                         {
-                            debug!("scrcpy_control received REL event: keycode={:?}, delta={:?}",&rel_event.keycode(),&rel_event.delta());
                             for (_,key_ev) in &rel_event.data {
-
+                                debug!("scrcpy_control received REL event: keycode={:?}, delta={:?}",key_ev.keycode(),key_ev.delta());
                                 if key_ev.keycode() == KeyCode::KEYCODE_ROTARY_CONTROLLER as u32
                                 {
                                     let ev = ScrcpyScrollEvent { position: last_touched_point, vscroll:key_ev.delta() as i16, hscroll:0, buttons:0 };
