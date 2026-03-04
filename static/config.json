@@ -3,6 +3,14 @@
     {
       "title": "📶 SYSTEM / WIFI CONFIGURATION",
       "values": {
+        "wifi_mode": {
+          "typ": "select",
+          "description": "WARNING this must reflect buildroot config, you can't change it  only from here",
+          "values": [
+            "STA",
+            "AP"
+          ]
+        },
         "enable_ssh": {
           "typ": "boolean",
           "description": "Enable SSH server"

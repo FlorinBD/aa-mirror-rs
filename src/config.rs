@@ -1,4 +1,4 @@
-use crate::config_types::{BluetoothAddressList, EvConnectorTypes, HexdumpLevel, UsbId};
+use crate::config_types::{BluetoothAddressList, EvConnectorTypes, HexdumpLevel, UsbId, WiFiMode};
 use indexmap::IndexMap;
 use serde::de::{Deserializer, Error as DeError};
 use serde::{Deserialize, Serialize};
@@ -96,6 +96,7 @@ pub struct AppConfig {
     pub dongle_mode: bool,
     pub debug: bool,
     pub hexdump_level: HexdumpLevel,
+    pub wifi_mode: WiFiMode,
     pub disable_console_debug: bool,
     pub legacy: bool,
     pub scrcpy_screen_off: bool,
@@ -227,6 +228,7 @@ impl Default for AppConfig {
             dongle_mode: false,
             debug: true,
             hexdump_level: HexdumpLevel::Disabled,
+            wifi_mode: WiFiMode::STA,
             disable_console_debug: false,
             legacy: false,
             scrcpy_screen_off:true,
@@ -310,6 +312,7 @@ impl AppConfig {
         doc["dongle_mode"] = value(self.dongle_mode);
         doc["debug"] = value(self.debug);
         doc["hexdump_level"] = value(format!("{:?}", self.hexdump_level));
+        doc["wifi_mode"] = value(format!("{:?}", self.wifi_mode));
         doc["disable_console_debug"] = value(self.disable_console_debug);
         doc["legacy"] = value(self.legacy);
         doc["scrcpy_screen_off"] = value(self.scrcpy_screen_off);

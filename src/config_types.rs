@@ -167,6 +167,15 @@ pub enum HexdumpLevel {
     All,
 }
 
+#[derive(
+    clap::ValueEnum, Default, Debug, PartialEq, PartialOrd, Clone, Copy, Deserialize, Serialize,
+)]
+pub enum WiFiMode {
+    #[default]
+    STA,
+    AP,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct UsbId {
     pub vid: u16,
