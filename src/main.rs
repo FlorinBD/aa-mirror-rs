@@ -35,6 +35,7 @@ use tokio::time::Instant;
 
 use std::net::SocketAddr;
 use tokio::sync::RwLock;
+use aa_mirror_rs::config_types::WiFiMode;
 
 // Just a generic Result type to ease error handling for us. Errors in multithreaded
 // async contexts needs some extra restrictions
@@ -458,8 +459,15 @@ fn main() -> Result<()> {
 
     // generate system configs from template and exit
     if args.generate_system_config {
-        //generate_hostapd_conf(config).expect("error generating config from template");
-        generate_wpa_supplicant_conf(config).expect("error generating config from template");
+        if config.wifi_mode == WiFiMode::STA
+        {
+            generate_wpa_supplicant_conf(config).expect("error generating config from template");
+        }
+        else
+        {
+            generate_hostapd_conf(config).expect("error generating config from template");
+        }
+
 
         generate_usb_strings(UMTPRD_CONF_IN, UMTPRD_CONF_OUT)
             .expect("error generating config from template");
