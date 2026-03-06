@@ -1159,9 +1159,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                                 first_screen_sent=false;
                                 stop_media(&tx_srv, ch_id as u8).await?;
                                 tokio::time::sleep(Duration::from_millis(200)).await;
-                                session_id +=1;
-                                start_media(&tx_srv, ch_id as u8, session_id).await?;
-                                //FIXME this is for TEST ONLY, check if we need some confirmation from HU, try to start video wo. confirmation ATM
+
                                 debug!( "{}, channel {:?}: MD connected, starting video streaming", get_name(), pkt.channel);
                                 video_stream_started=true;
                                 video_stream_paused=false;
@@ -1180,6 +1178,9 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                                 if let Err(_) = scrcpy_cmd.send_async(pkt_rsp).await{
                                     error!( "{} mpsc send error",get_name());
                                 };
+                                //FIXME this is for TEST ONLY, check if we need some confirmation from HU, try to start video wo. confirmation ATM
+                                session_id +=1;
+                                start_media(&tx_srv, ch_id as u8, session_id).await?;
                             }
                             else {
                                 //FIXME this is for TEST ONLY, check if we need some confirmation from HU, try to start video wo. confirmation ATM
