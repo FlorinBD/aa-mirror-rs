@@ -213,6 +213,15 @@ async fn tokio_main(
     };
 
     let mut cfg = config.read().await.clone();
+    if is_hostapd_configured()
+    {
+        cfg.wifi_mode= WiFiMode::AP;
+    }
+    else
+    {
+        cfg.wifi_mode= WiFiMode::STA;
+    }
+
     if let Some(ref bindaddr) = cfg.webserver {
         // preparing AppState and starting webserver
         let app = web::app(state.clone().into());

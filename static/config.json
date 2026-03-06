@@ -80,10 +80,6 @@
           "typ": "string",
           "description": "Webserver bind address/port, empty = disabled"
         },
-        "legacy": {
-          "typ": "boolean",
-          "description": "Enable legacy USB mode (some HeadUnits/cars needs this enabled for compatibility)"
-        },
         "scrcpy_screen_off": {
           "typ": "boolean",
           "description": "Turn off screen after SCRCPY server starts"
