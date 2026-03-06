@@ -1323,7 +1323,7 @@ pub async fn ch_proxy(
     {
         //check service messages
         match rx_srv.recv().await {
-            Some(pkt)=>{
+            Some(mut pkt)=>{
                 if pkt.channel !=0
                 {
                     let ch=pkt.channel;
@@ -1406,6 +1406,7 @@ pub async fn ch_proxy(
                                     let idx=get_service_index(&channel_status, audio_codec_params.sid as i32);
                                     if idx !=255
                                     {
+                                        pkt.channel=audio_codec_params.sid;
                                         if let Err(_) = srv_senders[idx].send(pkt).await{
                                             error!( "{} srv send error",get_name());
                                         };
