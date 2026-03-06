@@ -98,7 +98,6 @@ pub struct AppConfig {
     pub hexdump_level: HexdumpLevel,
     pub wifi_mode: WiFiMode,
     pub disable_console_debug: bool,
-    pub legacy: bool,
     pub scrcpy_screen_off: bool,
     pub video_bitrate:i32,
     pub connect: BluetoothAddressList,
@@ -230,7 +229,6 @@ impl Default for AppConfig {
             hexdump_level: HexdumpLevel::Disabled,
             wifi_mode: WiFiMode::STA,
             disable_console_debug: false,
-            legacy: false,
             scrcpy_screen_off:true,
             video_bitrate:4_000_000,
             connect: BluetoothAddressList::default(),
@@ -314,7 +312,6 @@ impl AppConfig {
         doc["hexdump_level"] = value(format!("{:?}", self.hexdump_level));
         doc["wifi_mode"] = value(format!("{:?}", self.wifi_mode));
         doc["disable_console_debug"] = value(self.disable_console_debug);
-        doc["legacy"] = value(self.legacy);
         doc["scrcpy_screen_off"] = value(self.scrcpy_screen_off);
         doc["video_bitrate"] = value(self.video_bitrate as i64);
         doc["connect"] = value(self.connect.to_string());

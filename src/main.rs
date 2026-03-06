@@ -245,11 +245,7 @@ async fn tokio_main(
     };
     let mut usb = None;
     if !cfg.dhu {
-        if cfg.legacy {
-            // start uevent listener in own task
-            std::thread::spawn(|| uevent_listener(accessory_started_cloned));
-        }
-        usb = Some(UsbGadgetState::new(cfg.legacy, cfg.udc.clone()));
+        usb = Some(UsbGadgetState::new(false, cfg.udc.clone()));
     }
 
     // spawn a background task for reboot detection
