@@ -259,7 +259,7 @@ pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, 
                     else
                     {
 
-                        /*if sensors.contains(&SensorType::SENSOR_NIGHT_MODE) {
+                        if sensors.contains(&SensorType::SENSOR_NIGHT_MODE) {
                             info!("{} send SENSOR_MESSAGE_REQUEST",get_name());
                             let mut req = SensorRequest::new();
                             req.set_type(protos::SensorType::SENSOR_NIGHT_MODE);
@@ -270,7 +270,7 @@ pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, 
 
                             let pkt_rsp = Packet {
                                 channel: ch_id as u8,
-                                flags: ENCRYPTED | FRAME_TYPE_CONTROL | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                                flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                                 final_length: None,
                                 payload: payload,
                             };
@@ -278,7 +278,7 @@ pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, 
                             {
                                 error!( "{} mpsc send error", get_name());
                             };
-                        }*/
+                        }
 
                     }
                 }
