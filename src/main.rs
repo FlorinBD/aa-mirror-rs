@@ -384,6 +384,29 @@ fn generate_wpa_supplicant_conf(config: AppConfig) -> std::io::Result<()> {
     fs::write(WPA_SUPPLICANT_CONF_OUT, rendered)
 }
 
+fn is_hostapd_configured() -> bool {
+    let command="hostapd";
+    let file_path="/etc/network/interfaces";
+    let content = match fs::read_to_string(file_path) {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+
+        if trimmed.starts_with('#') {
+            continue;
+        }
+
+        if trimmed.contains(command) {
+            return true;
+        }
+    }
+
+    false
+}
+
 fn generate_usb_strings(input: &str, output: &str) -> std::io::Result<()> {
     info!(
         "{} 🗃️ Generating config from input template: <bold><green>{}</>",
@@ -459,13 +482,13 @@ fn main() -> Result<()> {
 
     // generate system configs from template and exit
     if args.generate_system_config {
-        if config.wifi_mode == WiFiMode::STA
+        if is_hostapd_configured()
         {
-            generate_wpa_supplicant_conf(config).expect("error generating config from template");
+            generate_hostapd_conf(config).expect("error generating config from template");
         }
         else
         {
-            generate_hostapd_conf(config).expect("error generating config from template");
+            generate_wpa_supplicant_conf(config).expect("error generating config from template");
         }
 
 
