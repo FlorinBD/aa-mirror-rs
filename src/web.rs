@@ -152,7 +152,16 @@ pub fn render_config_values(config: &ConfigJson) -> String {
                             .map(|opt| format!(r#"<option value="{opt}">{opt}</option>"#))
                             .collect::<Vec<_>>()
                             .join("\n");
-                        format!(r#"<select id="{key}">{options_html}</select>"#)
+                        let read_only_select="wifi_mode".to_string();
+                        if key==&read_only_select
+                        {
+                            format!(r#"<select id="{key}" disabled>{options_html}</select>"#)
+                        }
+                        else
+                        {
+                            format!(r#"<select id="{key}">{options_html}</select>"#)
+                        }
+
                     } else {
                         // fallback to text input if no options provided
                         format!(r#"<input type="text" id="{key}" />"#)
