@@ -1227,7 +1227,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         video_stream_paused=false;
                         first_screen_sent=false;
                         stop_media(&tx_srv, ch_id as u8).await?;
-                        tokio::time::sleep(Duration::from_millis(100)).await;
+                        tokio::time::sleep(Duration::from_millis(200)).await;
                         start_media(&tx_srv, ch_id as u8, session_id).await?;
                         //Send first screen again
                         show_first_screen(&tx_srv, ch_id as u8, &wait_screen_config_frame, &wait_screen_first_frame).await;
@@ -1359,7 +1359,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                             if let Err(_) = scrcpy_cmd.send_async(pkt_rsp).await{
                                 error!( "{} mpsc send error",get_name());
                             };
-                            stop_media(&tx_srv, ch_id as u8).await?;
+                            //stop_media(&tx_srv, ch_id as u8).await?;
                         }
                     }
                 }
