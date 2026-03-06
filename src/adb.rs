@@ -2,7 +2,7 @@ use std::ffi::OsStr;
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::process::Stdio;
 use std::time::{Duration};
-use log::error;
+use log::{debug, error};
 use port_check::is_port_reachable_with_timeout;
 use simplelog::info;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
@@ -46,6 +46,40 @@ pub fn parse_response_lines_old(rsp: Vec<u8>) ->Result<Vec<String>, String>
 ///Find an ADB device, connect to it and return TCP address
 pub(crate) async fn get_first_adb_device( config: AppConfig) ->Option<String>
 {
+    //check if ADB runing and if device is allready connected
+    debug!("Check ADB daemon devices...");
+    let cmd_dev = Command::new("adb")
+        .arg("devices")
+        .output().await.unwrap();
+    let lines=adb::parse_response_lines(cmd_dev.stdout).expect("TODO: panic message");
+    if lines.len() > 0 {
+        for line in lines {
+            info!("ADB devices response: {:?}", line);
+            if line.contains(&ADB_DEVICE_PORT.to_string()) {
+                if line.contains(&"device".to_string())
+                {
+                    let addr: Option<SocketAddrV4> = line
+                        .split_whitespace()
+                        .next()
+                        .and_then(|s| s.parse().ok());
+
+                    if let Some(addr) = addr {
+                        return Some(addr.to_string());
+                    }
+                    else
+                    {
+                        error!("ADB device found but failed to parse its address");
+                    }
+                }
+                else {
+                    //offline device, disconnect it
+                    debug!("ADB offline device found: {:?}, disconnect it", line);
+                    let _ = Command::new("adb").arg("disconnect").output().await.unwrap();
+                }
+
+            }
+        }
+    }
     // Run `ip -j neigh` asynchronously
     let cmd_ip_neigh = Command::new("ip")
         .args(&["neigh"])
