@@ -249,7 +249,7 @@ pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, 
             let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
             if message_id == MESSAGE_CHANNEL_OPEN_RESPONSE  as i32
             {
-                info!("Ch {} Received message id: {}", ch_id.to_string(), message_id);
+                info!("{} Received message id: {}", get_name(), message_id);
                 let data = &pkt.payload[2..]; // start of message data, without message_id
                 if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
                     if rsp.status() != STATUS_SUCCESS
