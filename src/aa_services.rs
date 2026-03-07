@@ -361,6 +361,24 @@ pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, 
                 {
                     info!( "{} MD_CONNECTED received", get_name());
                     md_connected=true;
+                    if prev_nt_mode
+                    {
+                        info!("{} Switching theme for MD to night mode", get_name());
+                        let mut mode="yes";
+                        let mut cmd_shell:Vec<String> = vec![];
+                        cmd_shell.push("cmd".to_string());
+                        cmd_shell.push("uimode".to_string());
+                        cmd_shell.push("night".to_string());
+                        cmd_shell.push(format!("{}",mode.to_string() ));
+                        let (mut shell, mut sh_reader,line)=adb::shell_cmd(cmd_shell).await?;
+                        info!("{} ADB cmd shell response: {:?}",get_name(), line);
+                        if !line.contains("Night mode:") && shell.id().is_some()
+                        {
+                            error!( "{} error switching MD theme", get_name());
+                        }
+                        shell.kill().await?;
+                    }
+
                 }
                 else if cmd == CustomCommand::MD_DISCONNECTED as i32
                 {
