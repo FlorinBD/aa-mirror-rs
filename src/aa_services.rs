@@ -1176,7 +1176,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                                 info!("{} MD connected, send media STOP to HU",get_name());
                                 first_screen_sent=false;
                                 stop_media(&tx_srv, ch_id as u8).await?;
-                                tokio::time::sleep(Duration::from_millis(200)).await;
+                                //tokio::time::sleep(Duration::from_millis(200)).await;
 
                                 debug!( "{}, channel {:?}: MD connected, starting video streaming", get_name(), pkt.channel);
                                 video_stream_started=true;
