@@ -340,13 +340,7 @@ async fn tsk_scrcpy_video(
                 let dbg_len = min(media_header.size, 16);
                 if dbg_count <  10
                 {
-                    if media_header.size > dbg_len
-                    {
-                        let end_offset = media_header.size - dbg_len;
-                        debug!("Video task got frame config={:?}, ts={}, act size: {}, raw slice: {:02x?}...{:02x?}",media_header.config, media_header.timestamp, media_header.size, &chunks[0][..dbg_len], &chunks[0][end_offset..]);
-                    } else {
-                        debug!("Video task got frame config={:?}, ts={}, act size: {}, raw bytes: {:02x?}",media_header.config, media_header.timestamp, media_header.size, &chunks[0][..dbg_len]);
-                    }
+                    debug!("Video task got frame config={:?}, ts={}, act size: {}, raw bytes: {:02x?}",media_header.config, media_header.timestamp, media_header.size, &chunks[0][..dbg_len]);
                     dbg_count += 1;
                 }
                 if pause_mode.load(Ordering::Relaxed)
@@ -508,13 +502,7 @@ async fn tsk_scrcpy_audio(
                 let dbg_len = min(rd_len, 16);
                 if dbg_count <  10
                 {
-                    if rd_len > dbg_len
-                    {
-                        let end_offset = rd_len - dbg_len;
-                        debug!("Audio task got frame config={:?}, ts={}, act size: {}, raw slice: {:02x?}...{:02x?}",media_header.config, media_header.timestamp, rd_len, &chunks[0][..dbg_len], &chunks[0][end_offset..]);
-                    } else {
-                        debug!("Audio task got frame config={:?}, ts={}, act size: {}, raw bytes: {:02x?}",media_header.config, media_header.timestamp, rd_len, &chunks[0][..dbg_len]);
-                    }
+                    debug!("Audio task got frame config={:?}, ts={}, act size: {}, raw bytes: {:02x?}",media_header.config, media_header.timestamp, rd_len, &chunks[0][..dbg_len]);
                     dbg_count += 1;
                 }
                 if pause_mode.load(Ordering::Relaxed)
