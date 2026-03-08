@@ -351,7 +351,7 @@ pub async fn io_loop(
         let mut hu_tcp = None;
         let mut hu_usb = None;
         let mut usb = None;
-        
+
         if config.dhu {
             //info!("{} 🛰️ DHU TCP server: bind to local address",NAME);
             //dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
@@ -367,7 +367,7 @@ pub async fn io_loop(
             }
         } else {
             debug!("{} 🛰️ Waiting for `Head Unit` connection on USB...",NAME);
-            usb = Some(UsbGadgetState::new(false, cfg.udc.clone()));
+            usb = Some(UsbGadgetState::new(false, config.udc.clone()));
             if let Some(ref mut usb) = usb {
                 if let Err(e) = usb.init() {
                     error!("{} 🔌 USB init error: {}", NAME, e);
