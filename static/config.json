@@ -60,6 +60,14 @@
     {
       "title": "⚙️ GENERAL OPTIONS",
       "values": {
+        "aa_mode": {
+          "typ": "select",
+          "description": "Android Auto mode: [possible values: Mirror (Using ADB SCRCPY to mirror the screen), PassTrough (Wireless AA)]",
+          "values": [
+            "Mirror",
+            "PassTrough"
+          ]
+        },
         "logfile": {
           "typ": "string",
           "description": "Log file path, by default it is saved to `/var/log` in `tmpfs`/memory. If you want, you can change it e.g. to `/data/aa-mirror-rs.log` and it will be saved to SD card (appended, not replaced)."

@@ -1,4 +1,4 @@
-use crate::config_types::{BluetoothAddressList, EvConnectorTypes, HexdumpLevel, UsbId, WiFiMode};
+use crate::config_types::{AAMode, BluetoothAddressList, EvConnectorTypes, HexdumpLevel, UsbId, WiFiMode};
 use indexmap::IndexMap;
 use serde::de::{Deserializer, Error as DeError};
 use serde::{Deserialize, Serialize};
@@ -97,6 +97,7 @@ pub struct AppConfig {
     pub debug: bool,
     pub hexdump_level: HexdumpLevel,
     pub wifi_mode: WiFiMode,
+    pub aa_mode: AAMode,
     pub disable_console_debug: bool,
     pub scrcpy_screen_off: bool,
     pub video_bitrate:i32,
@@ -228,6 +229,7 @@ impl Default for AppConfig {
             debug: true,
             hexdump_level: HexdumpLevel::Disabled,
             wifi_mode: WiFiMode::STA,
+            aa_mode: AAMode::Mirror,
             disable_console_debug: false,
             scrcpy_screen_off:true,
             video_bitrate:4_000_000,
@@ -311,6 +313,7 @@ impl AppConfig {
         doc["debug"] = value(self.debug);
         doc["hexdump_level"] = value(format!("{:?}", self.hexdump_level));
         doc["wifi_mode"] = value(format!("{:?}", self.wifi_mode));
+        doc["aa_mode"] = value(format!("{:?}", self.aa_mode));
         doc["disable_console_debug"] = value(self.disable_console_debug);
         doc["scrcpy_screen_off"] = value(self.scrcpy_screen_off);
         doc["video_bitrate"] = value(self.video_bitrate as i64);

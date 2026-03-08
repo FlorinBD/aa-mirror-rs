@@ -176,6 +176,15 @@ pub enum WiFiMode {
     AP,
 }
 
+#[derive(
+    clap::ValueEnum, Default, Debug, PartialEq, PartialOrd, Clone, Copy, Deserialize, Serialize,
+)]
+pub enum AAMode {
+    #[default]
+    Mirror,
+    PassThrough,
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct UsbId {
     pub vid: u16,
