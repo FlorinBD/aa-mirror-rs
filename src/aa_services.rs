@@ -1173,12 +1173,12 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         {
                             if first_screen_sent
                             {
-                                info!("{} MD connected, send media STOP to HU",get_name());
+                                info!("{} MD connected, trying to restart media streaming...",get_name());
                                 first_screen_sent=false;
                                 stop_media(&tx_srv, ch_id as u8).await?;
                                 //tokio::time::sleep(Duration::from_millis(200)).await;
 
-                                debug!( "{}, channel {:?}: MD connected, starting video streaming", get_name(), pkt.channel);
+                               /*debug!( "{}, channel {:?}: MD connected, starting video streaming", get_name(), pkt.channel);
                                 video_stream_started=true;
                                 video_stream_paused=false;
                                 let bytes: Vec<u8> = postcard::to_stdvec(&video_params)?;
@@ -1195,7 +1195,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                                 };
                                 if let Err(_) = scrcpy_cmd.send_async(pkt_rsp).await{
                                     error!( "{} mpsc send error",get_name());
-                                };
+                                };*/
                                 //FIXME this is for TEST ONLY, check if we need some confirmation from HU, try to start video wo. confirmation ATM
                                 session_id +=1;
                                 start_media(&tx_srv, ch_id as u8, session_id).await?;
@@ -1438,6 +1438,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                     {
                         debug!( "{}, channel {:?}: MD connected, starting video streaming", get_name(), pkt.channel);
                         video_stream_started=true;
+                        video_stream_paused=false;
                         let bytes: Vec<u8> = postcard::to_stdvec(&video_params)?;
                         let mut payload = Vec::new();
                         payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
