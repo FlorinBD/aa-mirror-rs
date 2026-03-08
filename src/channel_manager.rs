@@ -1433,99 +1433,45 @@ pub async fn ch_proxy(
         }
         //check for SCRCPY CMDs
         match scrcpy_cmd_rx.try_recv() {
-            Ok(pkt) => {
+            Ok(mut pkt) => {
                 let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
                 if message_id == MESSAGE_CUSTOM_CMD  as i32
                 {
                     let cmd_id: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
                     if cmd_id == CustomCommand::MD_CONNECTED as i32
                     {
-                        let ch=pkt.channel as i32;
-                        info!("{} MD connected, proxy packet to media channels",get_name());
-                        let idx=get_service_index(&channel_status, audio_codec_params.sid as i32);
-                        if idx !=255
-                        {
+                        //forward to services
+                        for (idx,stat) in channel_status.iter().enumerate() {
                             let mut payload: Vec<u8>=Vec::new();
                             payload.extend_from_slice(&(ControlMessageType::MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
                             payload.extend_from_slice(&(CustomCommand::MD_CONNECTED as u16).to_be_bytes());
                             let pkt_rsp = Packet {
-                                channel: audio_codec_params.sid,
+                                channel: stat.ch_id as u8,
                                 flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                                 final_length: None,
                                 payload: std::mem::take(&mut payload),
                             };
-                            //srv_senders[idx].send(pkt_rsp).await.expect("Error sending message to service");
                             if let Err(_) = srv_senders[idx].send(pkt_rsp).await{
                                 error!( "{} srv send error",get_name());
                             };
-                        }
-                        else {
-                            error!( "{} Invalid channel {}",get_name(), ch);
-                        }
-                        let idx=get_service_index(&channel_status, video_codec_params.sid as i32);
-                        if idx !=255
-                        {
-                            let mut payload: Vec<u8>=Vec::new();
-                            payload.extend_from_slice(&(ControlMessageType::MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
-                            payload.extend_from_slice(&(CustomCommand::MD_CONNECTED as u16).to_be_bytes());
-                            let pkt_rsp = Packet {
-                                channel: video_codec_params.sid,
-                                flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                                final_length: None,
-                                payload: std::mem::take(&mut payload),
-                            };
-                            //srv_senders[idx].send(pkt_rsp).await.expect("Error sending message to service");
-                            if let Err(_) = srv_senders[idx].send(pkt_rsp).await{
-                                error!( "{} srv send error",get_name());
-                            };
-                        }
-                        else {
-                            error!( "{} Invalid channel {}",get_name(), ch);
                         }
                     }
                     else if cmd_id == CustomCommand::MD_DISCONNECTED as i32
                     {
-                        let ch=pkt.channel as i32;
-                        info!("{} MD disconnected, proxy packet to media channels",get_name());
-                        let idx=get_service_index(&channel_status, audio_codec_params.sid as i32);
-                        if idx !=255
-                        {
+                        //forward to services
+                        for (idx,stat) in channel_status.iter().enumerate() {
                             let mut payload: Vec<u8>=Vec::new();
                             payload.extend_from_slice(&(ControlMessageType::MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
                             payload.extend_from_slice(&(CustomCommand::MD_DISCONNECTED as u16).to_be_bytes());
                             let pkt_rsp = Packet {
-                                channel: audio_codec_params.sid,
+                                channel: stat.ch_id as u8,
                                 flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
                                 final_length: None,
                                 payload: std::mem::take(&mut payload),
                             };
-                            //srv_senders[idx].send(pkt_rsp).await.expect("Error sending message to service");
                             if let Err(_) = srv_senders[idx].send(pkt_rsp).await{
                                 error!( "{} srv send error",get_name());
                             };
-                        }
-                        else {
-                            error!( "{} Invalid channel {}",get_name(), ch);
-                        }
-                        let idx=get_service_index(&channel_status, video_codec_params.sid as i32);
-                        if idx !=255
-                        {
-                            let mut payload: Vec<u8>=Vec::new();
-                            payload.extend_from_slice(&(ControlMessageType::MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
-                            payload.extend_from_slice(&(CustomCommand::MD_DISCONNECTED as u16).to_be_bytes());
-                            let pkt_rsp = Packet {
-                                channel: video_codec_params.sid,
-                                flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                                final_length: None,
-                                payload: std::mem::take(&mut payload),
-                            };
-                            //srv_senders[idx].send(pkt_rsp).await.expect("Error sending message to service");
-                            if let Err(_) = srv_senders[idx].send(pkt_rsp).await{
-                                error!( "{} srv send error",get_name());
-                            };
-                        }
-                        else {
-                            error!( "{} Invalid channel {}",get_name(), ch);
                         }
                     }
                 }

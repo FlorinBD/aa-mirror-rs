@@ -101,7 +101,7 @@ pub(crate) async fn get_first_adb_device( config: AppConfig) ->Option<String>
 
         // State is usually the last token
         let state = parts.last().copied();
-        if !matches!(state, Some("REACHABLE")) {
+        if !matches!(state, Some("REACHABLE")) && !matches!(state, Some("STALE")) {
             continue;
         }
         // Find lladdr <MAC>
