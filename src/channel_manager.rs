@@ -268,6 +268,12 @@ impl PacketProxy
         };
         let mut ssl_handshake_done=false;
         let mut server = openssl::ssl::SslStream::new(ssl, mem_buf.clone())?;
+        while scrcpy_rx.try_recv().is_ok() {
+
+        }
+        while srv_rx.try_recv().is_ok() {
+
+        }
         info!( "{}: Starting message proxy loop...", get_name());
         loop {
             tokio::select! {
