@@ -1196,9 +1196,9 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                                 if let Err(_) = scrcpy_cmd.send_async(pkt_rsp).await{
                                     error!( "{} mpsc send error",get_name());
                                 };*/
-                                //FIXME this is for TEST ONLY, check if we need some confirmation from HU, try to start video wo. confirmation ATM
+                                /*//FIXME this is for TEST ONLY, check if we need some confirmation from HU, try to start video wo. confirmation ATM
                                 session_id +=1;
-                                start_media(&tx_srv, ch_id as u8, session_id).await?;
+                                start_media(&tx_srv, ch_id as u8, session_id).await?;*/
                             }
                             else {
                                 //FIXME this is for TEST ONLY, check if we need some confirmation from HU, try to start video wo. confirmation ATM
@@ -1459,6 +1459,15 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                     else {
                         info!("{}, channel {:?}: video streaming already started, ignoring packet", get_name(), pkt.channel);
                     }
+                }
+            }
+            else if message_id == MediaMessageId::MEDIA_MESSAGE_STOP  as i32
+            {
+                debug!( "{}, channel {:?}: MEDIA_MESSAGE_STOP received", get_name(), pkt.channel);
+                if md_connected && !video_stream_started
+                {
+                    session_id +=1;
+                    start_media(&tx_srv, ch_id as u8, session_id).await?;
                 }
             }
             else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK  as i32//now this is done by PacketProxy, not needed
