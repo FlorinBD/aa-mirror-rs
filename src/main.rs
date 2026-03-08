@@ -7,7 +7,7 @@ use aa_mirror_rs::config::{DEFAULT_WLAN_ADDR, TCP_MD_SERVER_PORT};
 use aa_mirror_rs::io_uring::io_loop;
 use aa_mirror_rs::led::{LedColor, LedManager, LedMode};
 use aa_mirror_rs::channel_manager::Packet;
-use aa_mirror_rs::usb_gadget::uevent_listener;
+//use aa_mirror_rs::usb_gadget::uevent_listener;
 use aa_mirror_rs::usb_gadget::UsbGadgetState;
 use aa_mirror_rs::web;
 use clap::Parser;
@@ -164,12 +164,12 @@ fn logging_init(debug: bool, disable_console_debug: bool, log_path: &PathBuf) {
     }
 }
 
-async fn enable_usb_if_present(usb: &mut Option<UsbGadgetState>, accessory_started: Arc<Notify>) {
+/*async fn enable_usb_if_present(usb: &mut Option<UsbGadgetState>, accessory_started: Arc<Notify>) {
     if let Some(ref mut usb) = usb {
         usb.enable_default_and_wait_for_accessory(accessory_started)
             .await;
     }
-}
+}*/
 
 async fn action_handler(config: &mut SharedConfig) {
     // check pending action
@@ -195,8 +195,7 @@ async fn tokio_main(
     led_support: bool,
 
 ) -> Result<()> {
-    let accessory_started = Arc::new(Notify::new());
-    let accessory_started_cloned = accessory_started.clone();
+    //let accessory_started = Arc::new(Notify::new());
     let state = web::AppState {
         config: config.clone(),
         config_json: config_json.clone(),
@@ -252,10 +251,10 @@ async fn tokio_main(
             None
         }
     };
-    let mut usb = None;
+    /*let mut usb = None;
     if !cfg.dhu {
         usb = Some(UsbGadgetState::new(false, cfg.udc.clone()));
-    }
+    }*/
 
     // spawn a background task for reboot detection
     let mut config_cloned = config.clone();
@@ -274,22 +273,22 @@ async fn tokio_main(
         if let Some(ref mut leds) = led_manager {
             leds.set_led(LedColor::Green, LedMode::Heartbeat).await;
         }
-        if let Some(ref mut usb) = usb {
+        /*if let Some(ref mut usb) = usb {
             if let Err(e) = usb.init() {
                 error!("{} 🔌 USB init error: {}", NAME, e);
             }
-        }
+        }*/
 
-        enable_usb_if_present(&mut usb, accessory_started.clone()).await;
+        //enable_usb_if_present(&mut usb, accessory_started.clone()).await;
 
         // inform via LED about successful connection
         if let Some(ref mut leds) = led_manager {
             leds.set_led(LedColor::Blue, LedMode::On).await;
         }
-        info!("{} 📵 USB init done, waiting for restart...",NAME);
+        info!("{} 📵 Init done, waiting for restart...",NAME);
         // wait for restart notification
         let _ = need_restart.recv().await;
-        info!("{} 📵 TCP/USB connection closed or not started, trying again...",NAME);
+        info!("{} 📵 HU/DHU connection closed or not started, trying again...",NAME);
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
         // TODO: make proper main loop with cancellation

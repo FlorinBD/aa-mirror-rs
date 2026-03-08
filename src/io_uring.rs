@@ -42,6 +42,7 @@ pub const TCP_CLIENT_TIMEOUT: Duration = Duration::new(30, 0);
 use crate::config::{Action, SharedConfig, TCP_DHU_PORT};
 use crate::channel_manager::{endpoint_reader, ch_proxy, packet_tls_proxy, ENCRYPTED, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
 use crate::channel_manager::Packet;
+use crate::usb_gadget::UsbGadgetState;
 use crate::usb_stream::{UsbStreamRead, UsbStreamWrite};
 
 // tokio_uring::fs::File and tokio_uring::net::TcpStream are using different
@@ -278,6 +279,13 @@ pub async fn usb_wait_for_hu_connection(timeout_secs: u64) -> Result<()> {
     timeout(Duration::from_secs(timeout_secs), fut).await.unwrap_or_else(|_| Err("timeout".into()))
 }
 
+async fn enable_usb_if_present(usb: &mut Option<UsbGadgetState>, accessory_started: Arc<Notify>) {
+    if let Some(ref mut usb) = usb {
+        usb.enable_default_and_wait_for_accessory(accessory_started)
+            .await;
+    }
+}
+
 pub async fn io_loop(
     need_restart: BroadcastSender<Option<Action>>,
     config: SharedConfig,
@@ -342,7 +350,8 @@ pub async fn io_loop(
 
         let mut hu_tcp = None;
         let mut hu_usb = None;
-        //let mut dhu_listener ;
+        let mut usb = None;
+        
         if config.dhu {
             //info!("{} 🛰️ DHU TCP server: bind to local address",NAME);
             //dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
@@ -358,6 +367,14 @@ pub async fn io_loop(
             }
         } else {
             debug!("{} 🛰️ Waiting for `Head Unit` connection on USB...",NAME);
+            usb = Some(UsbGadgetState::new(false, cfg.udc.clone()));
+            if let Some(ref mut usb) = usb {
+                if let Err(e) = usb.init() {
+                    error!("{} 🔌 USB init error: {}", NAME, e);
+                }
+            }
+            let accessory_started = Arc::new(Notify::new());//FIXME remove this, is not needed because legacy mode was removed, no UEvent task is running
+            enable_usb_if_present(&mut usb, accessory_started.clone()).await;
             if let Ok(_)=usb_wait_for_hu_connection(config.hu_detect_timeout_secs as u64).await
             {
                 debug!("{} 📂 Opening USB accessory device: <u>{}</u>",NAME, USB_ACCESSORY_PATH);
@@ -455,7 +472,7 @@ pub async fn io_loop(
             shared_config.clone(),
         ));
 
-        // Stop as soon as one of them errors
+        // Wait here and Stop as soon as one of them errors
         let res = tokio::try_join!(
             flatten(&mut tsk_hu_read, "tsk_hu_read".into()),
             flatten(&mut tsk_ch_manager, "tsk_ch_manager".into()),
@@ -466,6 +483,7 @@ pub async fn io_loop(
         if let Err(e) = res {
             error!("{} 🔴 Connection error: {}", NAME, e);
         }
+
         //Stop SCRCPY task as well
         let mut payload: Vec<u8>=Vec::new();
         payload.extend_from_slice(&(ControlMessageType::MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
