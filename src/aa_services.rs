@@ -1183,7 +1183,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                             session_id +=1;
                             start_media(&tx_srv, ch_id as u8, session_id).await?;
                             projection_state=ProjectionStatus::TransitionToProjected;
-                            debug!("{}, projection state: {:?}: Waiting for START confirmation",get_name(), projection_state);
+                            debug!("{}, projection state: {:?}: Waiting for VIDEO_PROJECTED confirmation",get_name(), projection_state);
                         }
                         else if projection_state==ProjectionStatus::TransitionToFS
                         {
@@ -1299,34 +1299,52 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                                 start_media(&tx_srv, ch_id as u8, session_id).await?;
                                 projection_state=ProjectionStatus::ProjectedRecording;
                             }
+                            else if projection_state==ProjectionStatus::TransitionToProjected
+                            {
+                                debug!( "{}, channel {:?}, projection: {:?}: MD connected, starting video streaming", get_name(), pkt.channel, projection_state);
+                                let bytes: Vec<u8> = postcard::to_stdvec(&video_params)?;
+                                let mut payload = Vec::new();
+                                payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+                                payload.extend_from_slice(&(CustomCommand::CMD_START_VIDEO_RECORDING as u16).to_be_bytes());
+                                payload.extend_from_slice(&bytes);
+
+                                let pkt_rsp = Packet {
+                                    channel: ch_id as u8,
+                                    flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                                    final_length: None,
+                                    payload: payload.clone(),
+                                };
+                                //scrcpy_cmd.send_async(pkt_rsp).await?;
+                                if let Err(_) = scrcpy_cmd.send_async(pkt_rsp).await{
+                                    error!( "{} mpsc send error",get_name());
+                                };
+                                projection_state=ProjectionStatus::ProjectedRecording;
+                            }
+                            else if projection_state==ProjectionStatus::ProjectedPause
+                            {
+                                debug!("{}, channel {:?}: resuming video streaming", get_name(), pkt.channel);
+                                let mut payload = Vec::new();
+                                payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+                                payload.extend_from_slice(&(CustomCommand::CMD_RESUME_VIDEO_RECORDING as u16).to_be_bytes());
+
+                                let pkt_rsp = Packet {
+                                    channel: ch_id as u8,
+                                    flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                                    final_length: None,
+                                    payload: payload.clone(),
+                                };
+                                if let Err(_) = scrcpy_cmd.send_async(pkt_rsp).await{
+                                    error!( "{} mpsc send error",get_name());
+                                };
+                                session_id +=1;
+                                start_media(&tx_srv, ch_id as u8, session_id).await?;
+                                projection_state=ProjectionStatus::ProjectedRecording;
+                            }
                             else
                             {
-                                if projection_state==ProjectionStatus::ProjectedPause
-                                {
-                                    debug!("{}, channel {:?}: resuming video streaming", get_name(), pkt.channel);
-                                    let mut payload = Vec::new();
-                                    payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
-                                    payload.extend_from_slice(&(CustomCommand::CMD_RESUME_VIDEO_RECORDING as u16).to_be_bytes());
-
-                                    let pkt_rsp = Packet {
-                                        channel: ch_id as u8,
-                                        flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                                        final_length: None,
-                                        payload: payload.clone(),
-                                    };
-                                    if let Err(_) = scrcpy_cmd.send_async(pkt_rsp).await{
-                                        error!( "{} mpsc send error",get_name());
-                                    };
-                                    session_id +=1;
-                                    start_media(&tx_srv, ch_id as u8, session_id).await?;
-                                    projection_state=ProjectionStatus::ProjectedRecording;
-                                }
-                                else
-                                {
-                                    debug!("{}, channel {:?}: video streaming already started, ignoring packet", get_name(), pkt.channel);
-                                }
-
+                                debug!("{}, channel {:?}: video streaming already started, ignoring packet", get_name(), pkt.channel);
                             }
+
                         }
 
                     }
@@ -1365,7 +1383,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                 info!("{} Received {} message", ch_id.to_string(), message_id);
                 info!( "{}, channel {:?}: MEDIA_MESSAGE_START received", get_name(), pkt.channel);
 
-                if !md_connected
+                /*if !md_connected
                 {
                     show_first_screen(&tx_srv, ch_id as u8, &wait_screen_config_frame, &wait_screen_first_frame).await;
                     projection_state=ProjectionStatus::FirstScreen;
@@ -1396,7 +1414,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                     else {
                         info!("{}, channel {:?}: video streaming already started, ignoring packet", get_name(), pkt.channel);
                     }
-                }
+                }*/
             }
             else if message_id == MediaMessageId::MEDIA_MESSAGE_STOP  as i32
             {
