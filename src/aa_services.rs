@@ -48,7 +48,7 @@ impl Default for ServiceType {
     fn default() -> Self { ServiceType::None }
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum ProjectionStatus
 {
     TransitionToFS,
@@ -1372,7 +1372,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                 }
                 else
                 {
-                    if projection_state=ProjectionStatus::TransitionToProjected
+                    if projection_state==ProjectionStatus::TransitionToProjected
                     {
                         debug!( "{}, channel {:?}, projection: {:?}: MD connected, starting video streaming", get_name(), pkt.channel, projection_state);
                         let bytes: Vec<u8> = postcard::to_stdvec(&video_params)?;
