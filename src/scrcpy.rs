@@ -96,7 +96,7 @@ pub struct ScrcpyKeyEvent {
 #[derive(Serialize, Deserialize, Copy, Clone, Debug, Default)]
 pub struct ScrcpyScrollEvent {
     pub position:ScrcpyPoint,
-    //pub screen_size: ScrcpySize,  //not clear if should be here or not
+    pub screen_size: ScrcpySize,
     pub hscroll: i16,
     pub vscroll:i16,
     pub buttons:i32,
@@ -119,6 +119,7 @@ impl ScrcpyScrollEvent {
     fn to_be_bytes(&self) -> Vec<u8> {
         let mut buf = BytesMut::new();
         buf.extend_from_slice(&self.position.to_be_bytes());
+        buf.extend_from_slice(&self.screen_size.to_be_bytes());
         buf.extend_from_slice(&self.hscroll.to_be_bytes());
         buf.extend_from_slice(&self.vscroll.to_be_bytes());
         buf.extend_from_slice(&self.buttons.to_be_bytes());
@@ -771,7 +772,7 @@ async fn tsk_scrcpy_control(
                                 debug!("scrcpy_control received REL event: keycode={:?}, delta={:?}",key_ev.keycode(),key_ev.delta());
                                 if key_ev.keycode() == KeyCode::KEYCODE_ROTARY_CONTROLLER as u32
                                 {
-                                    let ev = ScrcpyScrollEvent { position: last_touched_point, vscroll:key_ev.delta() as i16, hscroll:0, buttons:0 };
+                                    let ev = ScrcpyScrollEvent { position: last_touched_point, screen_size:screen_size, vscroll:key_ev.delta() as i16, hscroll:0, buttons:0 };
                                     //info!("SCRCPY Control inject event: {:?}",ev);
                                     let ev_bytes=ev.to_be_bytes();
                                     let mut payload: Vec<u8> = Vec::new();
