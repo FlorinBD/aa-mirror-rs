@@ -50,10 +50,6 @@
         "ap_psw": {
           "typ": "string",
           "description": "Wi-Fi AP password used to connect"
-        },
-        "ble_password": {
-          "typ": "string",
-          "description": "BLE password to communicate with companion app, please set it on app too"
         }
       }
     },
