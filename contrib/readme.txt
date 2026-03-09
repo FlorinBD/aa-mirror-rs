@@ -20,7 +20,7 @@ improve scrcpy audio/video reader to not re-alocate buf every time, use a single
 implement night/day switch for sensor_channel with:  "adb shell cmd uimode night yes"
 signal all tasks that must be finished in a clean way
 done: implement media ack sliding window using tokio::sync::Semaphore;
-solve ADB connection when dev state is STALE, is connected but not REACHABLE
+done: solve ADB connection when dev state is STALE, is connected but not REACHABLE
 in STA mode dhcp is not providing host name
 
 NOTES:
