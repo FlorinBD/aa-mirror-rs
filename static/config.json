@@ -169,10 +169,6 @@
         "hostapd_conf": {
           "typ": "string",
           "description": "hostapd.conf file location (used for obtaining AP SSID and WPA passphrase)"
-        },
-        "change_usb_order": {
-          "typ": "boolean",
-          "description": "Connect to HU USB before Bluetooth handshake"
         }
       }
     },
