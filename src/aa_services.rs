@@ -1180,29 +1180,15 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         if projection_state==ProjectionStatus::FirstScreen
                         {
                             stop_media(&tx_srv, ch_id as u8).await?;
+                            start_scrcpy_media(&scrcpy_cmd, ch_id as u8, &video_params).await?;
                             session_id +=1;
                             start_media(&tx_srv, ch_id as u8, session_id).await?;
-                            projection_state=ProjectionStatus::TransitionToProjected;
-                            debug!("{}, projection state: {:?}: Waiting for VIDEO_PROJECTED confirmation",get_name(), projection_state);
+                            projection_state=ProjectionStatus::ProjectedRecording;
+
                         }
                         else if projection_state==ProjectionStatus::TransitionToFS
                         {
-                            debug!( "{}, projection state: {:?}: MD connected, starting video streaming", get_name(), projection_state);
-                            let bytes: Vec<u8> = postcard::to_stdvec(&video_params)?;
-                            let mut payload = Vec::new();
-                            payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
-                            payload.extend_from_slice(&(CustomCommand::CMD_START_VIDEO_RECORDING as u16).to_be_bytes());
-                            payload.extend_from_slice(&bytes);
-
-                            let pkt_rsp = Packet {
-                                channel: ch_id as u8,
-                                flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                                final_length: None,
-                                payload: payload.clone(),
-                            };
-                            if let Err(_) = scrcpy_cmd.send_async(pkt_rsp).await{
-                                error!( "{} mpsc send error",get_name());
-                            };
+                            start_scrcpy_media(&scrcpy_cmd, ch_id as u8, &video_params).await?;
                             session_id +=1;
                             start_media(&tx_srv, ch_id as u8, session_id).await?;
                             projection_state= ProjectionStatus::ProjectedRecording;
@@ -1221,10 +1207,11 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                     info!("{} MD disconnected, send media STOP to HU",get_name());
                     if md_connected
                     {
-                        session_id +=1;
                         stop_media(&tx_srv, ch_id as u8).await?;
+                        session_id +=1;
                         start_media(&tx_srv, ch_id as u8, session_id).await?;
-                        projection_state=ProjectionStatus::TransitionToFS;
+                        show_first_screen(&tx_srv, ch_id as u8, &wait_screen_config_frame, &wait_screen_first_frame).await;
+                        projection_state=ProjectionStatus::FirstScreen;
 
                     }
                     md_connected=false;
@@ -1279,63 +1266,22 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         {
                             if projection_state==ProjectionStatus::TransitionToFS
                             {
-                                debug!( "{}, channel {:?}: MD connected, starting video streaming", get_name(), pkt.channel);
-                                let bytes: Vec<u8> = postcard::to_stdvec(&video_params)?;
-                                let mut payload = Vec::new();
-                                payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
-                                payload.extend_from_slice(&(CustomCommand::CMD_START_VIDEO_RECORDING as u16).to_be_bytes());
-                                payload.extend_from_slice(&bytes);
-
-                                let pkt_rsp = Packet {
-                                    channel: ch_id as u8,
-                                    flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                                    final_length: None,
-                                    payload: payload.clone(),
-                                };
-                                if let Err(_) = scrcpy_cmd.send_async(pkt_rsp).await{
-                                    error!( "{} mpsc send error",get_name());
-                                };
+                                start_scrcpy_media(&scrcpy_cmd, ch_id as u8, &video_params).await?;
                                 session_id +=1;
                                 start_media(&tx_srv, ch_id as u8, session_id).await?;
                                 projection_state=ProjectionStatus::ProjectedRecording;
                             }
-                            else if projection_state==ProjectionStatus::TransitionToProjected
+                            else if projection_state==ProjectionStatus::FirstScreen
                             {
-                                debug!( "{}, channel {:?}, projection: {:?}: MD connected, starting video streaming", get_name(), pkt.channel, projection_state);
-                                let bytes: Vec<u8> = postcard::to_stdvec(&video_params)?;
-                                let mut payload = Vec::new();
-                                payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
-                                payload.extend_from_slice(&(CustomCommand::CMD_START_VIDEO_RECORDING as u16).to_be_bytes());
-                                payload.extend_from_slice(&bytes);
-
-                                let pkt_rsp = Packet {
-                                    channel: ch_id as u8,
-                                    flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                                    final_length: None,
-                                    payload: payload.clone(),
-                                };
-                                //scrcpy_cmd.send_async(pkt_rsp).await?;
-                                if let Err(_) = scrcpy_cmd.send_async(pkt_rsp).await{
-                                    error!( "{} mpsc send error",get_name());
-                                };
+                                stop_media(&tx_srv, ch_id as u8).await?;
+                                start_scrcpy_media(&scrcpy_cmd, ch_id as u8, &video_params).await?;
+                                session_id +=1;
+                                start_media(&tx_srv, ch_id as u8, session_id).await?;
                                 projection_state=ProjectionStatus::ProjectedRecording;
                             }
                             else if projection_state==ProjectionStatus::ProjectedPause
                             {
-                                debug!("{}, channel {:?}: resuming video streaming", get_name(), pkt.channel);
-                                let mut payload = Vec::new();
-                                payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
-                                payload.extend_from_slice(&(CustomCommand::CMD_RESUME_VIDEO_RECORDING as u16).to_be_bytes());
-
-                                let pkt_rsp = Packet {
-                                    channel: ch_id as u8,
-                                    flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                                    final_length: None,
-                                    payload: payload.clone(),
-                                };
-                                if let Err(_) = scrcpy_cmd.send_async(pkt_rsp).await{
-                                    error!( "{} mpsc send error",get_name());
-                                };
+                                resume_scrcpy_media(&scrcpy_cmd, ch_id as u8).await?;
                                 session_id +=1;
                                 start_media(&tx_srv, ch_id as u8, session_id).await?;
                                 projection_state=ProjectionStatus::ProjectedRecording;
@@ -1354,20 +1300,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         debug!( "{} video focus lost",get_name());
                         if projection_state==ProjectionStatus::ProjectedRecording
                         {
-                            debug!("{}, channel {:?}: pausing video streaming", get_name(), pkt.channel);
-                            let mut payload = Vec::new();
-                            payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
-                            payload.extend_from_slice(&(CustomCommand::CMD_PAUSE_VIDEO_RECORDING as u16).to_be_bytes());
-
-                            let pkt_rsp = Packet {
-                                channel: ch_id as u8,
-                                flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                                final_length: None,
-                                payload: payload.clone(),
-                            };
-                            if let Err(_) = scrcpy_cmd.send_async(pkt_rsp).await{
-                                error!( "{} mpsc send error",get_name());
-                            };
+                            pause_scrcpy_media(&scrcpy_cmd, ch_id as u8).await?;
                             stop_media(&tx_srv, ch_id as u8).await?;
                             projection_state=ProjectionStatus::ProjectedPause;
                         }
@@ -1515,6 +1448,61 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
         };
         if let Err(_) = tx.send(pkt_rsp).await{
             error!( "{} send error",get_name());
+        };
+        Ok(())
+    }
+
+    async fn start_scrcpy_media(tx: &flume::Sender<Packet>, ch_id: u8, vp:&VideoStreamingParams)->Result<()> {
+        debug!( "{}, Starting video streaming", get_name());
+        let bytes: Vec<u8> = postcard::to_stdvec(vp)?;
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+        payload.extend_from_slice(&(CustomCommand::CMD_START_VIDEO_RECORDING as u16).to_be_bytes());
+        payload.extend_from_slice(&bytes);
+
+        let pkt_rsp = Packet {
+            channel: ch_id,
+            flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+            final_length: None,
+            payload: payload.clone(),
+        };
+        if let Err(_) = tx.send_async(pkt_rsp).await{
+            error!( "{} mpsc send error",get_name());
+        };
+        Ok(())
+    }
+
+    async fn pause_scrcpy_media(tx: &flume::Sender<Packet>, ch_id: u8)->Result<()> {
+        debug!( "{}, Pausing video streaming", get_name());
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+        payload.extend_from_slice(&(CustomCommand::CMD_PAUSE_VIDEO_RECORDING as u16).to_be_bytes());
+
+        let pkt_rsp = Packet {
+            channel: ch_id,
+            flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+            final_length: None,
+            payload: payload.clone(),
+        };
+        if let Err(_) = tx.send_async(pkt_rsp).await{
+            error!( "{} mpsc send error",get_name());
+        };
+        Ok(())
+    }
+    async fn resume_scrcpy_media(tx: &flume::Sender<Packet>, ch_id: u8)->Result<()> {
+        debug!( "{}, Resuming video streaming", get_name());
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+        payload.extend_from_slice(&(CustomCommand::CMD_RESUME_VIDEO_RECORDING as u16).to_be_bytes());
+
+        let pkt_rsp = Packet {
+            channel: ch_id,
+            flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+            final_length: None,
+            payload: payload.clone(),
+        };
+        if let Err(_) = tx.send_async(pkt_rsp).await{
+            error!( "{} mpsc send error",get_name());
         };
         Ok(())
     }
