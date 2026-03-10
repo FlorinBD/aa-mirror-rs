@@ -1243,7 +1243,7 @@ pub async fn ch_proxy(
                     }
                     video_codec_params.dpi=proto_srv.media_sink_service.video_configs[0].density() as i32;
                     video_codec_params.sid=ch_id as u8;
-                    srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_video(ch_id,true, tx_srv.clone(), rx, scrcpy_cmd_tx.clone(), video_codec_params.clone())));
+                    srv_tsk_handles.push(tokio_uring::spawn(th_media_sink_video(ch_id,true, tx_srv.clone(), rx, scrcpy_cmd_tx.clone(), video_codec_params.clone(), config.dhu.clone())));
                 }
                 else {
                     error!( "{} Service not implemented ATM for ch: {}",get_name(), ch_id);

@@ -406,7 +406,7 @@ pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, 
         format!("<i><bright-black> aa-mirror/{}: </>", dev)
     }
 }
-pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, scrcpy_cmd: flume::Sender<Packet>, mut video_params:VideoStreamingParams) -> Result<()>{
+pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, scrcpy_cmd: flume::Sender<Packet>, mut video_params:VideoStreamingParams, dhu:bool) -> Result<()>{
     //pre-rendered frames using openh264 lib from a C# app (1 frame out of static 800x480 bmp)
     let wait_screen_config_frame: Vec<u8> = vec![0x00, 0x00, 0x00, 0x01, 0x67, 0x42, 0xC0, 0x1E, 0x8C, 0x8D, 0x40, 0x64, 0x1E, 0x90, 0x0F, 0x08, 0x84, 0x6A, 0x00, 0x00, 0x00, 0x01, 0x68, 0xCE, 0x3C, 0x80];
     let wait_screen_first_frame: Vec<u8> = vec![0x00, 0x00, 0x00, 0x01, 0x65, 0xB8, 0x00, 0x04, 0x00, 0x00, 0x78, 0x8C, 0x50, 0x00, 0x27, 0x1C,
@@ -1180,11 +1180,18 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         if projection_state==ProjectionStatus::FirstScreen
                         {
                             stop_media(&tx_srv, ch_id as u8).await?;
-                            //start_scrcpy_media(&scrcpy_cmd, ch_id as u8, &video_params).await?;
                             session_id +=1;
                             start_media(&tx_srv, ch_id as u8, session_id).await?;
-                            //projection_state=ProjectionStatus::ProjectedRecording;
-                            projection_state=ProjectionStatus::TransitionToProjected;
+                            if dhu
+                            {
+                                start_scrcpy_media(&scrcpy_cmd, ch_id as u8, &video_params).await?;
+                                projection_state=ProjectionStatus::ProjectedRecording;
+                            }
+                            else
+                            {
+                                projection_state=ProjectionStatus::TransitionToProjected;
+                            }
+
 
                         }
                         else if projection_state==ProjectionStatus::TransitionToFS
@@ -1272,24 +1279,22 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                                 start_media(&tx_srv, ch_id as u8, session_id).await?;
                                 projection_state=ProjectionStatus::ProjectedRecording;
                             }
-                            /*else if projection_state==ProjectionStatus::FirstScreen
+                            else if projection_state==ProjectionStatus::FirstScreen
                             {
-                                stop_media(&tx_srv, ch_id as u8).await?;
-                                start_scrcpy_media(&scrcpy_cmd, ch_id as u8, &video_params).await?;
-                                session_id +=1;
-                                start_media(&tx_srv, ch_id as u8, session_id).await?;
-                                projection_state=ProjectionStatus::ProjectedRecording;
-                            }*/
+                                if dhu
+                                {
+                                    stop_media(&tx_srv, ch_id as u8).await?;
+                                    start_scrcpy_media(&scrcpy_cmd, ch_id as u8, &video_params).await?;
+                                    session_id +=1;
+                                    start_media(&tx_srv, ch_id as u8, session_id).await?;
+                                    projection_state=ProjectionStatus::ProjectedRecording;
+                                }
+                            }
                             else if projection_state==ProjectionStatus::ProjectedPause
                             {
                                 resume_scrcpy_media(&scrcpy_cmd, ch_id as u8).await?;
                                 session_id +=1;
                                 start_media(&tx_srv, ch_id as u8, session_id).await?;
-                                projection_state=ProjectionStatus::ProjectedRecording;
-                            }
-                            else if projection_state==ProjectionStatus::TransitionToProjected
-                            {
-                                start_scrcpy_media(&scrcpy_cmd, ch_id as u8, &video_params).await?;
                                 projection_state=ProjectionStatus::ProjectedRecording;
                             }
                             else
@@ -1321,6 +1326,14 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
             {
                 info!("{} Received {} message", ch_id.to_string(), message_id);
                 info!( "{}, channel {:?}: MEDIA_MESSAGE_START received", get_name(), pkt.channel);
+                if projection_state==ProjectionStatus::TransitionToProjected
+                {
+                    if !dhu
+                    {
+                        start_scrcpy_media(&scrcpy_cmd, ch_id as u8, &video_params).await?;
+                        projection_state = ProjectionStatus::ProjectedRecording;
+                    }
+                }
             }
             else if message_id == MediaMessageId::MEDIA_MESSAGE_STOP  as i32
             {
