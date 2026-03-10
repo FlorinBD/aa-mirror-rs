@@ -1181,9 +1181,10 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         {
                             stop_media(&tx_srv, ch_id as u8).await?;
                             start_scrcpy_media(&scrcpy_cmd, ch_id as u8, &video_params).await?;
-                            session_id +=1;
-                            start_media(&tx_srv, ch_id as u8, session_id).await?;
-                            projection_state=ProjectionStatus::ProjectedRecording;
+                            //session_id +=1;
+                            //start_media(&tx_srv, ch_id as u8, session_id).await?;
+                            //projection_state=ProjectionStatus::ProjectedRecording;
+                            projection_state=ProjectionStatus::TransitionToProjected;
 
                         }
                         else if projection_state==ProjectionStatus::TransitionToFS
@@ -1311,43 +1312,17 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                     error!( "{}, channel {:?}: Unable to parse received message", get_name(), pkt.channel);
                 }
             }
-            else if message_id == MediaMessageId::MEDIA_MESSAGE_START  as i32//some HUs send this response as confirmation to START from MD
+            else if message_id == MediaMessageId::MEDIA_MESSAGE_START  as i32//HU send this response as confirmation to START from MD, but only if STOP was sent before START
             {
                 info!("{} Received {} message", ch_id.to_string(), message_id);
                 info!( "{}, channel {:?}: MEDIA_MESSAGE_START received", get_name(), pkt.channel);
 
-                /*if !md_connected
+                if projection_state==ProjectionStatus::TransitionToProjected
                 {
-                    show_first_screen(&tx_srv, ch_id as u8, &wait_screen_config_frame, &wait_screen_first_frame).await;
-                    projection_state=ProjectionStatus::FirstScreen;
+                    session_id +=1;
+                    start_media(&tx_srv, ch_id as u8, session_id).await?;
+                    projection_state=ProjectionStatus::ProjectedRecording;
                 }
-                else
-                {
-                    if projection_state==ProjectionStatus::TransitionToProjected
-                    {
-                        debug!( "{}, channel {:?}, projection: {:?}: MD connected, starting video streaming", get_name(), pkt.channel, projection_state);
-                        let bytes: Vec<u8> = postcard::to_stdvec(&video_params)?;
-                        let mut payload = Vec::new();
-                        payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
-                        payload.extend_from_slice(&(CustomCommand::CMD_START_VIDEO_RECORDING as u16).to_be_bytes());
-                        payload.extend_from_slice(&bytes);
-
-                        let pkt_rsp = Packet {
-                            channel: ch_id as u8,
-                            flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                            final_length: None,
-                            payload: payload.clone(),
-                        };
-                        //scrcpy_cmd.send_async(pkt_rsp).await?;
-                        if let Err(_) = scrcpy_cmd.send_async(pkt_rsp).await{
-                            error!( "{} mpsc send error",get_name());
-                        };
-                        projection_state=ProjectionStatus::ProjectedRecording;
-                    }
-                    else {
-                        info!("{}, channel {:?}: video streaming already started, ignoring packet", get_name(), pkt.channel);
-                    }
-                }*/
             }
             else if message_id == MediaMessageId::MEDIA_MESSAGE_STOP  as i32
             {
