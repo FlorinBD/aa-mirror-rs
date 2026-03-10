@@ -1051,7 +1051,7 @@ pub(crate) async fn tsk_adb_scrcpy(
             cmd_shell.push("video_codec=h264".to_string());
             cmd_shell.push(format!("video_codec_options={}", video_codec_options.to_string()));
             cmd_shell.push(format!("video_bit_rate={}", video_codec_params.bitrate));
-            cmd_shell.push(format!("new_display={}x{}/{}", (video_codec_params.res_w * res_multiplier) as i32, (video_codec_params.res_h * res_multiplier) as i32, video_codec_params.dpi));
+            cmd_shell.push(format!("new_display={}x{}/{}", (video_codec_params.res_w as f64 * res_multiplier) as i32, (video_codec_params.res_h as f64 * res_multiplier) as i32, video_codec_params.dpi));
             cmd_shell.push(format!("max_fps={}", video_codec_params.fps));
             let (mut shell, mut sh_reader,line)=adb::shell_cmd(cmd_shell).await?;
             info!("ADB video shell response: {:?}", line);
