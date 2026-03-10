@@ -1180,9 +1180,9 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         if projection_state==ProjectionStatus::FirstScreen
                         {
                             stop_media(&tx_srv, ch_id as u8).await?;
-                            start_scrcpy_media(&scrcpy_cmd, ch_id as u8, &video_params).await?;
-                            //session_id +=1;
-                            //start_media(&tx_srv, ch_id as u8, session_id).await?;
+                            //start_scrcpy_media(&scrcpy_cmd, ch_id as u8, &video_params).await?;
+                            session_id +=1;
+                            start_media(&tx_srv, ch_id as u8, session_id).await?;
                             //projection_state=ProjectionStatus::ProjectedRecording;
                             projection_state=ProjectionStatus::TransitionToProjected;
 
@@ -1319,8 +1319,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
 
                 if projection_state==ProjectionStatus::TransitionToProjected
                 {
-                    session_id +=1;
-                    start_media(&tx_srv, ch_id as u8, session_id).await?;
+                    start_scrcpy_media(&scrcpy_cmd, ch_id as u8, &video_params).await?;
                     projection_state=ProjectionStatus::ProjectedRecording;
                 }
             }
