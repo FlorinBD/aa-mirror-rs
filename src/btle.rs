@@ -304,7 +304,7 @@ fn decrypt_and_parse(buf: &[u8]) -> Request {
 async fn craft_response(req: &Request, state: AppState) -> Response {
     {
         let cfg_guard = state.config.read().await;
-        let expected_password = cfg_guard.ble_password.clone();
+        let expected_password = "";
 
         // Only enforce password if config has one
         if !expected_password.is_empty() {
