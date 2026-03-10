@@ -1018,6 +1018,7 @@ pub(crate) async fn tsk_adb_scrcpy(
             let video_codec_options=format!("profile:int=1,level:int=512,i-frame-interval:int={},low-latency:int=1,max-bframes:int=0",video_codec_params.fps);
             let mut cmd_shell:Vec<String> = vec![];
             let mut audio_codec="raw";
+            let res_multiplier =2;
             if audio_codec_params.codec == MediaCodec::AUDIO_AAC_LC
             {
                 audio_codec="aac";
@@ -1050,7 +1051,7 @@ pub(crate) async fn tsk_adb_scrcpy(
             cmd_shell.push("video_codec=h264".to_string());
             cmd_shell.push(format!("video_codec_options={}", video_codec_options.to_string()));
             cmd_shell.push(format!("video_bit_rate={}", video_codec_params.bitrate));
-            cmd_shell.push(format!("new_display={}x{}/{}", video_codec_params.res_w, video_codec_params.res_h, video_codec_params.dpi));
+            cmd_shell.push(format!("new_display={}x{}/{}", video_codec_params.res_w * res_multiplier, video_codec_params.res_h * res_multiplier, video_codec_params.dpi));
             cmd_shell.push(format!("max_fps={}", video_codec_params.fps));
             let (mut shell, mut sh_reader,line)=adb::shell_cmd(cmd_shell).await?;
             info!("ADB video shell response: {:?}", line);
