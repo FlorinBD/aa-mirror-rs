@@ -1018,7 +1018,7 @@ pub(crate) async fn tsk_adb_scrcpy(
             let video_codec_options=format!("profile:int=1,level:int=512,i-frame-interval:int={},low-latency:int=1,max-bframes:int=0",video_codec_params.fps);
             let mut cmd_shell:Vec<String> = vec![];
             let mut audio_codec="raw";
-            let res_multiplier =1.2;
+            let res_multiplier =1;
             if audio_codec_params.codec == MediaCodec::AUDIO_AAC_LC
             {
                 audio_codec="aac";
