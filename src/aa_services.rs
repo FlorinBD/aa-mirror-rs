@@ -1185,7 +1185,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                             {
                                 start_scrcpy_media(&scrcpy_cmd, ch_id as u8, &video_params).await?;
                                 stop_media(&tx_srv, ch_id as u8).await?;
-                                session_id +=1;
+                                //session_id +=1;
                                 start_media(&tx_srv, ch_id as u8, session_id).await?;
                                 projection_state=ProjectionStatus::ProjectedRecording;
                             }
@@ -1193,7 +1193,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                             {
                                 stop_media(&tx_srv, ch_id as u8).await?;
                                 Delay::new(Duration::from_millis(200)).await; // allow HU to process STOP
-                                session_id +=1;
+                                //session_id +=1;
                                 start_media(&tx_srv, ch_id as u8, session_id).await?;
                                 projection_state=ProjectionStatus::TransitionToProjected;
                             }
