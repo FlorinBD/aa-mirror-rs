@@ -1183,8 +1183,9 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
 
                             if dhu
                             {
-                                start_scrcpy_media(&scrcpy_cmd, ch_id as u8, &video_params).await?;
+                                //start_scrcpy_media(&scrcpy_cmd, ch_id as u8, &video_params).await?;
                                 stop_media(&tx_srv, ch_id as u8).await?;
+                                Delay::new(Duration::from_millis(100)).await; // allow HU to process STOP
                                 session_id +=1;
                                 start_media(&tx_srv, ch_id as u8, session_id).await?;
                                 projection_state=ProjectionStatus::ProjectedRecording;
@@ -1192,7 +1193,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                             else
                             {
                                 stop_media(&tx_srv, ch_id as u8).await?;
-                                tokio::time::sleep(Duration::from_millis(100)).await;//allow HU to process STOP message
+                                Delay::new(Duration::from_millis(100)).await; // allow HU to process STOP
                                 session_id +=1;
                                 start_media(&tx_srv, ch_id as u8, session_id).await?;
                                 projection_state=ProjectionStatus::TransitionToProjected;
@@ -1344,11 +1345,11 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                 info!( "{}, channel {:?}: MEDIA_MESSAGE_START received", get_name(), pkt.channel);
                 if projection_state==ProjectionStatus::TransitionToProjected
                 {
-                    if !dhu
-                    {
+                    //if !dhu
+                    //{
                         start_scrcpy_media(&scrcpy_cmd, ch_id as u8, &video_params).await?;
                         projection_state = ProjectionStatus::ProjectedRecording;
-                    }
+                    //}
                 }
                 else if projection_state==ProjectionStatus::TransitionToFS
                 {
