@@ -1125,24 +1125,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                     else {
                         if enabled
                         {
-                            let mut cfg_req= Setup::new();
-                            cfg_req.set_type(MediaCodecType::MEDIA_CODEC_VIDEO_H264_BP);
-
-                            let mut payload: Vec<u8>=cfg_req.write_to_bytes().expect("serialization failed");
-                            payload.insert(0,((MediaMessageId::MEDIA_MESSAGE_SETUP as u16) >> 8) as u8);
-                            payload.insert( 1,((MediaMessageId::MEDIA_MESSAGE_SETUP as u16) & 0xff) as u8);
-
-                            let pkt_rsp = Packet {
-                                channel: ch_id as u8,
-                                flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                                final_length: None,
-                                payload: payload,
-                            };
-                            //tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
-                            if let Err(_) = tx_srv.send(pkt_rsp).await
-                            {
-                                error!( "{} mpsc send error", get_name());
-                            };
+                            video_setup(&tx_srv, ch_id as u8).await?;
                         }
                     }
                 }
@@ -1181,23 +1164,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         if projection_state==ProjectionStatus::FirstScreen
                         {
                             stop_media(&tx_srv, ch_id as u8).await?;
-                            let mut cfg_req= Setup::new();
-                            cfg_req.set_type(MediaCodecType::MEDIA_CODEC_VIDEO_H264_BP);
-
-                            let mut payload: Vec<u8>=cfg_req.write_to_bytes().expect("serialization failed");
-                            payload.insert(0,((MediaMessageId::MEDIA_MESSAGE_SETUP as u16) >> 8) as u8);
-                            payload.insert( 1,((MediaMessageId::MEDIA_MESSAGE_SETUP as u16) & 0xff) as u8);
-
-                            let pkt_rsp = Packet {
-                                channel: ch_id as u8,
-                                flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                                final_length: None,
-                                payload: payload,
-                            };
-                            if let Err(_) = tx_srv.send(pkt_rsp).await
-                            {
-                                error!( "{} mpsc send error", get_name());
-                            };
+                            video_setup(&tx_srv, ch_id as u8).await?;
                             //start_scrcpy_media(&scrcpy_cmd, ch_id as u8, &video_params).await?;
                             projection_state=ProjectionStatus::TransitionToProjected;
                         }
@@ -1222,8 +1189,9 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                     info!("{} MD disconnected, send media STOP to HU",get_name());
                     if md_connected
                     {
-                        show_first_screen(&tx_srv, ch_id as u8, &wait_screen_config_frame, &wait_screen_first_frame).await;
-                        projection_state=ProjectionStatus::FirstScreen;
+                        stop_media(&tx_srv, ch_id as u8).await?;
+                        video_setup(&tx_srv, ch_id as u8).await?;
+                        projection_state=ProjectionStatus::TransitionToFS;
 
                     }
                     md_connected=false;
@@ -1405,6 +1373,24 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
         };
     }
 
+    async fn video_setup(tx: &Sender<Packet>, ch_id: u8)->Result<()> {
+        info!( "{}, channel {:?}: Sending SETUP command", get_name(), ch_id);
+        let media_setup= Setup::new();
+        media_setup.set_type(MediaCodecType::MEDIA_CODEC_VIDEO_H264_BP);
+        let mut payload: Vec<u8>=Vec::new();
+        payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_SETUP as u16).to_be_bytes());
+        payload.extend_from_slice(&(media_setup.write_to_bytes()?));
+        let pkt_rsp = Packet {
+            channel: ch_id,
+            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+            final_length: None,
+            payload: payload,
+        };
+        if let Err(_) = tx.send(pkt_rsp).await{
+            error!( "{} send error",get_name());
+        };
+        Ok(())
+    }
     async fn start_media(tx: &Sender<Packet>, ch_id: u8, session_id:i32)->Result<()> {
         info!( "{}, channel {:?}: Sending START command", get_name(), ch_id);
         let mut start_req = Start::new();
