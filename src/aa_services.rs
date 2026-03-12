@@ -1204,21 +1204,8 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                     info!("{} MD disconnected, send media STOP to HU",get_name());
                     if md_connected
                     {
-                        if dhu
-                        {
-                            stop_media(&tx_srv, ch_id as u8).await?;
-                            session_id +=1;
-                            start_media(&tx_srv, ch_id as u8, session_id).await?;
-                            show_first_screen(&tx_srv, ch_id as u8, &wait_screen_config_frame, &wait_screen_first_frame).await;
-                            projection_state=ProjectionStatus::FirstScreen;
-                        }
-                        else {
-                            stop_media(&tx_srv, ch_id as u8).await?;
-                            Delay::new(Duration::from_millis(100)).await; // allow HU to process STOP
-                            session_id +=1;
-                            start_media(&tx_srv, ch_id as u8, session_id).await?;
-                            projection_state=ProjectionStatus::TransitionToFS;
-                        }
+                        show_first_screen(&tx_srv, ch_id as u8, &wait_screen_config_frame, &wait_screen_first_frame).await;
+                        projection_state=ProjectionStatus::FirstScreen;
 
                     }
                     md_connected=false;
