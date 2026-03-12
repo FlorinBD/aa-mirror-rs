@@ -744,10 +744,10 @@ async fn tsk_scrcpy_control(
                                 key_code=key_ev.keycode() as i32;
                                 //remap fast forward/rewind
                                 if key_code == KeyCode::KEYCODE_MEDIA_FAST_FORWARD as i32 {
-                                    key_code=KeyCode::KEYCODE_L as i32;
+                                    key_code=272;//KEYCODE_MEDIA_SKIP_FORWARD
                                 }
                                 else if key_code == KeyCode::KEYCODE_MEDIA_REWIND as i32 {
-                                    key_code=KeyCode::KEYCODE_J as i32;
+                                    key_code=273;//KEYCODE_MEDIA_SKIP_BACKWARD
                                 }
                                 let mut _action: u8;
                                 if key_down
