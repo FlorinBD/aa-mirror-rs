@@ -738,6 +738,7 @@ async fn tsk_scrcpy_control(
                         else if rsp.key_event.is_some()
                         {
                             for (_,key_ev) in rsp.key_event.keys.iter().enumerate() {
+                                debug!("scrcpy_control received key_event: keycode={:?}, down={:?}",key_ev.keycode(), key_ev.down());
                                 let key_down = key_ev.down();
                                 let mut _action: u8;
                                 if key_down
