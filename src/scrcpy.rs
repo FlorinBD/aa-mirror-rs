@@ -737,9 +737,18 @@ async fn tsk_scrcpy_control(
                         }
                         else if rsp.key_event.is_some()
                         {
+                            let mut key_code=0;
                             for (_,key_ev) in rsp.key_event.keys.iter().enumerate() {
                                 debug!("scrcpy_control received key_event: keycode={:?}, down={:?}",key_ev.keycode(), key_ev.down());
                                 let key_down = key_ev.down();
+                                key_code=key_ev.keycode();
+                                //remap fast forward/rewind
+                                if key_code == KeyCode::KEYCODE_MEDIA_FAST_FORWARD {
+                                    key_code=KeyCode::KEYCODE_L;
+                                }
+                                else if key_code == KeyCode::KEYCODE_MEDIA_REWIND {
+                                    key_code=KeyCode::KEYCODE_J;
+                                }
                                 let mut _action: u8;
                                 if key_down
                                 {
@@ -748,7 +757,7 @@ async fn tsk_scrcpy_control(
                                     _action = AndroidKeyEvent::Up as u8;
                                 }
 
-                                let ev = ScrcpyKeyEvent { action: _action, key_code: key_ev.keycode() as i32, repeat: 0, metastate: 0 };
+                                let ev = ScrcpyKeyEvent { action: _action, key_code: key_code , repeat: 0, metastate: 0 };
                                 //info!("SCRCPY Control inject event: {:?}",ev);
                                 let ev_bytes=ev.to_be_bytes();
                                 let mut payload: Vec<u8> = Vec::new();
