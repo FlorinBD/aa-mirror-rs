@@ -3,7 +3,6 @@ use std::net::{Ipv4Addr, SocketAddrV4};
 use std::process::Stdio;
 use std::time::{Duration};
 use log::{debug, error};
-use port_check::is_port_reachable_with_timeout;
 use simplelog::info;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 use tokio::process::Command;
