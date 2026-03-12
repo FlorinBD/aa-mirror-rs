@@ -741,12 +741,12 @@ async fn tsk_scrcpy_control(
                             for (_,key_ev) in rsp.key_event.keys.iter().enumerate() {
                                 debug!("scrcpy_control received key_event: keycode={:?}, down={:?}",key_ev.keycode(), key_ev.down());
                                 let key_down = key_ev.down();
-                                key_code=key_ev.keycode();
+                                key_code=key_ev.keycode() as i32;
                                 //remap fast forward/rewind
-                                if key_code == KeyCode::KEYCODE_MEDIA_FAST_FORWARD as u32 {
+                                if key_code == KeyCode::KEYCODE_MEDIA_FAST_FORWARD as i32 {
                                     key_code=KeyCode::KEYCODE_L as i32;
                                 }
-                                else if key_code == KeyCode::KEYCODE_MEDIA_REWIND as u32 {
+                                else if key_code == KeyCode::KEYCODE_MEDIA_REWIND as i32 {
                                     key_code=KeyCode::KEYCODE_J as i32;
                                 }
                                 let mut _action: u8;
