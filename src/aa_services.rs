@@ -1375,7 +1375,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
 
     async fn video_setup(tx: &Sender<Packet>, ch_id: u8)->Result<()> {
         info!( "{}, channel {:?}: Sending SETUP command", get_name(), ch_id);
-        let media_setup= Setup::new();
+        let mut media_setup= Setup::new();
         media_setup.set_type(MediaCodecType::MEDIA_CODEC_VIDEO_H264_BP);
         let mut payload: Vec<u8>=Vec::new();
         payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_SETUP as u16).to_be_bytes());

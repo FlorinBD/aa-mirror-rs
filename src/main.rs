@@ -370,7 +370,11 @@ fn generate_wpa_supplicant_conf(config: AppConfig) -> std::io::Result<()> {
 
 
     let template = fs::read_to_string(WPA_SUPPLICANT_CONF_IN)?;
-
+    let mut freq_list="2412 2417 2422 2427 2432 2437 2442 2447 2452 2457 2462 2467 2472 2484";
+    if config.band == "5"
+    {
+        freq_list="5180 5200 5220 5240 5260 5280 5300 5320 5500 5520 5540 5560 5580 5600 5620 5640 5660 5680 5700 5720";
+    }
     // Eventually: For 6 GHz, we will need more options like opclass.
     let rendered = render_template(
         &template,
