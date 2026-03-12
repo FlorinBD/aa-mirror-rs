@@ -121,7 +121,7 @@ pub(crate) async fn get_first_adb_device( config: AppConfig) ->Option<String>
         // parse the &str into Ipv4Addr
         if let Ok(client_ip) = ip.parse::<Ipv4Addr>() {
             let dev_socket = SocketAddrV4::new(client_ip, dev_port);
-            if is_port_reachable(dev_socket, Duration::from_secs(5))
+            if is_port_reachable(dev_socket, Duration::from_secs(5)).await
             {
                 info!("{:?} found port {} open, trying to connect to ADB demon. MAC= {:?}", ip.to_string(), dev_port, mac.to_string());
                 let cmd_connect = Command::new("adb")
