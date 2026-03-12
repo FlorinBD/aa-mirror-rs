@@ -10,7 +10,8 @@ use tokio::process::Command;
 use crate::{adb};
 use crate::config::{AppConfig, ADB_DEVICE_PORT};
 use simplelog;
-
+use tokio::net::TcpStream;
+use tokio::time::timeout;
 
 ///ADB wrapper, needs adb binary installed
 pub(crate) fn parse_response_lines(rsp: Vec<u8>) -> Result<Vec<String>, String> {
@@ -120,7 +121,7 @@ pub(crate) async fn get_first_adb_device( config: AppConfig) ->Option<String>
         // parse the &str into Ipv4Addr
         if let Ok(client_ip) = ip.parse::<Ipv4Addr>() {
             let dev_socket = SocketAddrV4::new(client_ip, dev_port);
-            if is_port_reachable_with_timeout(dev_socket, Duration::from_secs(5))
+            if is_port_reachable(dev_socket, Duration::from_secs(5))
             {
                 info!("{:?} found port {} open, trying to connect to ADB demon. MAC= {:?}", ip.to_string(), dev_port, mac.to_string());
                 let cmd_connect = Command::new("adb")
@@ -285,5 +286,12 @@ fn shell_escape(s: &str) -> String {
         format!("'{}'", s.replace('\'', r"'\''"))
     } else {
         s.to_string()
+    }
+}
+
+async fn is_port_reachable(addr: SocketAddrV4, timeout_dur: Duration) -> bool {
+    match timeout(timeout_dur, TcpStream::connect(addr)).await {
+        Ok(Ok(_stream)) => true,
+        _ => false,
     }
 }
