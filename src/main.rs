@@ -381,6 +381,7 @@ fn generate_wpa_supplicant_conf(config: AppConfig) -> std::io::Result<()> {
         &[
             ("STA_SSID", &format!("\"{}\"", config.ap_ssid)),
             ("STA_PWD",  &format!("\"{}\"", config.ap_psw)),
+            ("STA_FREQ",  &format!("{}", freq_list.to_string())),
         ],
     );
 
