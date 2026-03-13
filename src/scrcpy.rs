@@ -1068,7 +1068,8 @@ pub(crate) async fn tsk_adb_scrcpy(
             info!("ADB video shell response: {:?}", line);
             if line.contains("[server] INFO: Device:") && shell.id().is_some()
             {
-                tokio::time::sleep(Duration::from_secs(1)).await;//give some time to start sockets
+                //this waiting time is MANDATORY, otherwise we get error on video socket, why???
+                tokio::time::sleep(Duration::from_millis(500)).await;//give some time to start sockets
                 let addr = format!("127.0.0.1:{}", SCRCPY_PORT).parse().unwrap();
                 let video_stream = TcpStream::connect(addr).await?;
                 video_stream.set_nodelay(true)?;
