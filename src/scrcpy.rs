@@ -326,6 +326,7 @@ async fn tsk_scrcpy_video(
             }
         }
         Err(e) => {
+            error!("SCRCPY Video reading error: {:?}",e);
             return Err(Box::new(io::Error::new(io::ErrorKind::Other, e)));
         }
     }
