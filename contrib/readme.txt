@@ -26,3 +26,8 @@ in STA mode dhcp is not providing host name
 NOTES:
 HU doesn't send ACK for config frames (video frames)
 transfer_monitor() must be used because TcpStream dosen't close when HU/DHU is disconnected and we can't re-connect
+video restart on HU (FS to projection):
+    stop,start,start rec is not OK
+    stop, config, start, start rec is not OK
+    start, start rec is not OK
+    stop, config, start, no session increment, start rec is ....

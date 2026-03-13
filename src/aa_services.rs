@@ -28,7 +28,7 @@ use protos::*;
 use protos::ControlMessageType::{self, *};
 use crate::adb;
 use crate::channel_manager::{Packet, ENCRYPTED, FRAME_TYPE_CONTROL, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
-use crate::config::{SCRCPY_PORT};
+use crate::config::{HU_CONFIG_DELAY_MS, SCRCPY_PORT};
 use crate::scrcpy::ScrcpyControlMessageType;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -1211,6 +1211,8 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         if projection_state==ProjectionStatus::TransitionToProjected && md_connected
                         {
                             info!( "{}, channel {:?}: MD connected, starting video streaming", get_name(), pkt.channel);
+                            //tokio::time::sleep(Duration::from_millis(HU_CONFIG_DELAY_MS)).await;
+                            Delay::new(Duration::from_millis(HU_CONFIG_DELAY_MS)).await;
                             //session_id +=1;
                             start_media(&tx_srv, ch_id as u8, session_id).await?;
                             start_scrcpy_media(&scrcpy_cmd, ch_id as u8, &video_params).await?;
