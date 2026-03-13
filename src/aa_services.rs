@@ -1164,6 +1164,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                         if projection_state==ProjectionStatus::FirstScreen
                         {
                             stop_media(&tx_srv, ch_id as u8).await?;
+                            Delay::new(Duration::from_millis(HU_CONFIG_DELAY_MS)).await;
                             video_setup(&tx_srv, ch_id as u8).await?;
                             //start_scrcpy_media(&scrcpy_cmd, ch_id as u8, &video_params).await?;
                             projection_state=ProjectionStatus::TransitionToProjected;
