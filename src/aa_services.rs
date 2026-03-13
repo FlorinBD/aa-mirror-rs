@@ -1104,7 +1104,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
     let mut projection_state=ProjectionStatus::TransitionToFS;
     let mut video_focus=false;
     let mut config_recived=false;
-    let mut session_id=1;
+    let mut session_id=0;
     loop {
         let pkt=  rx_srv.recv().await.ok_or("service reader channel hung up")?;
         if pkt.channel !=ch_id as u8
