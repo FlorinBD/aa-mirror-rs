@@ -906,7 +906,7 @@ pub(crate) async fn tsk_adb_scrcpy(
             srv_cmd_tx.send_async(pkt_rsp).await?;
             let mut start_audio_recived=false;
             let mut start_video_recived=false;
-            //wait for custom CMD to start recording
+            //wait for custom CMD to start recording or CANCEL to restart
             loop {
                 match srv_cmd_rx_scrcpy.recv_async().await {
                     Ok(pkt) => {
@@ -1150,6 +1150,7 @@ pub(crate) async fn tsk_adb_scrcpy(
 
 
                 info!("Connected to control server!");
+                let mut cancel_cmd_recived=false;
                 let mut buf = [0u8; 1024];
                 loop {
                     tokio::select! {
@@ -1184,6 +1185,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                                     debug!("tsk_scrcpy CANCEL CMD received, stopping all tasks");
                                     hnd_scrcpy_audio.abort();
                                     hnd_scrcpy_video.abort();
+                                    cancel_cmd_recived=true;
                                     //drop(tx_ack_audio);
                                     //drop(tx_ack_video);
                                     if let Err(_) = tx_ctrl.send_async(pkt).await
@@ -1287,19 +1289,23 @@ pub(crate) async fn tsk_adb_scrcpy(
                 // When done, stop the shell
                 //drop(rx_scrcpy_ctrl);
                 shell.kill().await?;
-                info!("Sending MD_DISCONNECTED to inform services");
-                let mut payload: Vec<u8>=Vec::new();
-                payload.extend_from_slice(&(ControlMessageType::MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
-                payload.extend_from_slice(&(CustomCommand::MD_DISCONNECTED as u16).to_be_bytes());
-                let pkt_rsp = Packet {
-                    channel: 0,
-                    flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                    final_length: None,
-                    payload: std::mem::take(&mut payload),
-                };
-                if let Err(_) = srv_cmd_tx.send_async(pkt_rsp).await{
-                    error!( "scrcpy MD_DISCONNECTED send error");
-                };
+                if !cancel_cmd_recived
+                {
+                    info!("Sending MD_DISCONNECTED to inform services");
+                    let mut payload: Vec<u8>=Vec::new();
+                    payload.extend_from_slice(&(ControlMessageType::MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+                    payload.extend_from_slice(&(CustomCommand::MD_DISCONNECTED as u16).to_be_bytes());
+                    let pkt_rsp = Packet {
+                        channel: 0,
+                        flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                        final_length: None,
+                        payload: std::mem::take(&mut payload),
+                    };
+                    if let Err(_) = srv_cmd_tx.send_async(pkt_rsp).await{
+                        error!( "scrcpy MD_DISCONNECTED send error");
+                    };
+                }
+
             }
             else {
                 error!("Invalid response for ADB shell");
