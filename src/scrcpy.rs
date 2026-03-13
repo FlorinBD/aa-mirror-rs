@@ -1023,7 +1023,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                 srv_cmd_tx.send_async(pkt_rsp).await?;
                 continue;
             }
-
+            //Configure SCRCPY for recording
             //AVC base profile, no B frames, only I and P frames, low-latency is MANDATORY
             let video_codec_options=format!("profile:int=1,level:int=512,i-frame-interval:int={},low-latency:int=1,max-bframes:int=0",video_codec_params.fps);
             let mut cmd_shell:Vec<String> = vec![];
