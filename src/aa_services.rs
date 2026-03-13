@@ -1400,7 +1400,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
         Ok(())
     }
     async fn start_media(tx: &Sender<Packet>, ch_id: u8, session_id:i32)->Result<()> {
-        info!( "{}, channel {:?}: Sending START command", get_name(), ch_id);
+        info!( "{}, channel {:?}: Sending START command, session id= {}", get_name(), ch_id, session_id);
         let mut start_req = Start::new();
         start_req.set_session_id(session_id);
         start_req.set_configuration_index(0);
