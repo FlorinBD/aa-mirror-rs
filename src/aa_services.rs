@@ -1248,7 +1248,6 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                             else {
                                 error!( "{}, channel {:?}: MD not connected yet, startup screen already done", get_name(), pkt.channel);
                             }
-
                         }
                         else
                         {
@@ -1275,9 +1274,7 @@ pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet
                             {
                                 debug!("{}, channel {:?}: video streaming already started, ignoring packet", get_name(), pkt.channel);
                             }
-
                         }
-
                     }
                     else
                     {
