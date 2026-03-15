@@ -324,11 +324,13 @@ pub async fn io_loop(
     let (tx_scrcpy_cmd, rx_scrcpy_cmd)=flume::bounded::<Packet>(5);
     //cmd scrcpy>srv channel
     let (tx_scrcpy_srv_cmd, rx_scrcpy_srv_cmd)=flume::bounded::<Packet>(5);
+    let md_connected = Arc::new(Notify::new());
     let mut tsk_adb;
     tsk_adb = tokio_uring::spawn(scrcpy::tsk_adb_scrcpy(
         tx_scrcpy,
         rx_scrcpy_cmd,
         tx_scrcpy_srv_cmd,
+        md_connected.clone(),
         cfg,
     ));
     loop {
@@ -346,6 +348,8 @@ pub async fn io_loop(
                 Some(Duration::from_secs(config.stats_interval.into()))
             }
         };
+        debug!("{}: Waiting on ADB device to be connected", get_name());
+        md_connected.notified().await;
         let read_timeout = Duration::from_secs(config.timeout_secs.into());
 
         let mut hu_tcp = None;

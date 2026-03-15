@@ -840,6 +840,7 @@ pub(crate) async fn tsk_adb_scrcpy(
     media_tx: flume::Sender<ChannelProxyHandle>,
     srv_cmd_rx_scrcpy: flume::Receiver<Packet>,
     srv_cmd_tx: flume::Sender<Packet>,
+    md_connected:Arc<Notify>,
     config: AppConfig,
 ) -> Result<()> {
     info!("{}: ADB task started",NAME);
@@ -895,7 +896,7 @@ pub(crate) async fn tsk_adb_scrcpy(
 
             }
             info!("ADB config done, sending MD_CONNECTED and wait for start recording");
-            let mut payload: Vec<u8>=Vec::new();
+            /*let mut payload: Vec<u8>=Vec::new();
             payload.extend_from_slice(&(ControlMessageType::MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
             payload.extend_from_slice(&(CustomCommand::MD_CONNECTED as u16).to_be_bytes());
             let pkt_rsp = Packet {
@@ -904,7 +905,8 @@ pub(crate) async fn tsk_adb_scrcpy(
                 final_length: None,
                 payload: std::mem::take(&mut payload),
             };
-            srv_cmd_tx.send_async(pkt_rsp).await?;
+            srv_cmd_tx.send_async(pkt_rsp).await?;*/
+            md_connected.notify_one();
             let mut start_audio_recived=false;
             let mut start_video_recived=false;
             //wait for custom CMD to start recording or CANCEL to restart
