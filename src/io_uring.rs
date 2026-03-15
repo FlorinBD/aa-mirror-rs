@@ -348,7 +348,7 @@ pub async fn io_loop(
                 Some(Duration::from_secs(config.stats_interval.into()))
             }
         };
-        debug!("{}: Waiting on ADB device to be connected", get_name());
+        debug!("{}: Waiting on ADB device to be connected", NAME);
         md_connected.notified().await;
         let read_timeout = Duration::from_secs(config.timeout_secs.into());
 
