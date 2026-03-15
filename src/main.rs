@@ -566,13 +566,6 @@ fn main() -> Result<()> {
         NAME,
         config.logfile.display()
     );
-    if config.startup_delay > 0 {
-        thread::sleep(Duration::from_secs(config.startup_delay.into()));
-        info!(
-            "{} 💤 Startup delayed by <b><blue>{}</> seconds",
-            NAME, config.startup_delay
-        );
-    }
 
     // notify for syncing threads
     let (restart_tx, _) = broadcast::channel(1);
