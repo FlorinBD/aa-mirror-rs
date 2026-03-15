@@ -743,13 +743,6 @@ async fn tsk_scrcpy_control(
                                 debug!("scrcpy_control received key_event: keycode={:?}, down={:?}",key_ev.keycode(), key_ev.down());
                                 let key_down = key_ev.down();
                                 key_code=key_ev.keycode() as i32;
-                                //remap fast forward/rewind
-                                if key_code == KeyCode::KEYCODE_MEDIA_FAST_FORWARD as i32 {
-                                    key_code=272;//KEYCODE_MEDIA_SKIP_FORWARD
-                                }
-                                else if key_code == KeyCode::KEYCODE_MEDIA_REWIND as i32 {
-                                    key_code=273;//KEYCODE_MEDIA_SKIP_BACKWARD
-                                }
                                 let mut _action: u8;
                                 if key_down
                                 {
