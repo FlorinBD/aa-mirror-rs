@@ -330,8 +330,8 @@ pub async fn io_loop(
         tx_scrcpy,
         rx_scrcpy_cmd,
         tx_scrcpy_srv_cmd,
-        md_connected.clone(), 
-        shared_config,
+        md_connected.clone(),
+        shared_config.clone(),
     ));
     loop {
         //drain scrcpy commands?
