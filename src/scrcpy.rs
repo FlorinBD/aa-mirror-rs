@@ -19,7 +19,7 @@ use tokio_uring::net::TcpStream;
 use crate::aa_services::{AudioStreamingParams, MediaCodec, VideoStreamingParams};
 use crate::{adb, channel_manager};
 use crate::channel_manager::{ChannelProxyHandle, Packet, PacketProxy, ENCRYPTED, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
-use crate::config::{AppConfig, MAX_DATA_LEN, SCRCPY_METADATA_HEADER_LEN, SCRCPY_PORT, SCRCPY_VERSION};
+use crate::config::{AppConfig, SharedConfig, MAX_DATA_LEN, SCRCPY_METADATA_HEADER_LEN, SCRCPY_PORT, SCRCPY_VERSION};
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use protos::*;
 use protos::ControlMessageType::{self, *};
@@ -834,7 +834,7 @@ pub(crate) async fn tsk_adb_scrcpy(
     srv_cmd_rx_scrcpy: flume::Receiver<Packet>,
     srv_cmd_tx: flume::Sender<Packet>,
     md_connected:Arc<Notify>,
-    config: AppConfig,
+    pconfig: SharedConfig,
 ) -> Result<()> {
     info!("{}: ADB task started",NAME);
     let cmd_adb = Command::new("adb")
@@ -859,6 +859,8 @@ pub(crate) async fn tsk_adb_scrcpy(
     let mut hu_conn_restart=false;
     loop
     {
+        // reload new config
+        let config = pconfig.read().await.clone();
         hu_conn_restart=false;
         if let Some(device)=adb::get_first_adb_device(config.clone()).await {
             info!("{}: ADB device found: {:?}, trying to get video/audio from it now",NAME, device);
