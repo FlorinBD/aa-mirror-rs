@@ -1,4 +1,4 @@
-use crate::config_types::{AAMode, BluetoothAddressList, EvConnectorTypes, HexdumpLevel, UsbId, WiFiMode};
+use crate::config_types::{AAMode, MACAddressList, EvConnectorTypes, HexdumpLevel, UsbId, WiFiMode};
 use indexmap::IndexMap;
 use serde::de::{Deserializer, Error as DeError};
 use serde::{Deserialize, Serialize};
@@ -101,7 +101,7 @@ pub struct AppConfig {
     pub disable_console_debug: bool,
     pub scrcpy_screen_off: bool,
     pub video_bitrate:i32,
-    pub connect: BluetoothAddressList,
+    pub connect: MACAddressList,
     pub logfile: PathBuf,
     pub stats_interval: u16,
     #[serde(default, deserialize_with = "empty_string_as_none")]
@@ -231,7 +231,7 @@ impl Default for AppConfig {
             disable_console_debug: false,
             scrcpy_screen_off:true,
             video_bitrate:4_000_000,
-            connect: BluetoothAddressList::default(),
+            connect: MACAddressList::default(),
             logfile: "/var/log/aa-mirror-rs.log".into(),
             stats_interval: 0,
             udc: None,

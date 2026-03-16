@@ -103,6 +103,10 @@
         "udc": {
           "typ": "string",
           "description": "UDC Controller name (used in special configurations)"
+        },
+        "connect": {
+          "typ": "string",
+          "description": "Auto-connect to phone and initiate connection\nempty string/no value: don't auto-connect,\nzeros: iterate over all connected devices,\nmay be set to a comma seperated list of phone MAC addresses for connecting to a specific list of phones, wildcard may not be used with list"
         }
       }
     },
@@ -145,10 +149,6 @@
         "btalias": {
           "typ": "string",
           "description": "Bluetooth device name/alias (how your bluetooth device is visible)\nby default it is `aa-mirror-CPUSERIAL`\nfor dongle mode you need to set it to: `AndroidAuto-xxxxx`"
-        },
-        "connect": {
-          "typ": "string",
-          "description": "Auto-connect to phone and initiate connection\nempty string/no value: don't auto-connect,\nzeros: iterate over all connected devices,\nmay be set to a comma seperated list of phone MAC addresses for connecting to a specific list of phones, wildcard may not be used with list"
         },
         "bt_timeout_secs": {
           "typ": "integer",

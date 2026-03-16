@@ -2,7 +2,7 @@ use crate::btle;
 use crate::config::Action;
 use crate::config::WifiConfig;
 use crate::config::IDENTITY_NAME;
-use crate::config_types::BluetoothAddressList;
+use crate::config_types::MACAddressList;
 use crate::web::AppState;
 use anyhow::anyhow;
 use backon::{ExponentialBuilder, Retryable};
@@ -352,7 +352,7 @@ impl Bluetooth {
     async fn get_aa_profile_connection(
         &mut self,
         dongle_mode: bool,
-        connect: BluetoothAddressList,
+        connect: MACAddressList,
         bt_timeout: Duration,
         stopped: bool,
     ) -> Result<(Address, Stream)> {
@@ -562,7 +562,7 @@ impl Bluetooth {
     pub async fn aa_handshake(
         &mut self,
         dongle_mode: bool,
-        connect: BluetoothAddressList,
+        connect: MACAddressList,
         wifi_config: WifiConfig,
         tcp_start: Arc<Notify>,
         bt_timeout: Duration,

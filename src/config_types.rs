@@ -8,9 +8,9 @@ use serde::{
 use std::{fmt, str::FromStr};
 
 #[derive(Debug, Clone)]
-pub struct BluetoothAddressList(pub Option<Vec<Address>>);
+pub struct MACAddressList(pub Option<Vec<Address>>);
 
-impl BluetoothAddressList {
+impl MACAddressList {
     fn to_string_internal(&self) -> String {
         match &self.0 {
             Some(addresses) => addresses
@@ -23,14 +23,14 @@ impl BluetoothAddressList {
     }
 }
 
-impl<'de> Deserialize<'de> for BluetoothAddressList {
+impl<'de> Deserialize<'de> for MACAddressList {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
     {
         let s: String = String::deserialize(deserializer)?;
         if s.is_empty() {
-            return Ok(BluetoothAddressList(None));
+            return Ok(MACAddressList(None));
         }
 
         let addresses: Result<Vec<Address>, _> = s
@@ -47,7 +47,7 @@ impl<'de> Deserialize<'de> for BluetoothAddressList {
                         "'connect' - Wildcard address '00:00:00:00:00:00' cannot be combined with other addresses"
                     ));
                 }
-                Ok(BluetoothAddressList(Some(addrs)))
+                Ok(MACAddressList(Some(addrs)))
             }
             Err(e) => Err(de::Error::custom(format!(
                 "'connect' - Failed to parse addresses: {}",
@@ -57,7 +57,7 @@ impl<'de> Deserialize<'de> for BluetoothAddressList {
     }
 }
 
-impl Serialize for BluetoothAddressList {
+impl Serialize for MACAddressList {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -67,15 +67,15 @@ impl Serialize for BluetoothAddressList {
     }
 }
 
-impl fmt::Display for BluetoothAddressList {
+impl fmt::Display for MACAddressList {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.to_string_internal())
     }
 }
 
-impl Default for BluetoothAddressList {
+impl Default for MACAddressList {
     fn default() -> Self {
-        BluetoothAddressList(Some(vec![Address::any()]))
+        MACAddressList(Some(vec![Address::any()]))
     }
 }
 
