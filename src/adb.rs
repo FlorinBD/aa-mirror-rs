@@ -126,7 +126,7 @@ pub(crate) async fn get_first_adb_device( config: AppConfig) ->Option<String>
         // parse the &str into Ipv4Addr
         if let Ok(client_ip) = ip.parse::<Ipv4Addr>() {
             let dev_socket = SocketAddrV4::new(client_ip, dev_port);
-            let mac_addr_list=config.connect;
+            let mac_addr_list=config.connect.clone();
             if let Some(addresses_to_connect) = mac_addr_list.0 {
                 debug!("{}: Try to connect to configured MAC addr list devices: {:?}",get_name(), addresses_to_connect);
 
