@@ -314,7 +314,7 @@ pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, 
                     if !rsp.night_mode_data.is_empty()
                     {
                         if let Some(night) = rsp.night_mode_data.first() {
-                            let value = night.get_night_mode();
+                            let value = night.night_mode.unwrap_or(false);
                             if value != prev_nt_mode
                             {
                                 prev_nt_mode=value;
