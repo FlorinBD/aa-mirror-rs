@@ -311,33 +311,36 @@ pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, 
                 info!("{} Received message SENSOR_MESSAGE_BATCH", get_name());
                 let data = &pkt.payload[2..]; // start of message data, without message_id
                 if  let Ok(rsp) = SensorBatch::parse_from_bytes(&data) {
-                    if rsp.night_mode_data.is_some()
+                    if !rsp.night_mode_data.is_empty()
                     {
-                        let nt=rsp.night_mode_data[0].night_mode() as bool;
-                        if nt != prev_nt_mode
-                        {
-                            prev_nt_mode=nt;
-                            if md_connected
+                        if let Some(night) = rsp.night_mode_data.first() {
+                            let value = night.get_night_mode();
+                            if value != prev_nt_mode
                             {
-                                info!("{} Switching theme for MD, night: {}", get_name(), nt);
-                                let mut mode="yes";
-                                if !nt{
-                                    mode="no";
-                                }
-                                let mut cmd_shell:Vec<String> = vec![];
-                                cmd_shell.push("cmd".to_string());
-                                cmd_shell.push("uimode".to_string());
-                                cmd_shell.push("night".to_string());
-                                cmd_shell.push(format!("{}",mode.to_string() ));
-                                let (mut shell, mut sh_reader,line)=adb::shell_cmd(cmd_shell).await?;
-                                info!("{} ADB cmd shell response: {:?}",get_name(), line);
-                                if !line.contains("Night mode:") && shell.id().is_some()
+                                prev_nt_mode=value;
+                                if md_connected
                                 {
-                                    error!( "{} error switching MD theme", get_name());
+                                    info!("{} Switching theme for MD, night: {}", get_name(), value);
+                                    let mut mode="yes";
+                                    if !value{
+                                        mode="no";
+                                    }
+                                    let mut cmd_shell:Vec<String> = vec![];
+                                    cmd_shell.push("cmd".to_string());
+                                    cmd_shell.push("uimode".to_string());
+                                    cmd_shell.push("night".to_string());
+                                    cmd_shell.push(format!("{}",mode.to_string() ));
+                                    let (mut shell, mut sh_reader,line)=adb::shell_cmd(cmd_shell).await?;
+                                    info!("{} ADB cmd shell response: {:?}",get_name(), line);
+                                    if !line.contains("Night mode:") && shell.id().is_some()
+                                    {
+                                        error!( "{} error switching MD theme", get_name());
+                                    }
+                                    shell.kill().await?;
                                 }
-                                shell.kill().await?;
                             }
                         }
+
                     }
                 }
                 else {
