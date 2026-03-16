@@ -132,7 +132,7 @@ pub(crate) async fn get_first_adb_device( config: AppConfig) ->Option<String>
 
                 if !addresses_to_connect.is_empty() {
                     for addr in addresses_to_connect {
-                        if addr.to_string()==mac
+                        if addr.to_string()==mac.to_string()
                         {
                             debug!("{}: MAC addr found in the configured list, return this device", get_name());
                             let dev= try_connect(dev_socket).await;
