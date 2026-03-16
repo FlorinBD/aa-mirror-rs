@@ -1235,7 +1235,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                             }
                         }
                         Ok(n) = sh_reader.read(&mut buf) => {
-                            if(n>2)
+                            if n>2
                             {
                                 info!("shell stdout: {}", String::from_utf8_lossy(&buf[..n]));
                             }
