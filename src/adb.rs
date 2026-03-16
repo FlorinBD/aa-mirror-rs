@@ -2,6 +2,7 @@ use std::ffi::OsStr;
 use std::net::{Ipv4Addr, SocketAddrV4};
 use std::process::Stdio;
 use std::time::{Duration};
+use bluer::Address;
 use log::{debug, error};
 use simplelog::info;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
@@ -13,6 +14,11 @@ use tokio::net::TcpStream;
 use tokio::time::timeout;
 
 ///ADB wrapper, needs adb binary installed
+
+fn get_name() -> String {
+    let dev = "ADB client";
+    format!("<i><bright-black> aa-mirror/{}: </>", dev)
+}
 pub(crate) fn parse_response_lines(rsp: Vec<u8>) -> Result<Vec<String>, String> {
     // Convert bytes to UTF-8 safely, replacing invalid bytes with �
     let s = String::from_utf8_lossy(&rsp);
@@ -115,44 +121,73 @@ pub(crate) async fn get_first_adb_device( config: AppConfig) ->Option<String>
             None => continue,
         };
 
-        info!("Potential ADB client found: {:?} with MAC: {:?}", ip.to_string(), mac.to_string());
+        debug!("Potential ADB client found: {:?} with MAC: {:?}", ip.to_string(), mac.to_string());
         let dev_port=ADB_DEVICE_PORT;
         // parse the &str into Ipv4Addr
         if let Ok(client_ip) = ip.parse::<Ipv4Addr>() {
             let dev_socket = SocketAddrV4::new(client_ip, dev_port);
-            if is_port_reachable(dev_socket, Duration::from_secs(5)).await
-            {
-                info!("{:?} found port {} open, trying to connect to ADB demon. MAC= {:?}", ip.to_string(), dev_port, mac.to_string());
-                let cmd_connect = Command::new("adb")
-                    .arg("connect")
-                    .arg(dev_socket.to_string())
-                    .output().await.unwrap();
-                let lines=adb::parse_response_lines(cmd_connect.stdout).expect("TODO: panic message");
-                if lines.len() > 0 {
-                    for line in lines {
-                        info!("ADB connect response: {:?}", line);
-                    }
-                }
-                tokio::time::sleep(Duration::from_secs(5)).await;
-                let cmd_dev = Command::new("adb")
-                    .arg("devices")
-                    .output().await.unwrap();
-                let lines=adb::parse_response_lines(cmd_dev.stdout).expect("TODO: panic message");
-                if lines.len() > 0 {
-                    for line in lines {
-                        info!("ADB devices response: {:?}", line);
-                        if line.contains(&dev_socket.to_string()) {
-                            return  Some(dev_socket.to_string());
+            let mac_addr_list=config.connect;
+            if let Some(addresses_to_connect) = mac_addr_list.0 {
+                debug!("{}: Try to connect to configured MAC addr list devices: {:?}",get_name(), addresses_to_connect);
 
+                if !addresses_to_connect.is_empty() {
+                    for addr in addresses_to_connect {
+                        if addr.to_string()==mac
+                        {
+                            debug!("{}: MAC addr found in the configured list, return this device", get_name());
+                            let dev= try_connect(dev_socket).await;
+                            if dev.is_some()
+                            {
+                                return dev;
+                            }
                         }
                     }
                 }
-
             }
+            else {
+                debug!("{}: No configured MAC addr list found, try to open ADB by port", get_name());
+
+                if is_port_reachable(dev_socket, Duration::from_secs(5)).await
+                {
+                    info!("{:?} found port {} open, trying to connect to ADB demon. MAC= {:?}", ip.to_string(), dev_port, mac.to_string());
+                   return try_connect(dev_socket).await;
+
+                }
+            }
+
         }
         else
         {
             error!("Invalid IP address: {}", ip);
+        }
+    }
+    None
+}
+
+async  fn try_connect(sk:SocketAddrV4) -> Option<String>
+{
+    let cmd_connect = Command::new("adb")
+        .arg("connect")
+        .arg(sk.to_string())
+        .output().await.unwrap();
+    let lines=adb::parse_response_lines(cmd_connect.stdout).expect("TODO: panic message");
+    if lines.len() > 0 {
+        for line in lines {
+            info!("ADB connect response: {:?}", line);
+        }
+    }
+    tokio::time::sleep(Duration::from_secs(5)).await;
+    let cmd_dev = Command::new("adb")
+        .arg("devices")
+        .output().await.unwrap();
+    let lines=adb::parse_response_lines(cmd_dev.stdout).expect("TODO: panic message");
+    if lines.len() > 0 {
+        for line in lines {
+            info!("ADB devices response: {:?}", line);
+            if line.contains(&sk.to_string()) {
+                return  Some(sk.to_string());
+
+            }
         }
     }
     None
