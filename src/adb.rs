@@ -102,12 +102,15 @@ pub(crate) async fn get_first_adb_device( config: AppConfig) ->Option<String>
         // IP is always first
         let ip = match parts.get(0) {
             Some(v) => *v,
-            None => continue,
+            None => {
+                error!("{}: IP is NONE",get_name());
+                continue},
         };
 
         // State is usually the last token
         let state = parts.last().copied();
         if !matches!(state, Some("REACHABLE")) && !matches!(state, Some("STALE")) {
+            error!("{}: Invalid status= {}",get_name(), state);
             continue;
         }
         // Find lladdr <MAC>
@@ -118,7 +121,10 @@ pub(crate) async fn get_first_adb_device( config: AppConfig) ->Option<String>
 
         let mac = match mac {
             Some(v) => v,
-            None => continue,
+            None => {
+                error!("{}: MAC address is NONE",get_name());
+                continue;
+            },
         };
 
         debug!("Potential ADB client found: {:?} with MAC: {:?}", ip.to_string(), mac.to_string());
