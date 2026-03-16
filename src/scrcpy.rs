@@ -776,7 +776,7 @@ async fn tsk_scrcpy_control(
                                 debug!("scrcpy_control received REL event: keycode={:?}, delta={:?}",key_ev.keycode(),key_ev.delta());
                                 if key_ev.keycode() == KeyCode::KEYCODE_ROTARY_CONTROLLER as u32
                                 {
-                                    let ev = ScrcpyScrollEvent { position: last_touched_point, screen_size:screen_size, vscroll:key_ev.delta() as i16, hscroll:0, buttons:0 };
+                                    let ev = ScrcpyScrollEvent { position: last_touched_point, screen_size:screen_size, vscroll:key_ev.delta() as i16, hscroll:0, buttons:1 };
                                     //info!("SCRCPY Control inject event: {:?}",ev);
                                     let ev_bytes=ev.to_be_bytes();
                                     let mut payload: Vec<u8> = Vec::new();
