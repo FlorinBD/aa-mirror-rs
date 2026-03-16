@@ -268,7 +268,6 @@ pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, 
                     }
                     else
                     {
-
                         if sensors.contains(&SensorType::SENSOR_NIGHT_MODE) {
                             info!("{} send SENSOR_MESSAGE_REQUEST",get_name());
                             let mut req = SensorRequest::new();
@@ -340,6 +339,9 @@ pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, 
                             }
                         }
                     }
+                }
+                else {
+                    error!( "{} error deserializing SensorBatch", get_name());
                 }
             }
             else if message_id == MESSAGE_CUSTOM_CMD  as i32
