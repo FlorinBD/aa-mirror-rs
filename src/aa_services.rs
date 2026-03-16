@@ -336,7 +336,6 @@ pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, 
                                 shell.kill().await?;
                             }
                         }
-
                     }
                     else {
                         error!( "{} No night mode data in SensorBatch", get_name());
