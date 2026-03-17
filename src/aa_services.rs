@@ -337,9 +337,6 @@ pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, 
                             }
                         }
                     }
-                    else {
-                        error!( "{} No night mode data in SensorBatch", get_name());
-                    }
                 }
                 else {
                     error!( "{} error deserializing SensorBatch", get_name());
