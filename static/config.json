@@ -90,7 +90,7 @@
         },
         "video_bitrate": {
           "typ": "integer",
-          "description": "Video recording quality, default=4Mbps, 0=Get from SDR"
+          "description": "Video recording quality, 0=4Mbps"
         },
         "dpi": {
           "typ": "integer",
