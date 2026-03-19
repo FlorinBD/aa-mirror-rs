@@ -35,7 +35,7 @@ use tokio::time::Instant;
 
 use std::net::SocketAddr;
 use tokio::sync::RwLock;
-use aa_mirror_rs::config_types::WiFiMode;
+use aa_mirror_rs::config_types::{AAMode, WiFiMode};
 
 // Just a generic Result type to ease error handling for us. Errors in multithreaded
 // async contexts needs some extra restrictions
@@ -212,7 +212,7 @@ async fn tokio_main(
     };
 
     let mut cfg = config.read().await.clone();
-    if is_hostapd_configured()
+    if cfg.aa_mode == AAMode::PassThrough
     {
         cfg.wifi_mode= WiFiMode::AP;
     }
@@ -491,7 +491,7 @@ fn main() -> Result<()> {
 
     // generate system configs from template and exit
     if args.generate_system_config {
-        if is_hostapd_configured()
+        if config.aa_mode == AAMode::PassThrough
         {
             generate_hostapd_conf(config).expect("error generating config from template");
         }
