@@ -77,43 +77,6 @@ struct Args {
     generate_system_config: bool,
 }
 
-fn init_wifi_config(cfg: &AppConfig) -> WifiConfig {
-    let mut ip_addr = String::from(DEFAULT_WLAN_ADDR);
-
-    // Get UP interface and IP
-    for ifa in netif::up().unwrap() {
-        match ifa.name() {
-            val if val == cfg.iface => {
-                debug!("Found interface: {:?}", ifa);
-                // IPv4 Address contains None scope_id, while IPv6 contains Some
-                match ifa.scope_id() {
-                    None => {
-                        ip_addr = ifa.address().to_string();
-                        break;
-                    }
-                    _ => (),
-                }
-            }
-            _ => (),
-        }
-    }
-
-    let bssid = mac_address::mac_address_by_name(&cfg.iface)
-        .expect(&format!("mac_address_by_name for {:?}", cfg.iface))
-        .expect(&format!(
-            "No MAC address found for interface: {:?}",
-            cfg.iface
-        ))
-        .to_string();
-
-    WifiConfig {
-        ip_addr,
-        port: TCP_MD_SERVER_PORT,
-        ssid: cfg.ssid.clone(),
-        bssid,
-        wpa_key: cfg.wpa_passphrase.clone(),
-    }
-}
 
 fn logging_init(debug: bool, disable_console_debug: bool, log_path: &PathBuf) {
     let conf = ConfigBuilder::new()
@@ -234,18 +197,6 @@ async fn tokio_main(
             }
         }
     }
-
-    let _ = {
-        if !cfg.wired.is_some() {
-            Some(init_wifi_config(&cfg))
-        } else {
-            None
-        }
-    };
-    /*let mut usb = None;
-    if !cfg.dhu {
-        usb = Some(UsbGadgetState::new(false, cfg.udc.clone()));
-    }*/
 
     // spawn a background task for reboot detection
     let mut config_cloned = config.clone();

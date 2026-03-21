@@ -29,6 +29,7 @@ use WifiInfoResponse::AccessPointType;
 use WifiInfoResponse::SecurityMode;
 const HEADER_LEN: usize = 4;
 const STAGES: u8 = 5;
+const ATTEMPTS: usize = 3;
 
 // module name for logging engine
 const NAME: &str = "<i><bright-black> bluetooth: </>";
@@ -63,6 +64,7 @@ pub struct Bluetooth {
     handle_aa: ProfileHandle,
     btle_handle: Option<bluer::gatt::local::ApplicationHandle>,
     adv_handle: Option<bluer::adv::AdvertisementHandle>,
+    current_index: usize,
 }
 
 // Create and configure the Bluetooth adapter
@@ -152,6 +154,7 @@ pub async fn init(
         handle_aa,
         btle_handle: None,
         adv_handle: None,
+        current_index: 0,
     })
 }
 
@@ -351,7 +354,6 @@ impl Bluetooth {
 
     async fn get_aa_profile_connection(
         &mut self,
-        dongle_mode: bool,
         connect: MACAddressList,
         bt_timeout: Duration,
         stopped: bool,
@@ -375,12 +377,15 @@ impl Bluetooth {
                 // exit if we don't have anything to connect to
                 if !addresses.is_empty() {
                     info!("{} 🧲 Attempting to start an AndroidAuto session via bluetooth with the following devices, in this order: {:?}", NAME, addresses);
-                    let try_connect_bluetooth_addresses_retry = || {
-                        Bluetooth::try_connect_bluetooth_addresses(
+                    let try_connect_bluetooth_addresses_retry = || async {
+                        let next_index = Bluetooth::try_connect_bluetooth_addresses(
                             &adapter_cloned,
-                            dongle_mode,
                             &addresses,
+                            self.current_index,
                         )
+                            .await?;
+
+                        Ok(next_index)
                     };
 
                     let retry_policy = ExponentialBuilder::default()
@@ -388,7 +393,7 @@ impl Bluetooth {
                         .with_max_delay(Duration::from_secs(15))
                         .without_max_times();
 
-                    let _connect = try_connect_bluetooth_addresses_retry
+                    self.current_index = try_connect_bluetooth_addresses_retry
                         // Retry with exponential backoff
                         .retry(retry_policy)
                         // Sleep implementation, required if no feature has been enabled
@@ -421,87 +426,44 @@ impl Bluetooth {
 
     async fn try_connect_bluetooth_addresses(
         adapter: &Adapter,
-        dongle_mode: bool,
         addresses: &Vec<Address>,
-    ) -> Result<()> {
-        for addr in addresses {
-            let device = adapter.device(*addr)?;
+        start_index: usize,
+    ) -> Result<(usize)> {
+        let n = addresses.len();
+        for i in 0..n {
+            // Calculate the actual index, taking start_index into account
+            let idx = (start_index + i) % n;
+            let addr = addresses[idx];
+            let device = adapter.device(addr)?;
+
             let dev_name = match device.name().await {
                 Ok(Some(name)) => format!(" (<b><blue>{}</>)", name),
                 _ => String::new(),
             };
-            info!("{} 🧲 Trying to connect to: {}{}", NAME, addr, dev_name);
-            if let Ok(true) = adapter.device(*addr)?.is_paired().await {
-                let supported_uuids = device.uuids().await?.unwrap_or_default();
-                debug!(
-                    "{} Discovered device {} with service UUIDs {:?}",
-                    NAME, addr, &supported_uuids
+            for j in 1..=ATTEMPTS {
+                info!(
+                    "{} 🧲 Trying to connect to: {}{}, attempt: {}/{}",
+                    NAME, addr, dev_name, j, ATTEMPTS
                 );
-                if supported_uuids.contains(&AIS_PRIMARY_UUID)
-                {
-                    if !dongle_mode {
-                        match device.connect_profile(&HSP_AG_UUID).await {
-                            Ok(_) => {
-                                info!(
-                                    "{} 🔗 Successfully connected to device: {}{}",
-                                    NAME, addr, dev_name
-                                );
-                                return Ok(());
-                            }
-                            Err(e) => {
-                                warn!("{} 🔇 {}{}: Error connecting: {}", NAME, addr, dev_name, e)
-                            }
+                if let Ok(true) = device.is_paired().await {
+                    match device.connect_profile(&HSP_AG_UUID).await {
+                        Ok(_) => {
+                            info!(
+                                "{} 🔗 Successfully connected to device: {}{}",
+                                NAME, addr, dev_name
+                            );
+                            return Ok((idx + 1) % n);
                         }
-                    } else {
-                        match device.connect().await {
-                            Ok(_) => {
-                                info!(
-                                    "{} 🔗 Successfully connected to device: {}{}",
-                                    NAME, addr, dev_name
-                                );
-                                return Ok(());
-                            }
-                            Err(e) => {
-                                // should be handled with the following code:
-                                // match e.kind {bluer::ErrorKind::ConnectionAttemptFailed} ...
-                                // but the problem is that not all errors are defined in bluer,
-                                // so just fallback for text-searching in error :(
-                                let error_text = e.to_string();
-
-                                if let Some(code) =
-                                    error_text.splitn(2, ':').nth(1).map(|s| s.trim())
-                                {
-                                    if code == "br-connection-page-timeout"
-                                        || code == "br-connection-canceled"
-                                    {
-                                        warn!(
-                                            "{} 🔇 {}{}: Error connecting: {}",
-                                            NAME, addr, dev_name, e
-                                        );
-                                        Bluetooth::cleanup_failed_bluetooth_connect(&device)
-                                            .await?;
-                                    } else {
-                                        info!(
-                                    "{} 🔗 Connection success, waiting for AA profile connection: {}{}, ignored error: {}",
-                                    NAME, addr, dev_name, e
-                                );
-                                        return Ok(());
-                                    }
-                                } else {
-                                    warn!("{} Unknown bluetooth error: {}", NAME, e);
-                                    Bluetooth::cleanup_failed_bluetooth_connect(&device).await?;
-                                }
-                            }
+                        Err(e) => {
+                            warn!("{} 🔇 {}{}: Error connecting: {}", NAME, addr, dev_name, e)
                         }
                     }
                 } else {
-                    warn!("{} 🧲 Will not try to connect to: {}{} device does not have the required Android Auto device profiles", NAME, addr, dev_name);
+                    warn!(
+                        "{} 🧲 Unable to connect to: {}{} device not paired",
+                        NAME, addr, dev_name
+                    );
                 }
-            } else {
-                warn!(
-                    "{} 🧲 Unable to connect to: {}{} device not paired",
-                    NAME, addr, dev_name
-                );
             }
         }
         Err(anyhow!("Unable to connect to the provided addresses").into())
@@ -561,21 +523,17 @@ impl Bluetooth {
 
     pub async fn aa_handshake(
         &mut self,
-        dongle_mode: bool,
         connect: MACAddressList,
         wifi_config: WifiConfig,
-        tcp_start: Arc<Notify>,
         bt_timeout: Duration,
         stopped: bool,
-        mut need_restart: BroadcastReceiver<Option<Action>>,
-        restart_tx: BroadcastSender<Option<Action>>,
     ) -> Result<()> {
         // Use the provided session and adapter instead of creating new ones
         let (address, mut stream) = self
-            .get_aa_profile_connection(dongle_mode, connect, bt_timeout, stopped)
+            .get_aa_profile_connection(connect, bt_timeout, stopped)
             .await?;
         Self::send_params(wifi_config.clone(), &mut stream).await?;
-        tcp_start.notify_one();
+        //tcp_start.notify_one();
 
 
         // handshake complete, now disconnect the device so it should

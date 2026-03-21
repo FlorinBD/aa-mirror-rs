@@ -22,7 +22,7 @@ use tokio_uring::net::TcpListener;
 use tokio_uring::net::TcpStream;
 use tokio_uring::BufResult;
 use tokio_uring::UnsubmittedWrite;
-use crate::{scrcpy};
+use crate::{bluetooth, scrcpy};
 use crate::channel_manager::{ChannelProxyHandle, PacketProxy, KEYS_PATH};
 use crate::aa_services::{VideoStreamingParams, AudioStreamingParams};
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
@@ -39,9 +39,10 @@ const USB_ACCESSORY_PATH: &str = "/dev/usb_accessory";
 pub const BUFFER_LEN: usize = 16 * 1024;
 pub const TCP_CLIENT_TIMEOUT: Duration = Duration::new(30, 0);
 
-use crate::config::{Action, SharedConfig, TCP_DHU_PORT};
+use crate::config::{Action, AppConfig, SharedConfig, WifiConfig, DEFAULT_WLAN_ADDR, TCP_DHU_PORT, TCP_MD_SERVER_PORT};
 use crate::channel_manager::{endpoint_reader, ch_proxy, packet_tls_proxy, ENCRYPTED, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
 use crate::channel_manager::Packet;
+use crate::config_types::AAMode;
 use crate::usb_gadget::UsbGadgetState;
 use crate::usb_stream::{UsbStreamRead, UsbStreamWrite};
 
@@ -179,7 +180,43 @@ async fn transfer_monitor(
         sleep(Duration::from_millis(100)).await;
     }
 }
+fn init_wifi_config(cfg: &AppConfig) -> WifiConfig {
+    let mut ip_addr = String::from(DEFAULT_WLAN_ADDR);
 
+    // Get UP interface and IP
+    for ifa in netif::up().unwrap() {
+        match ifa.name() {
+            val if val == cfg.iface => {
+                debug!("Found interface: {:?}", ifa);
+                // IPv4 Address contains None scope_id, while IPv6 contains Some
+                match ifa.scope_id() {
+                    None => {
+                        ip_addr = ifa.address().to_string();
+                        break;
+                    }
+                    _ => (),
+                }
+            }
+            _ => (),
+        }
+    }
+
+    let bssid = mac_address::mac_address_by_name(&cfg.iface)
+        .expect(&format!("mac_address_by_name for {:?}", cfg.iface))
+        .expect(&format!(
+            "No MAC address found for interface: {:?}",
+            cfg.iface
+        ))
+        .to_string();
+
+    WifiConfig {
+        ip_addr,
+        port: TCP_MD_SERVER_PORT,
+        ssid: cfg.ssid.clone(),
+        bssid,
+        wpa_key: cfg.wpa_passphrase.clone(),
+    }
+}
 async fn flatten<T>(handle: &mut JoinHandle<Result<T>>, dbg_info:String) -> Result<T> {
     match handle.await {
         Ok(Ok(result)) => {
@@ -316,23 +353,27 @@ pub async fn io_loop(
     info!("{} 🛰️ Starting TCP server for DHU...", NAME);
     dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
     info!("{} 🛰️ DHU TCP server bound to: <u>{}</u>", NAME, bind_addr);
-
-    //io channels for scrcpy
-    //media frames channel, scrcpy>HU, TODO implement Arc<Packet> to solve copy
-    let (tx_scrcpy, rx_scrcpy)=flume::bounded::<ChannelProxyHandle>(60);
-    //cmd srv>scrcpy channel
-    let (tx_scrcpy_cmd, rx_scrcpy_cmd)=flume::bounded::<Packet>(5);
-    //cmd scrcpy>srv channel
-    let (tx_scrcpy_srv_cmd, rx_scrcpy_srv_cmd)=flume::bounded::<Packet>(5);
     let md_connected = Arc::new(Notify::new());
-    let mut tsk_adb;
-    tsk_adb = tokio_uring::spawn(scrcpy::tsk_adb_scrcpy(
-        tx_scrcpy,
-        rx_scrcpy_cmd,
-        tx_scrcpy_srv_cmd,
-        md_connected.clone(),
-        shared_config.clone(),
-    ));
+    if cfg.aa_mode == AAMode::Mirror
+    {
+        //io channels for scrcpy
+        //media frames channel, scrcpy>HU, TODO implement Arc<Packet> to solve copy
+        let (tx_scrcpy, rx_scrcpy) = flume::bounded::<ChannelProxyHandle>(60);
+        //cmd srv>scrcpy channel
+        let (tx_scrcpy_cmd, rx_scrcpy_cmd) = flume::bounded::<Packet>(5);
+        //cmd scrcpy>srv channel
+        let (tx_scrcpy_srv_cmd, rx_scrcpy_srv_cmd) = flume::bounded::<Packet>(5);
+
+        let mut tsk_adb;
+        tsk_adb = tokio_uring::spawn(scrcpy::tsk_adb_scrcpy(
+            tx_scrcpy,
+            rx_scrcpy_cmd,
+            tx_scrcpy_srv_cmd,
+            md_connected.clone(),
+            shared_config.clone(),
+        ));
+    }
+    let mut bt_stopped=false;
     loop {
         //drain scrcpy commands?
         //while let Ok(msg) = rx_scrcpy_srv_cmd.clone().try_recv() {
@@ -348,7 +389,53 @@ pub async fn io_loop(
                 Some(Duration::from_secs(config.stats_interval.into()))
             }
         };
-        debug!("{}: Waiting on ADB device to be connected", NAME);
+        if config.aa_mode == AAMode::Mirror
+        {
+            debug!("{}: Waiting on ADB device to be connected", NAME);
+        }
+        else
+        {
+            debug!("{}: Bluetooth init", NAME);
+            // initial bluetooth setup
+            let mut bluetooth;
+            loop {
+                match bluetooth::init(cfg.btalias.clone(), cfg.advertise, cfg.dongle_mode).await {
+                    Ok(result) => {
+                        bluetooth = result;
+                        break;
+                    }
+                    Err(e) => {
+                        error!("{} Fatal error in Bluetooth setup: {}", NAME, e);
+                        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                        continue;
+                    }
+                }
+            }
+            debug!("{}: Waiting bluetooth handshake", NAME);
+            let wifi_conf = {
+                if !cfg.wired.is_some() {
+                    Some(init_wifi_config(&cfg))
+                } else {
+                    None
+                }
+            };
+            // bluetooth handshake
+            if let Err(e) = bluetooth
+                .aa_handshake(
+                    cfg.connect.clone(),
+                    wifi_conf.clone().unwrap(),
+                    Duration::from_secs(cfg.bt_timeout_secs.into()),
+                    bt_stopped,
+                )
+                .await
+            {
+                error!("{} bluetooth AA handshake error: {}", NAME, e);
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                continue;
+            }
+        }
+        bt_stopped=true;
+        debug!("{}: Waiting on MD to be connected over TCP", NAME);
         md_connected.notified().await;
         let read_timeout = Duration::from_secs(config.timeout_secs.into());
 
