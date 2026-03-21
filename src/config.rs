@@ -96,7 +96,6 @@ pub struct AppConfig {
     pub dongle_mode: bool,
     pub debug: bool,
     pub hexdump_level: HexdumpLevel,
-    pub wifi_mode: WiFiMode,
     pub aa_mode: AAMode,
     pub disable_console_debug: bool,
     pub scrcpy_screen_off: bool,
@@ -226,7 +225,6 @@ impl Default for AppConfig {
             dongle_mode: false,
             debug: true,
             hexdump_level: HexdumpLevel::Disabled,
-            wifi_mode: WiFiMode::STA,
             aa_mode: AAMode::Mirror,
             disable_console_debug: false,
             scrcpy_screen_off:true,
@@ -308,7 +306,6 @@ impl AppConfig {
         doc["dongle_mode"] = value(self.dongle_mode);
         doc["debug"] = value(self.debug);
         doc["hexdump_level"] = value(format!("{:?}", self.hexdump_level));
-        doc["wifi_mode"] = value(format!("{:?}", self.wifi_mode));
         doc["aa_mode"] = value(format!("{:?}", self.aa_mode));
         doc["disable_console_debug"] = value(self.disable_console_debug);
         doc["scrcpy_screen_off"] = value(self.scrcpy_screen_off);

@@ -3,14 +3,6 @@
     {
       "title": "📶 SYSTEM / WIFI CONFIGURATION",
       "values": {
-        "wifi_mode": {
-          "typ": "select",
-          "description": "WARNING this must reflect buildroot config, you can't change it  only from here",
-          "values": [
-            "STA",
-            "AP"
-          ]
-        },
         "enable_ssh": {
           "typ": "boolean",
           "description": "Enable SSH server"
@@ -58,7 +50,7 @@
       "values": {
         "aa_mode": {
           "typ": "select",
-          "description": "Android Auto mode: [possible values: Mirror (Using ADB SCRCPY to mirror the screen), PassThrough (Wireless AA)]",
+          "description": "Android Auto mode: [Mirror (Using ADB SCRCPY to mirror the screen), PassThrough (Wireless AA)], based on this settings WiFi is switched between AP and STA mode",
           "values": [
             "Mirror",
             "PassThrough"
