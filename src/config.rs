@@ -120,7 +120,7 @@ pub struct AppConfig {
     )]
     pub webserver: Option<String>,
     pub bt_timeout_secs: u16,
-    pub dpi: u16,
+    pub res_multiplier: f64,
     #[serde(default, deserialize_with = "empty_string_as_none")]
     pub wired: Option<UsbId>,
     pub dhu: bool,
@@ -244,7 +244,7 @@ impl Default for AppConfig {
             webserver: webserver_default_bind(),
             bt_timeout_secs: 0,
             action_requested: None,
-            dpi: 0,
+            res_multiplier: 1.0,
             wired: None,
             dhu: false,
             enable_ssh: true,
@@ -330,7 +330,7 @@ impl AppConfig {
             doc["webserver"] = value(webserver);
         }
         doc["bt_timeout_secs"] = value(self.bt_timeout_secs as i64);
-        doc["dpi"] = value(self.dpi as i64);
+        doc["res_multiplier"] = value(self.res_multiplier);
         doc["wired"] = value(self.wired.as_ref().map_or(String::new(), |w| w.to_string()));
         doc["dhu"] = value(self.dhu);
         doc["enable_ssh"] = value(self.enable_ssh);
