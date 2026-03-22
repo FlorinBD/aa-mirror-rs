@@ -442,9 +442,6 @@ pub async fn io_loop(
             if let Ok(s) = tcp_wait_for_hu_connection(& dhu_listener.as_mut().unwrap()).await {
                 hu_tcp = Some(s);
             } else {
-                //notify main loop to restart
-                //let _ = need_restart.send(None);
-                //drop(dhu_listener);
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 continue;
             }
@@ -721,9 +718,6 @@ pub async fn io_loop_pt(
             if let Ok(s) = tcp_wait_for_hu_connection(& dhu_listener.as_mut().unwrap()).await {
                 hu_tcp = Some(s);
             } else {
-                //notify main loop to restart
-                //let _ = need_restart.send(None);
-                //drop(dhu_listener);
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 continue;
             }
