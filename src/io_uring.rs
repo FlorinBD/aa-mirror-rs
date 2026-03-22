@@ -393,7 +393,11 @@ async fn packet_proxy_pt<A: Endpoint<A>>(mut hu_rx: Receiver<Packet>,
                 r_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
                 msg.transmit(&mut md_tx).await.with_context(|| format!("{}: Service transmit to MD failed", NAME))?;
             }
-
+            else => {
+            // all channels closed
+            tokio::time::sleep(Duration::from_secs(1)).await;
+                error!("packet_proxy_pt ALL CHANNELS CLOSED! handle app restart needed")
+        }
         }
     }
 
