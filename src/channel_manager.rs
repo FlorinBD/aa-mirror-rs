@@ -157,7 +157,7 @@ impl Packet {
 
 
     /// composes a final frame and transmits it to endpoint device (HU/MD)
-    async fn transmit<A: Endpoint<A>>(
+    pub async fn transmit<A: Endpoint<A>>(
         &self,
         device: &mut IoDevice<A>,
     ) -> std::result::Result<usize, std::io::Error> {

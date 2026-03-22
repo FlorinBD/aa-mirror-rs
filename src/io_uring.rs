@@ -9,7 +9,9 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use core::net::SocketAddr;
+use std::collections::VecDeque;
 use std::net::IpAddr;
+use anyhow::Context;
 use mac_address::MacAddress;
 use nix::sys::prctl::get_name;
 use tokio::sync::broadcast::Sender as BroadcastSender;
@@ -18,6 +20,7 @@ use tokio::sync::{mpsc, Mutex, Notify};
 use tokio::task::JoinHandle;
 use tokio::time::{sleep, timeout};
 use tokio::fs::File as TokioFile;
+use tokio::io;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio_uring::buf::BoundedBuf;
@@ -29,7 +32,7 @@ use tokio_uring::net::TcpStream;
 use tokio_uring::BufResult;
 use tokio_uring::UnsubmittedWrite;
 use crate::{bluetooth, scrcpy};
-use crate::channel_manager::{ChannelProxyHandle, PacketProxy, KEYS_PATH};
+use crate::channel_manager::{ChannelProxyHandle, PacketProxy, SslMemBuf, HEADER_LENGTH, KEYS_PATH};
 use crate::aa_services::{VideoStreamingParams, AudioStreamingParams};
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use protos::*;
@@ -363,6 +366,39 @@ async fn enable_usb_if_present(usb: &mut Option<UsbGadgetState>, accessory_start
         usb.enable_default_and_wait_for_accessory(accessory_started)
             .await;
     }
+}
+
+async fn packet_proxy_pt<A: Endpoint<A>>(mut hu_wr: IoDevice<A>,
+                                         mut hu_rx: Receiver<Packet>,
+                                         mut md_rx: Receiver<Packet>,
+                                         md_tx: Sender<Packet>,
+                                         r_statistics: Arc<AtomicUsize>,
+                                         w_statistics: Arc<AtomicUsize>,
+                            ) -> Result<()> {
+
+    info!( "{}: Starting message proxy loop...", get_name());
+    loop {
+        tokio::select! {
+            biased;
+
+            // 🔴 highest priority, MD>HU
+            Some(mut msg)=md_rx.recv() => {
+                     // Increment byte counters for statistics
+                        w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
+                        msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: Service transmit to HU failed", NAME))?;
+            }
+            // medium priority, HU>Service
+            Some(mut msg) = hu_rx.recv() => {
+                // Increment byte counters for statistics
+                r_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
+
+                
+            }
+            
+        }
+    }
+
+    Ok(())
 }
 ///
 /// IO Loop for Mirror mode only
@@ -806,7 +842,11 @@ pub async fn io_loop_pt(
         tsk_hu_read = tokio_uring::spawn(endpoint_reader(hu_r, txr_hu));
 
         //packet proxy
-        //TODO
+        let mut tsk_pp = tokio::spawn(packet_proxy_pt(
+            hu_w, rxr_hu, rxr_srv, tx_srv,
+            stats_r_bytes.clone(),
+            stats_w_bytes.clone(),
+        ));
 
 
         // Thread for monitoring transfer
