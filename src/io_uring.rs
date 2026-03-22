@@ -368,15 +368,15 @@ async fn enable_usb_if_present(usb: &mut Option<UsbGadgetState>, accessory_start
     }
 }
 
-async fn packet_proxy_pt<A: Endpoint<A>>(mut hu_wr: IoDevice<A>,
-                                         mut hu_rx: Receiver<Packet>,
+async fn packet_proxy_pt<A: Endpoint<A>>(mut hu_rx: Receiver<Packet>,
+                                         mut hu_tx: IoDevice<A>,
                                          mut md_rx: Receiver<Packet>,
-                                         md_tx: Sender<Packet>,
+                                         mut md_tx: IoDevice<TcpStream>,
                                          r_statistics: Arc<AtomicUsize>,
                                          w_statistics: Arc<AtomicUsize>,
                             ) -> Result<()> {
 
-    info!( "{}: Starting message proxy loop...", get_name());
+    info!( "{}: Starting message proxy loop MD<>HU", get_name());
     loop {
         tokio::select! {
             biased;
@@ -385,16 +385,15 @@ async fn packet_proxy_pt<A: Endpoint<A>>(mut hu_wr: IoDevice<A>,
             Some(mut msg)=md_rx.recv() => {
                      // Increment byte counters for statistics
                         w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
-                        msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: Service transmit to HU failed", NAME))?;
+                        msg.transmit(&mut hu_tx).await.with_context(|| format!("{}: Service transmit to HU failed", NAME))?;
             }
-            // medium priority, HU>Service
+            // lower priority, HU>Service
             Some(mut msg) = hu_rx.recv() => {
                 // Increment byte counters for statistics
                 r_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
-
-                
+                msg.transmit(&mut md_tx).await.with_context(|| format!("{}: Service transmit to MD failed", NAME))?;
             }
-            
+
         }
     }
 
@@ -740,7 +739,16 @@ pub async fn io_loop_pt(
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             continue;
         }
-
+        // these will be used for cleanup
+        let mut md_tcp_stream = None;
+        let mut hu_tcp_stream = None;
+        // selecting I/O device for reading and writing
+        // and creating desired objects for proxy functions
+        // MD using TCP stream (wireless)
+        let md = Arc::new(md_tcp.unwrap());
+        let md_r = IoDevice::EndpointIo(md.clone());
+        let md_w = IoDevice::EndpointIo(md.clone());
+        md_tcp_stream = Some(md.clone());
 
         let read_timeout = Duration::from_secs(cfg.timeout_secs.into());
 
@@ -809,14 +817,11 @@ pub async fn io_loop_pt(
         let stats_w_bytes = Arc::new(AtomicUsize::new(0));
         let stats_r_bytes = Arc::new(AtomicUsize::new(0));
         // mpsc channels:
-        let (txr_hu, rxr_hu):       (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
-        let (tx_srv, rx_srv):   (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
-        let (txr_srv, rxr_srv): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(20);
-        //let tx_srv_cloned=tx_srv.clone();
+        let (tx_hu, rx_hu):       (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
+        let (tx_md, rx_md):       (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
+
         let mut tsk_hu_read;
-        let mut tsk_packet_proxy;
-        // these will be used for cleanup
-        //let mut hu_tcp_stream = None;
+        let mut tsk_md_read;
 
 
         // selecting I/O device for reading and writing
@@ -835,15 +840,16 @@ pub async fn io_loop_pt(
             let hu = Arc::new(hu_tcp.unwrap());
             hu_r = IoDevice::TcpStreamIo(hu.clone());
             hu_w = IoDevice::TcpStreamIo(hu.clone());
-            //hu_tcp_stream = Some(hu.clone());
+            hu_tcp_stream = Some(hu.clone());
         }
 
         // dedicated reading threads:
-        tsk_hu_read = tokio_uring::spawn(endpoint_reader(hu_r, txr_hu));
+        tsk_hu_read = tokio_uring::spawn(endpoint_reader(hu_r, tx_hu));
+        tsk_md_read = tokio_uring::spawn(endpoint_reader(md_r, tx_md));
 
         //packet proxy
-        let mut tsk_pp = tokio::spawn(packet_proxy_pt(
-            hu_w, rxr_hu, rxr_srv, tx_srv,
+        let mut tsk_packet_proxy = tokio::spawn(packet_proxy_pt(
+            rx_hu, hu_w, rx_md, md_w,
             stats_r_bytes.clone(),
             stats_w_bytes.clone(),
         ));
@@ -861,6 +867,7 @@ pub async fn io_loop_pt(
         // Wait here and Stop as soon as one of them errors
         let res = tokio::try_join!(
             flatten(&mut tsk_hu_read, "tsk_hu_read".into()),
+            flatten(&mut tsk_md_read, "tsk_md_read".into()),
             flatten(&mut tsk_monitor,"tsk_monitor".into()),
             flatten(&mut tsk_packet_proxy,"tsk_pkt_proxy".into()),
         );
@@ -869,7 +876,19 @@ pub async fn io_loop_pt(
             error!("{} 🔴 Connection error: {}", NAME, e);
         }
 
+        // Do not await these handles here: `try_join!(flatten(&mut ...))` above
+        // may already have polled one of them to completion, and polling a
+        // `JoinHandle` after completion panics. Aborting is enough to request
+        // cancellation of the remaining tasks before we drop the handles and
+        // shut down the TCP streams below.
 
+        // make sure TCP connections are closed before next connection attempts
+        if let Some(stream) = md_tcp_stream {
+            let _ = stream.shutdown(std::net::Shutdown::Both);
+        }
+        if let Some(stream) = hu_tcp_stream {
+            let _ = stream.shutdown(std::net::Shutdown::Both);
+        }
 
         // Disassociate a client from the WiFi AP.
         // Mainly needed when a button was used to switch to the next device,
@@ -889,6 +908,7 @@ pub async fn io_loop_pt(
         // for each direction)
         tsk_packet_proxy.abort();
         tsk_hu_read.abort();
+        tsk_md_read.abort();
         tsk_monitor.abort();
 
         // make sure TCP connections are closed before next connection attempts
