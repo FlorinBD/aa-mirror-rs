@@ -535,13 +535,21 @@ fn main() -> Result<()> {
     });
 
     // start tokio_uring runtime simultaneously
-    match cfg.aa_mode {
-        AAMode::Mirror => {
-            tokio_uring::start(io_loop(restart_tx, config_lck, tx));
-        }
-        AAMode::PassThrough => {
-            tokio_uring::start(io_loop_pt(restart_tx, config_lck, tx));
-        }
+    if cfg.aa_mode == AAMode::Mirror
+    {
+        let _ = tokio_uring::start(io_loop(
+            restart_tx,
+            config_lck,
+            tx,
+        ));
+    }
+    else
+    {
+        let _ = tokio_uring::start(io_loop_pt(
+            restart_tx,
+            config_lck,
+            tx,
+        ));
     }
 
 
