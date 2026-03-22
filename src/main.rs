@@ -4,7 +4,7 @@ use aa_mirror_rs::config::SharedConfigJson;
 use aa_mirror_rs::config::WifiConfig;
 use aa_mirror_rs::config::{Action, AppConfig};
 use aa_mirror_rs::config::{DEFAULT_WLAN_ADDR, TCP_MD_SERVER_PORT};
-use aa_mirror_rs::io_uring::io_loop;
+use aa_mirror_rs::io_uring::{io_loop, io_loop_pt};
 use aa_mirror_rs::led::{LedColor, LedManager, LedMode};
 use aa_mirror_rs::channel_manager::Packet;
 //use aa_mirror_rs::usb_gadget::uevent_listener;
@@ -19,13 +19,14 @@ use std::panic;
 use std::fs;
 use std::fs::OpenOptions;
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::process::{Stdio};
 use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use tokio::runtime::Builder;
+use tokio::process::Command;
 use tokio::sync::broadcast;
 use tokio::sync::broadcast::Sender as BroadcastSender;
 use tokio::sync::mpsc::Sender;
@@ -508,12 +509,12 @@ fn main() -> Result<()> {
         NAME,
         config.logfile.display()
     );
-
+    let cfg = config.clone();
     // notify for syncing threads
     let (restart_tx, _) = broadcast::channel(1);
-    let config = Arc::new(RwLock::new(config));
+    let config_lck = Arc::new(RwLock::new(config));
     let config_json = Arc::new(RwLock::new(config_json));
-    let config_cloned = config.clone();
+    let config_lck_cloned = config_lck.clone();
     let tx = Arc::new(Mutex::new(None));
     let tx_cloned = tx.clone();
     let sensor_channel = Arc::new(Mutex::new(None));
@@ -524,7 +525,7 @@ fn main() -> Result<()> {
 
     runtime.spawn(async move {
         tokio_main(
-            config_cloned,
+            config_lck_cloned,
             config_json.clone(),
             restart_tx_cloned,
             args.config.clone(),
@@ -536,11 +537,22 @@ fn main() -> Result<()> {
     });
 
     // start tokio_uring runtime simultaneously
-    let _ = tokio_uring::start(io_loop(
-        restart_tx,
-        config,
-        tx,
-    ));
+    if cfg.aa_mode == AAMode::Mirror
+    {
+        let _ = tokio_uring::start(io_loop(
+            restart_tx,
+            config_lck,
+            tx,
+        ));
+    }
+    else {
+        let _ = tokio_uring::start(io_loop_pt(
+            restart_tx,
+            config_lck,
+            tx,
+        ));
+    }
+
 
     info!(
         "🚩 aa-mirror-rs terminated, running time: {}",
