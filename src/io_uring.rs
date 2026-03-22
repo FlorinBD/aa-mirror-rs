@@ -97,7 +97,7 @@ pub enum IoDevice<A: Endpoint<A>> {
     UsbReader(Arc<RefCell<UsbStreamRead>>, PhantomData<A>),
     UsbWriter(Arc<RefCell<UsbStreamWrite>>, PhantomData<A>),
     EndpointIo(Arc<A>),
-    TcpStreamIo(Arc<TcpStream>),
+    TcpStreamIo(Rc<TcpStream>),
 }
 
 /// Set SO_RCVBUF / SO_SNDBUF on any socket via its raw file descriptor.
@@ -559,7 +559,7 @@ pub async fn io_loop(
             hu_w = IoDevice::EndpointIo(hu.clone());
         } else {
             // Head Unit Emulator via TCP
-            let hu = Arc::new(hu_tcp.unwrap());
+            let hu = Rc::new(hu_tcp.unwrap());
             hu_r = IoDevice::TcpStreamIo(hu.clone());
             hu_w = IoDevice::TcpStreamIo(hu.clone());
             //hu_tcp_stream = Some(hu.clone());
