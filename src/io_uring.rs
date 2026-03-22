@@ -397,11 +397,9 @@ async fn packet_proxy_pt<A: Endpoint<A>>(mut hu_rx: Receiver<Packet>,
             // all channels closed
             tokio::time::sleep(Duration::from_secs(1)).await;
                 error!("packet_proxy_pt ALL CHANNELS CLOSED! handle app restart needed")
-        }
+            }
         }
     }
-
-    Ok(())
 }
 ///
 /// IO Loop for Mirror mode only
