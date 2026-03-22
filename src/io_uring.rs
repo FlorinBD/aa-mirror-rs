@@ -729,7 +729,7 @@ pub async fn io_loop_pt(
             }
         } else {
             debug!("{} 🛰️ Waiting for `Head Unit` connection on USB...",NAME);
-            usb = Some(UsbGadgetState::new(false, config.udc.clone()));
+            usb = Some(UsbGadgetState::new(false, cfg.udc.clone()));
             if let Some(ref mut usb) = usb {
                 if let Err(e) = usb.init() {
                     error!("{} 🔌 USB init error: {}", NAME, e);
