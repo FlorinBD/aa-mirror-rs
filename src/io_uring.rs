@@ -731,7 +731,7 @@ pub async fn io_loop_pt(
             }
             let accessory_started = Arc::new(Notify::new());//FIXME remove this, is not needed because legacy mode was removed, no UEvent task is running
             enable_usb_if_present(&mut usb, accessory_started.clone()).await;
-            if let Ok(_)=usb_wait_for_hu_connection(config.hu_detect_timeout_secs as u64).await
+            if let Ok(_)=usb_wait_for_hu_connection(cfg.hu_detect_timeout_secs as u64).await
             {
                 debug!("{} 📂 Opening USB accessory device: <u>{}</u>",NAME, USB_ACCESSORY_PATH);
                 match OpenOptions::new()
@@ -776,7 +776,6 @@ pub async fn io_loop_pt(
         let (tx_srv, rx_srv):   (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
         let (txr_srv, rxr_srv): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(20);
         //let tx_srv_cloned=tx_srv.clone();
-        let mut tsk_ch_manager;
         let mut tsk_hu_read;
         let mut tsk_packet_proxy;
         // these will be used for cleanup
@@ -805,9 +804,8 @@ pub async fn io_loop_pt(
         // dedicated reading threads:
         tsk_hu_read = tokio_uring::spawn(endpoint_reader(hu_r, txr_hu));
 
-        //service packet proxy
-        let pp=PacketProxy::new( stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested);
-        tsk_packet_proxy=pp.start(hu_w, rxr_hu, rxr_srv, tx_srv, rx_scrcpy.clone());
+        //packet proxy
+        //TODO
 
 
         // Thread for monitoring transfer
