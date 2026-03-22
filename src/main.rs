@@ -235,8 +235,6 @@ async fn tokio_main(
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
         // TODO: make proper main loop with cancellation
-        // re-read config
-        cfg = config.read().await.clone();
     }
 }
 
@@ -495,7 +493,7 @@ fn main() -> Result<()> {
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()?;                     // just spawn, don't await
-        debug!("FTP server started with PID: {}", _child.id());
+        debug!("FTP server started with PID: {:?}", _child.id());
     }
 
     if let Some(ref wired) = config.wired {
