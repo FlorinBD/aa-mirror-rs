@@ -374,7 +374,8 @@ async fn packet_proxy_pt<A: Endpoint<A>>(mut hu_rx: Receiver<Packet>,
                                          mut md_tx: IoDevice<TcpStream>,
                                          r_statistics: Arc<AtomicUsize>,
                                          w_statistics: Arc<AtomicUsize>,
-                            ) -> Result<()> {
+                                        ) -> Result<()>
+{
 
     info!( "{}: Starting message proxy loop MD<>HU", NAME);
     loop {
