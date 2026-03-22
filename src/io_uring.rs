@@ -53,7 +53,7 @@ const TCP_BUFFER_SIZE: usize = 32 * 1024; // 32 KB
 // reach Android and trigger bitrate/resolution adaptation.
 
 use crate::config::{Action, AppConfig, SharedConfig, WifiConfig, DEFAULT_WLAN_ADDR, TCP_DHU_PORT, TCP_MD_SERVER_PORT};
-use crate::channel_manager::{endpoint_reader, ch_proxy, packet_tls_proxy, ENCRYPTED, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
+use crate::channel_manager::{endpoint_reader, ch_proxy, ENCRYPTED, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
 use crate::channel_manager::Packet;
 use crate::config_types::AAMode;
 use crate::usb_gadget::UsbGadgetState;
@@ -97,7 +97,7 @@ pub enum IoDevice<A: Endpoint<A>> {
     UsbReader(Arc<RefCell<UsbStreamRead>>, PhantomData<A>),
     UsbWriter(Arc<RefCell<UsbStreamWrite>>, PhantomData<A>),
     EndpointIo(Arc<A>),
-    TcpStreamIo(Rc<TcpStream>),
+    TcpStreamIo(Arc<TcpStream>),
 }
 
 /// Set SO_RCVBUF / SO_SNDBUF on any socket via its raw file descriptor.
@@ -559,7 +559,7 @@ pub async fn io_loop(
             hu_w = IoDevice::EndpointIo(hu.clone());
         } else {
             // Head Unit Emulator via TCP
-            let hu = Rc::new(hu_tcp.unwrap());
+            let hu = Arc::new(hu_tcp.unwrap());
             hu_r = IoDevice::TcpStreamIo(hu.clone());
             hu_w = IoDevice::TcpStreamIo(hu.clone());
             //hu_tcp_stream = Some(hu.clone());
@@ -851,7 +851,7 @@ pub async fn io_loop_pt(
         tsk_md_read = tokio_uring::spawn(endpoint_reader(md_r, tx_md));
 
         //packet proxy
-        let mut tsk_packet_proxy = tokio::spawn(packet_proxy_pt(
+        let mut tsk_packet_proxy = tokio_uring::spawn(packet_proxy_pt(
             rx_hu, hu_w, rx_md, md_w,
             stats_r_bytes.clone(),
             stats_w_bytes.clone(),
