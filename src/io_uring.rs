@@ -364,7 +364,8 @@ async fn enable_usb_if_present(usb: &mut Option<UsbGadgetState>, accessory_start
             .await;
     }
 }
-
+///
+/// IO Loop for Mirror mode only
 pub async fn io_loop(
     need_restart: BroadcastSender<Option<Action>>,
     config: SharedConfig,
@@ -621,7 +622,7 @@ pub async fn io_loop(
         let _ = need_restart.send(action);
     }
 }
-
+/// IO Loop for PassTrough only
 pub async fn io_loop_pt(
     need_restart: BroadcastSender<Option<Action>>,
     config: SharedConfig,
