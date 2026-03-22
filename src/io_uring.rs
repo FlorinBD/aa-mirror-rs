@@ -386,7 +386,8 @@ pub async fn io_loop(
     }
 
 
-    let cfg = config.read().await.clone();
+    let cfg = shared_config.read().await.clone();
+    let cfg_clone=cfg.clone();
     let hex_requested = cfg.hexdump_level;
     // prepare/bind needed TCP listeners
     let mut dhu_listener=None;
@@ -394,15 +395,15 @@ pub async fn io_loop(
     info!("{} 🛰️ Starting TCP server for DHU...", NAME);
     dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
     info!("{} 🛰️ DHU TCP server bound to: <u>{}</u>", NAME, bind_addr);
-    let md_connected = Arc::new(Notify::new());
+
     //io channels for scrcpy
     //media frames channel, scrcpy>HU, TODO implement Arc<Packet> to solve copy
-    let (tx_scrcpy, rx_scrcpy) = flume::bounded::<ChannelProxyHandle>(60);
+    let (tx_scrcpy, rx_scrcpy)=flume::bounded::<ChannelProxyHandle>(60);
     //cmd srv>scrcpy channel
-    let (tx_scrcpy_cmd, rx_scrcpy_cmd) = flume::bounded::<Packet>(5);
+    let (tx_scrcpy_cmd, rx_scrcpy_cmd)=flume::bounded::<Packet>(5);
     //cmd scrcpy>srv channel
-    let (tx_scrcpy_srv_cmd, rx_scrcpy_srv_cmd) = flume::bounded::<Packet>(5);
-
+    let (tx_scrcpy_srv_cmd, rx_scrcpy_srv_cmd)=flume::bounded::<Packet>(5);
+    let md_connected = Arc::new(Notify::new());
     let mut tsk_adb;
     tsk_adb = tokio_uring::spawn(scrcpy::tsk_adb_scrcpy(
         tx_scrcpy,
@@ -412,25 +413,29 @@ pub async fn io_loop(
         shared_config.clone(),
     ));
     loop {
-
+        //drain scrcpy commands?
+        //while let Ok(msg) = rx_scrcpy_srv_cmd.clone().try_recv() {
+        //}
+        // reload new config
+        let config = config.read().await.clone();
+        let cfg2=cfg_clone.clone();
         // generate Durations from configured seconds
         let stats_interval = {
-            if cfg.stats_interval == 0 {
+            if config.stats_interval == 0 {
                 None
             } else {
-                Some(Duration::from_secs(cfg.stats_interval.into()))
+                Some(Duration::from_secs(config.stats_interval.into()))
             }
         };
         debug!("{}: Waiting on ADB device to be connected", NAME);
         md_connected.notified().await;
-
-        let read_timeout = Duration::from_secs(cfg.timeout_secs.into());
+        let read_timeout = Duration::from_secs(config.timeout_secs.into());
 
         let mut hu_tcp = None;
         let mut hu_usb = None;
         let mut usb = None;
 
-        if cfg.dhu {
+        if config.dhu {
             //info!("{} 🛰️ DHU TCP server: bind to local address",NAME);
             //dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
             debug!("{} 🛰️ DHU TCP server: listening for `Desktop Head Unit` connection...",NAME);
@@ -445,7 +450,7 @@ pub async fn io_loop(
             }
         } else {
             debug!("{} 🛰️ Waiting for `Head Unit` connection on USB...",NAME);
-            usb = Some(UsbGadgetState::new(false, cfg.udc.clone()));
+            usb = Some(UsbGadgetState::new(false, config.udc.clone()));
             if let Some(ref mut usb) = usb {
                 if let Err(e) = usb.init() {
                     error!("{} 🔌 USB init error: {}", NAME, e);
@@ -453,7 +458,7 @@ pub async fn io_loop(
             }
             let accessory_started = Arc::new(Notify::new());//FIXME remove this, is not needed because legacy mode was removed, no UEvent task is running
             enable_usb_if_present(&mut usb, accessory_started.clone()).await;
-            if let Ok(_)=usb_wait_for_hu_connection(cfg.hu_detect_timeout_secs as u64).await
+            if let Ok(_)=usb_wait_for_hu_connection(config.hu_detect_timeout_secs as u64).await
             {
                 debug!("{} 📂 Opening USB accessory device: <u>{}</u>",NAME, USB_ACCESSORY_PATH);
                 match OpenOptions::new()
@@ -530,13 +535,15 @@ pub async fn io_loop(
         //service packet proxy
         let pp=PacketProxy::new( stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested);
         tsk_packet_proxy=pp.start(hu_w, rxr_hu, rxr_srv, tx_srv, rx_scrcpy.clone());
+        //tsk_packet_proxy = tokio_uring::spawn(packet_tls_proxy(hu_w, rxr_hu, rxr_srv, tx_srv, rx_scrcpy.clone(), stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested));
+        //tsk_packet_proxy=pp.start(hu_w, rxr_hu, rxr_srv, tx_srv, rx_scrcpy.clone(),tx_scrcpy_cmd.clone());
         // main processing threads:
         tsk_ch_manager = tokio_uring::spawn(ch_proxy(
             rx_srv,
             txr_srv,
             tx_scrcpy_cmd.clone(),
             rx_scrcpy_srv_cmd.clone(),
-            cfg.clone(),
+            cfg2,
         ));
 
         // Thread for monitoring transfer
@@ -588,7 +595,6 @@ pub async fn io_loop(
         if let Err(_) = tx_srv_cloned.send(pkt_rsp).await{
             error!( "io_uring.io_loop() send error");
         };*/
-
 
         // Make sure the reference count drops to zero and the socket is
         // freed by aborting both tasks (which both hold a `Rc<TcpStream>`
