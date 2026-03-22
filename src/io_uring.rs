@@ -376,7 +376,7 @@ async fn packet_proxy_pt<A: Endpoint<A>>(mut hu_rx: Receiver<Packet>,
                                          w_statistics: Arc<AtomicUsize>,
                             ) -> Result<()> {
 
-    info!( "{}: Starting message proxy loop MD<>HU", get_name());
+    info!( "{}: Starting message proxy loop MD<>HU", NAME);
     loop {
         tokio::select! {
             biased;
