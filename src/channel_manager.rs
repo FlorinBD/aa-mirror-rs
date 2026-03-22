@@ -33,7 +33,7 @@ use crate::aa_services::{th_input_source, th_media_sink_audio_guidance, th_media
 use crate::config::{AppConfig, SharedConfig, HU_CONFIG_DELAY_MS, MAX_DATA_LEN, MAX_PACKET_LEN};
 use crate::config_types::HexdumpLevel;
 use crate::io_uring::Endpoint;
-use crate::io_uring::IoDevice;
+use crate::io_uring::{IoDevice, Result};
 use crate::io_uring::BUFFER_LEN;
 
 // module name for logging engine
@@ -44,7 +44,7 @@ fn get_name() -> String {
 
 // Just a generic Result type to ease error handling for us. Errors in multithreaded
 // async contexts needs some extra restrictions
-type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
+//type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 
 // message related constants:
