@@ -112,32 +112,8 @@ impl UsbGadgetState {
         Ok(())
     }
 
-    pub async fn enable_default_and_wait_for_accessory(
-        &mut self,
-        accessory_started: Arc<tokio::sync::Notify>,
-    ) {
-        if self.legacy {
-            for _try in 1..=2 {//FIXME try for about 20 times, it takes around 50 sec. for HU to start
-                let _ = self.enable(DEFAULT_GADGET_NAME);
-                info!("{} 🔌 USB Manager: Enabled default gadget", NAME);
-
-                // now waiting for accesory start from uevent thread loop, witch can take up to 1 minute
-                let retval = accessory_started.notified();
-                if let Err(_) = timeout(Duration::from_secs_f32(5.0), retval).await {
-                    error!(
-                    "{} 🔌 USB Manager: Timeout waiting for accessory start, trying to recover...",
-                    NAME
-                );
-                } else {
-                    break;
-                };
-            }
-
-            info!("{} 🔌 USB Manager: Received accessory start request", NAME);
-            let _ = self.disable(DEFAULT_GADGET_NAME);
-            // 0.1 second, keep the gadget disabled for a short time to let the host recognize the change
-            tokio::time::sleep(Duration::from_millis(100)).await;
-        }
+    pub async fn switch_to__accessory(&mut self) {
+        let _ = self.disable(DEFAULT_GADGET_NAME);
         let _ = self.enable(ACCESSORY_GADGET_NAME);
         info!("{} 🔌 USB Manager: Switched to accessory gadget", NAME);
     }

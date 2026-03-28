@@ -361,10 +361,9 @@ pub async fn usb_wait_for_hu_connection(timeout_secs: u64) -> Result<()> {
     timeout(Duration::from_secs(timeout_secs), fut).await.unwrap_or_else(|_| Err("timeout".into()))
 }
 
-async fn enable_usb_if_present(usb: &mut Option<UsbGadgetState>, accessory_started: Arc<Notify>) {
+async fn enable_usb_if_present(usb: &mut Option<UsbGadgetState>) {
     if let Some(ref mut usb) = usb {
-        usb.enable_default_and_wait_for_accessory(accessory_started)
-            .await;
+        usb.switch_to__accessory().await;
     }
 }
 
@@ -492,8 +491,7 @@ pub async fn io_loop(
                     error!("{} 🔌 USB init error: {}", NAME, e);
                 }
             }
-            let accessory_started = Arc::new(Notify::new());//FIXME remove this, is not needed because legacy mode was removed, no UEvent task is running
-            enable_usb_if_present(&mut usb, accessory_started.clone()).await;
+            enable_usb_if_present(&mut usb).await;
             if let Ok(_)=usb_wait_for_hu_connection(config.hu_detect_timeout_secs as u64).await
             {
                 debug!("{} 📂 Opening USB accessory device: <u>{}</u>",NAME, USB_ACCESSORY_PATH);
@@ -777,8 +775,7 @@ pub async fn io_loop_pt(
                     error!("{} 🔌 USB init error: {}", NAME, e);
                 }
             }
-            let accessory_started = Arc::new(Notify::new());//FIXME remove this, is not needed because legacy mode was removed, no UEvent task is running
-            enable_usb_if_present(&mut usb, accessory_started.clone()).await;
+            enable_usb_if_present(&mut usb).await;
             if let Ok(_)=usb_wait_for_hu_connection(cfg.hu_detect_timeout_secs as u64).await
             {
                 debug!("{} 📂 Opening USB accessory device: <u>{}</u>",NAME, USB_ACCESSORY_PATH);
