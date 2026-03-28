@@ -148,7 +148,6 @@ impl UsbGadgetState {
         let _ = self.enable(DEFAULT_GADGET_NAME);
         // 0.1 second, to let the host recognize the change
         tokio::time::sleep(Duration::from_millis(100)).await;
-        }
     }
 
     fn attached(gadget_path: &PathBuf) -> io::Result<Option<String>> {
