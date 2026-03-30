@@ -410,14 +410,8 @@ impl Bluetooth {
             }
         }
 
-        let req = timeout(bt_timeout, self.handle_aa.next())
-            .await?
-            .expect("received no connect request");
-        info!(
-            "{} 📱 AA Wireless Profile: connect from: <b>{}</>",
-            NAME,
-            req.device()
-        );
+        let req = timeout(bt_timeout, self.handle_aa.next()).await?.expect("received no connect request");
+        info!("{} 📱 AA Wireless Profile: connect from: <b>{}</>", NAME, req.device());
         let addr = req.device().clone();
         let stream = req.accept()?;
 
