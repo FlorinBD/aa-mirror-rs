@@ -321,7 +321,7 @@ async fn tcp_wait_for_md_connection(listener: & TcpListener) ->  Result<(TcpStre
     // high-throughput Android Auto video streaming.
     use std::os::unix::io::AsRawFd;
     stream.set_nodelay(true)?;
-    apply_tcp_buffer_sizes(stream.as_raw_fd());
+    //apply_tcp_buffer_sizes(stream.as_raw_fd());
 
     Ok((stream, addr))
 }
