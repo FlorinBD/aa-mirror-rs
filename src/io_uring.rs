@@ -723,6 +723,7 @@ pub async fn io_loop_pt(
                 wifi_conf.clone().unwrap(),
                 Duration::from_secs(cfg.bt_timeout_secs.into()),
                 bt_stopped,
+                cfg.bt_poweroff,
             )
             .await
         {

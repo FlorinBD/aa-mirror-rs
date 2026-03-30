@@ -50,7 +50,7 @@
       "values": {
         "aa_mode": {
           "typ": "select",
-          "description": "Android Auto mode: [Mirror (Using ADB SCRCPY to mirror the screen), PassThrough (Wireless AA)], based on this settings WiFi is switched between AP and STA mode",
+          "description": "Android Auto mode: [Mirror (Using ADB SCRCPY to mirror the screen), PassThrough (Wireless AA)],\n based on this settings WiFi is switched between AP and STA mode",
           "values": [
             "Mirror",
             "PassThrough"
@@ -58,7 +58,7 @@
         },
         "logfile": {
           "typ": "string",
-          "description": "Log file path, by default it is saved to `/var/log` in `tmpfs`/memory. If you want, you can change it e.g. to `/data/aa-mirror-rs.log` and it will be saved to SD card (appended, not replaced)."
+          "description": "Log file path, by default it is saved to `/var/log` in `tmpfs`/memory.\nIf you want, you can change it e.g. to `/data/aa-mirror-rs.log` and it will be saved to SD card (appended, not replaced)."
         },
         "stats_interval": {
           "typ": "integer",
@@ -133,6 +133,10 @@
         "btalias": {
           "typ": "string",
           "description": "Bluetooth device name/alias (how your bluetooth device is visible)\nby default it is `aa-mirror-CPUSERIAL`\nfor dongle mode you need to set it to: `AndroidAuto-xxxxx`"
+        },
+        "bt_poweroff": {
+          "typ": "boolean",
+          "description": "Bluetooth turn off after a successfully AA handshake\nIt will be turned on automatically if AA is disconnected"
         },
         "bt_timeout_secs": {
           "typ": "integer",

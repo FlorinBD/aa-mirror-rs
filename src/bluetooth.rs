@@ -521,6 +521,7 @@ impl Bluetooth {
         wifi_config: WifiConfig,
         bt_timeout: Duration,
         stopped: bool,
+        bt_poweroff: bool,
     ) -> Result<()> {
         // Use the provided session and adapter instead of creating new ones
         let (address, mut stream) = self
@@ -534,6 +535,9 @@ impl Bluetooth {
         // connect to real HU for calls
         let device = self.adapter.device(bluer::Address(*address))?;
         let _ = device.disconnect().await;
+        if bt_poweroff {
+            let _ = self.adapter.set_powered(false).await;
+        }
 
         info!("{} 🚀 Bluetooth launch sequence completed", NAME);
 

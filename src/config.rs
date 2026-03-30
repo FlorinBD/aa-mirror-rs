@@ -112,6 +112,7 @@ pub struct AppConfig {
     pub wpa_supplicant_conf: PathBuf,
     #[serde(default, deserialize_with = "empty_string_as_none")]
     pub btalias: Option<String>,
+    pub bt_poweroff: bool,
     pub timeout_secs: u16,
     pub hu_detect_timeout_secs: u16,
     #[serde(
@@ -243,6 +244,7 @@ impl Default for AppConfig {
             hu_detect_timeout_secs:10,
             webserver: webserver_default_bind(),
             bt_timeout_secs: 30,
+            bt_poweroff:false,
             action_requested: None,
             res_multiplier: 1.0,
             wired: None,
@@ -330,6 +332,7 @@ impl AppConfig {
             doc["webserver"] = value(webserver);
         }
         doc["bt_timeout_secs"] = value(self.bt_timeout_secs as i64);
+        doc["bt_poweroff"] = value(self.bt_poweroff);
         doc["res_multiplier"] = value(self.res_multiplier);
         doc["wired"] = value(self.wired.as_ref().map_or(String::new(), |w| w.to_string()));
         doc["dhu"] = value(self.dhu);
