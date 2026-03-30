@@ -658,7 +658,7 @@ pub async fn io_loop(
         let _ = need_restart.send(action);
     }
 }
-/// IO Loop for PassTrough only
+/// IO Loop for PassTrough mode only
 pub async fn io_loop_pt(
     need_restart: BroadcastSender<Option<Action>>,
     config: SharedConfig,

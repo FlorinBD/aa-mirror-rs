@@ -103,12 +103,18 @@ impl UsbGadgetState {
 
     pub fn init(&mut self) -> Result<()> {
         info!("{} 🔌 Initializing USB Manager", NAME);
-        if self.legacy {
-            self.disable(DEFAULT_GADGET_NAME)?;
+        match self.disable(DEFAULT_GADGET_NAME) {
+            Ok(_) => {}
+            Err(_) => {}
         }
-        self.disable(ACCESSORY_GADGET_NAME)?;
-        info!("{} 🔌 USB Manager: Disabled all USB gadgets", NAME);
-
+        match self.disable(ACCESSORY_GADGET_NAME) {
+            Ok(_) => {
+                info!("{} 🔌 USB Manager: Disabled all USB gadgets", NAME);
+            }
+            Err(_) => {
+                error!("{} 🔌 USB Manager: Error Disabling USB gadgets", NAME);
+            }
+        }
         Ok(())
     }
 
