@@ -352,13 +352,13 @@ async fn tsk_scrcpy_video(
                 if !media_header.config
                 {
                     //wait for ACK
-                    match ack_notify.send(()).await {
+                    /*match ack_notify.send(()).await {
                         Ok(()) => {}
                         Err(e) => {
                             error!("scrcpy video ack send failed: {:?}", e);
                             return Err(Box::from(e));
                         }
-                    }
+                    }*/
                 }
                 let pk_header_size = if media_header.config {
                     2
