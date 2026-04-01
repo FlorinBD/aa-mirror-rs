@@ -231,7 +231,7 @@ impl Default for AppConfig {
             aa_mode: AAMode::Mirror,
             disable_console_debug: false,
             scrcpy_screen_off:true,
-            video_bitrate:4_000_000,
+            video_bitrate:1_000_000,
             connect: MACAddressList::default(),
             logfile: "/var/log/aa-mirror-rs.log".into(),
             stats_interval: 0,
