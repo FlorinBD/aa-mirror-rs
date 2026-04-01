@@ -150,17 +150,13 @@ pub(crate) async fn get_first_adb_device( config: AppConfig) ->Option<String>
                     }
                 }
             }
-            else {
-                debug!("{}: No configured MAC addr list found, try to open ADB by port", get_name());
+            debug!("{}: No valid device found for configured MAC addr list, try to open ADB by port", get_name());
+            if is_port_reachable(dev_socket, Duration::from_secs(5)).await
+            {
+                info!("{:?} found port {} open, trying to connect to ADB demon. MAC= {:?}", ip.to_string(), dev_port, mac.to_string());
+                return try_connect(dev_socket).await;
 
-                if is_port_reachable(dev_socket, Duration::from_secs(5)).await
-                {
-                    info!("{:?} found port {} open, trying to connect to ADB demon. MAC= {:?}", ip.to_string(), dev_port, mac.to_string());
-                   return try_connect(dev_socket).await;
-
-                }
             }
-
         }
         else
         {
