@@ -313,6 +313,7 @@ async fn tsk_scrcpy_video(
     video_tx: flume::Sender<ChannelProxyHandle>,
     pause_mode: Arc<AtomicBool>,
     sid:u8,
+    ignore_ack:bool,
 ) -> Result<()> {
     info!("Starting video server!");
     let mut reader=ScrcpyMediaReader::new(stream);
@@ -352,13 +353,17 @@ async fn tsk_scrcpy_video(
                 if !media_header.config
                 {
                     //wait for ACK
-                    /*match ack_notify.send(()).await {
-                        Ok(()) => {}
-                        Err(e) => {
-                            error!("scrcpy video ack send failed: {:?}", e);
-                            return Err(Box::from(e));
+                    if !ignore_ack
+                    {
+                        match ack_notify.send(()).await {
+                            Ok(()) => {}
+                            Err(e) => {
+                                error!("scrcpy video ack send failed: {:?}", e);
+                                return Err(Box::from(e));
+                            }
                         }
-                    }*/
+                    }
+
                 }
                 let pk_header_size = if media_header.config {
                     2
@@ -1126,6 +1131,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                         video_tx,
                         pause_mode_rd_video,
                         video_codec_params.sid,
+                        config.ignore_media_ack,
                     ).await;
                     let _ = done_th_tx_video.send(res);
 

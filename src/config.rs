@@ -95,6 +95,7 @@ pub struct AppConfig {
     pub advertise: bool,
     pub dongle_mode: bool,
     pub debug: bool,
+    pub ignore_media_ack:bool,
     pub hexdump_level: HexdumpLevel,
     pub aa_mode: AAMode,
     pub disable_console_debug: bool,
@@ -225,6 +226,7 @@ impl Default for AppConfig {
             advertise: true,
             dongle_mode: false,
             debug: true,
+            ignore_media_ack: false,
             hexdump_level: HexdumpLevel::Disabled,
             aa_mode: AAMode::Mirror,
             disable_console_debug: false,
@@ -306,6 +308,7 @@ impl AppConfig {
 
         doc["advertise"] = value(self.advertise);
         doc["dongle_mode"] = value(self.dongle_mode);
+        doc["ignore_media_ack"] = value(self.ignore_media_ack);
         doc["debug"] = value(self.debug);
         doc["hexdump_level"] = value(format!("{:?}", self.hexdump_level));
         doc["aa_mode"] = value(format!("{:?}", self.aa_mode));

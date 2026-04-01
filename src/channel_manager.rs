@@ -230,6 +230,7 @@ pub struct PacketProxy {
     r_statistics: Arc<AtomicUsize>,
     w_statistics: Arc<AtomicUsize>,
     dmp_level:HexdumpLevel,
+    ignore_media_ack:bool,
     //local vars
     audio_sid:u8,
     video_sid:u8,
@@ -243,11 +244,13 @@ impl PacketProxy
         r_statistics: Arc<AtomicUsize>,
         w_statistics: Arc<AtomicUsize>,
         dmp_level: HexdumpLevel,
+        ignore_media_ack:bool,
     ) -> Self {
         Self {
             r_statistics,
             w_statistics,
             dmp_level,
+            ignore_media_ack,
             audio_sid:0,
             video_sid:0,
             audio_ack_rx:None,
@@ -337,36 +340,39 @@ impl PacketProxy
                                 //check if is media ack message
                                 if (self.audio_sid >0) && (self.video_sid>0) && ((msg.channel == self.audio_sid)||(msg.channel == self.video_sid))
                                 {
-                                    let message_id: i32 = u16::from_be_bytes(msg.payload[0..=1].try_into()?).into();
-                                    if message_id == MediaMessageId::MEDIA_MESSAGE_ACK as i32
+                                    if !self.ignore_media_ack
                                     {
-                                        if msg.channel == self.audio_sid
+                                        let message_id: i32 = u16::from_be_bytes(msg.payload[0..=1].try_into()?).into();
+                                        if message_id == MediaMessageId::MEDIA_MESSAGE_ACK as i32
                                         {
-                                            if let Some(ref mut scrcpy_tx)=self.audio_ack_rx
+                                            if msg.channel == self.audio_sid
                                             {
-                                                scrcpy_tx.try_recv();
-                                                continue;
+                                                if let Some(ref mut scrcpy_tx)=self.audio_ack_rx
+                                                {
+                                                    scrcpy_tx.try_recv();
+                                                    continue;
+                                                }
+                                                else
+                                                {
+                                                    error!( "{}: Media ACK error, audio_ack_rx is None", get_name());
+                                                }
+                                            }
+                                            else if msg.channel == self.video_sid
+                                            {
+                                                if let Some(ref mut scrcpy_tx)=self.video_ack_rx
+                                                {
+                                                    scrcpy_tx.try_recv();
+                                                    continue;
+                                                }
+                                                else
+                                                {
+                                                    error!( "{}: Media ACK error, video_ack_rx is None", get_name());
+                                                }
                                             }
                                             else
                                             {
-                                                error!( "{}: Media ACK error, audio_ack_rx is None", get_name());
+                                                error!( "{}: Media ACK unmanaged", get_name());
                                             }
-                                        }
-                                        else if msg.channel == self.video_sid
-                                        {
-                                            if let Some(ref mut scrcpy_tx)=self.video_ack_rx
-                                            {
-                                                scrcpy_tx.try_recv();
-                                                continue;
-                                            }
-                                            else
-                                            {
-                                                error!( "{}: Media ACK error, video_ack_rx is None", get_name());
-                                            }
-                                        }
-                                        else
-                                        {
-                                            error!( "{}: Media ACK unmanaged", get_name());
                                         }
                                     }
                                 }
