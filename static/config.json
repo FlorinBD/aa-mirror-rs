@@ -84,6 +84,10 @@
           "typ": "integer",
           "description": "Video recording quality, 0=4Mbps"
         },
+        "ignore_media_ack": {
+          "typ": "boolean",
+          "description": "Don't wait for ACK signal from HU, just send all frames as they are available.\nThis seems to work on MIB2 units and DHU as well.\nIt can speed up video rendering a bit"
+        },
         "wired": {
           "typ": "string",
           "description": "Enable wired USB connection to phone (VID:PID should be specified, zero is wildcard and can be used for single or both fields)\nyou can obtain it e.g. using `lsusb` after connecting phone,\nand then use e.g. \"18d1:0\" which will handle specified phone vendor ID (Google Pixel in this example)"

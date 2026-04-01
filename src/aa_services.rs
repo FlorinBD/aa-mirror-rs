@@ -100,7 +100,7 @@ pub(crate) struct AudioStreamingParams {
 impl Default for VideoStreamingParams {
     fn default() -> Self {
         Self {
-            bitrate: 8_000_000,
+            bitrate: 4_000_000,//8Mb by default but is too much
             res_w: 800,
             res_h: 480,
             fps: 60,
