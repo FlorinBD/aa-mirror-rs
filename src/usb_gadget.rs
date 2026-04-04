@@ -126,10 +126,11 @@ impl UsbGadgetState {
 
     pub async fn switch_to_default(&mut self) {
         let _ = self.disable(ACCESSORY_GADGET_NAME);
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        /*tokio::time::sleep(Duration::from_millis(100)).await;
         let _ = self.enable(DEFAULT_GADGET_NAME);
         // 0.1 second, to let the host recognize the change
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        tokio::time::sleep(Duration::from_millis(100)).await;*/
+        let _ = self.disable(DEFAULT_GADGET_NAME);
     }
 
     fn attached(gadget_path: &PathBuf) -> io::Result<Option<String>> {
