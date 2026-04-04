@@ -126,10 +126,11 @@ impl UsbGadgetState {
 
     pub async fn switch_to_default(&mut self) {
         let _ = self.disable(ACCESSORY_GADGET_NAME);
-        /*tokio::time::sleep(Duration::from_millis(100)).await;
         let _ = self.enable(DEFAULT_GADGET_NAME);
-        // 0.1 second, to let the host recognize the change
-        tokio::time::sleep(Duration::from_millis(100)).await;*/
+    }
+///Disable USB connection, HU will not see it as connected
+    pub async fn disconnect(&mut self) {
+        let _ = self.disable(ACCESSORY_GADGET_NAME);
         let _ = self.disable(DEFAULT_GADGET_NAME);
     }
 

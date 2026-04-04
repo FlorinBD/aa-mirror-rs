@@ -876,9 +876,9 @@ pub async fn io_loop_pt(
         if let Err(e) = res {
             error!("{} 🔴 Connection error: {}", NAME, e);
         }
-        //switch back to default to let HU switch again to accessory mode
+        //disconnect to let HU switch again to accessory mode
         if let Some(ref mut usb) = usb {
-            usb.switch_to_default().await;
+            usb.disconnect().await;
         }
 
         // Do not await these handles here: `try_join!(flatten(&mut ...))` above
