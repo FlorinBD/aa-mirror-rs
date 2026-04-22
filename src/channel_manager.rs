@@ -27,6 +27,7 @@ use protobuf::text_format::print_to_string_pretty;
 use protobuf::{Enum, Message, MessageDyn};
 use tokio::sync::{mpsc};
 use tokio::task::JoinHandle;
+use tokio_uring::net::TcpStream;
 use protos::ControlMessageType::{self, *};
 use crate::aa_services::{VideoCodecResolution::*, VideoFPS::*, AudioStream, AudioConfig, MediaCodec::*, ServiceType, CommandState, ServiceStatus, th_bluetooth, VideoStreamingParams, AudioStreamingParams, SensorType};
 use crate::aa_services::{th_input_source, th_media_sink_audio_guidance, th_media_sink_audio_streaming, th_media_sink_video, th_media_source, th_sensor_source, th_vendor_extension};
@@ -225,6 +226,441 @@ pub struct ChannelProxyHandle {
     pub(crate) data: Option<Packet>,
 }
 
+///Used for AA mode only
+pub struct PacketProxyMITM {
+    //params
+    r_statistics: Arc<AtomicUsize>,
+    w_statistics: Arc<AtomicUsize>,
+    dmp_level:HexdumpLevel,
+    mitm:bool,
+}
+
+impl PacketProxyMITM
+{
+    pub fn new(
+        r_statistics: Arc<AtomicUsize>,
+        w_statistics: Arc<AtomicUsize>,
+        dmp_level: HexdumpLevel,
+        mitm: bool,
+    ) -> Self {
+        Self {
+            r_statistics,
+            w_statistics,
+            dmp_level,
+            mitm,
+        }
+    }
+
+    async fn run_mitm<A: Endpoint<A>>(mut self, mut hu_wr: IoDevice<A>,
+                                 mut hu_rx: Receiver<Packet>,
+                                 mut md_rx: Receiver<Packet>,
+                                 mut md_tx: IoDevice<A>,
+    ) -> Result<()> {
+        let ssl_hu = self.ssl_builder_md().await?;
+        let ssl_md = self.ssl_builder_hu().await?;
+        let mut mem_buf_hu = SslMemBuf {
+            client_stream: Arc::new(Mutex::new(VecDeque::new())),
+            server_stream: Arc::new(Mutex::new(VecDeque::new())),
+        };
+        let mut mem_buf_md = SslMemBuf {
+            client_stream: Arc::new(Mutex::new(VecDeque::new())),
+            server_stream: Arc::new(Mutex::new(VecDeque::new())),
+        };
+        let mut ssl_handshake_done=false;
+        let mut server = openssl::ssl::SslStream::new(ssl_hu, mem_buf_hu.clone())?;
+        let mut client = openssl::ssl::SslStream::new(ssl_md, mem_buf_md.clone())?;
+
+        info!( "{}: Starting MITM message proxy loop...", get_name());
+        loop {
+            tokio::select! {
+            biased;
+
+            // 🔴 highest priority, HU>MD
+            Some(mut msg) = hu_rx.recv() => {
+                // Increment byte counters for statistics
+                // fixme: compute final_len for precise stats
+                self.r_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
+
+                if msg.flags&ENCRYPTED !=0
+                {
+                    if !ssl_handshake_done
+                    {
+                        error!( "{}: tls proxy error: received encrypted message from HU before TLS handshake", get_name());
+                    }
+                    else {
+                        match msg.decrypt_payload(&mut mem_buf_hu, &mut server).await {
+                            Ok(_) => {
+                                match msg.encrypt_payload(&mut mem_buf_md, &mut client).await {
+                                Ok(_) => {
+                                     msg.transmit(&mut md_tx).await.with_context(|| format!("{}: Service transmit to MD failed", get_name()))?;
+                                }
+                                Err(e) => {error!( "{} encrypt_payload error: {:?}", get_name(), e);},
+                                }
+                            }
+                            Err(e) => {error!( "{} decrypt_payload error: {:?}", get_name(), e);},
+                        }
+                    }
+                }
+                else
+                {
+                    let _ = self.pkt_debug(HexdumpLevel::DecryptedInput, self.dmp_level, &msg, "HU".parse().unwrap()).await;
+                    // message_id is the first 2 bytes of payload
+                    let message_id: i32 = u16::from_be_bytes(msg.payload[0..=1].try_into()?).into();
+                    if !ssl_handshake_done && (message_id == ControlMessageType::MESSAGE_ENCAPSULATED_SSL as i32)
+                    {
+                        // doing SSL handshake
+                            //Step1 MD: Send client hello
+                            self.ssl_check_failure(client.do_handshake())?;
+                            info!(
+                                "{} 🔒 stage #{} of {}: MD SSL handshake: {}",
+                                get_name(),
+                                1,
+                                3,
+                                client.ssl().state_string_long(),
+                            );
+                            let pkt = self.ssl_encapsulate(mem_buf_md.clone()).await?;
+                            let _ = self.pkt_debug(HexdumpLevel::RawInput, self.dmp_level, &pkt, "MD".parse().unwrap()).await;
+                            pkt.transmit(&mut md_tx).await.with_context(|| format!("{}: transmit failed", get_name()))?;
+
+                            //Step2 MD: Read server hello
+                            let pkt = md_rx.recv().await.ok_or("reader channel hung up")?;
+                            let _ = self.pkt_debug(HexdumpLevel::RawInput, self.dmp_level, &pkt, "MD".parse().unwrap()).await;
+                            pkt.ssl_decapsulate_write(&mut mem_buf_md).await?;
+
+                            //Step1 HU: parse client hello
+                            let _ = self.pkt_debug(HexdumpLevel::RawInput, self.dmp_level, &msg, "HU".parse().unwrap()).await;
+                            msg.ssl_decapsulate_write(&mut mem_buf_hu).await?;
+                            self.ssl_check_failure(server.accept())?;
+                            info!(
+                                "{} 🔒 stage #{} of {}: HU SSL handshake: {}",
+                                get_name(),
+                                1,
+                                2,
+                                server.ssl().state_string_long(),
+                            );
+
+                            //Step3 MD:
+                            self.ssl_check_failure(client.do_handshake())?;
+                            info!(
+                                "{} 🔒 stage #{} of {}: MD SSL handshake: {}",
+                                get_name(),
+                                2,
+                                3,
+                                client.ssl().state_string_long(),
+                            );
+                            let pkt = self.ssl_encapsulate(mem_buf_md.clone()).await?;
+                            let _ = self.pkt_debug(HexdumpLevel::RawInput, self.dmp_level, &pkt, "MD".parse().unwrap()).await;
+                            pkt.transmit(&mut md_tx).await.with_context(|| format!("{}: transmit failed", get_name()))?;
+
+                            // Step2 HU: send server hello
+                            let pkt = self.ssl_encapsulate(mem_buf_hu.clone()).await?;
+                            let _ = self.pkt_debug(HexdumpLevel::RawOutput, self.dmp_level, &pkt,"HU".parse().unwrap()).await;
+                            pkt.transmit(&mut hu_wr).await.with_context(|| format!("{}: transmit failed", get_name()))?;
+
+                            //Step4 MD:
+                            let pkt = md_rx.recv().await.ok_or("reader channel hung up")?;
+                            let _ = self.pkt_debug(HexdumpLevel::RawInput, self.dmp_level, &pkt, "MD".parse().unwrap()).await;
+                            pkt.ssl_decapsulate_write(&mut mem_buf_md).await?;
+
+                            //Step3 HU: ClientKeyExchange
+                            let pkt = hu_rx.recv().await.ok_or("hu reader channel hung up")?;
+                            let _ = self.pkt_debug(HexdumpLevel::RawInput, self.dmp_level, &pkt, "HU".parse().unwrap()).await;
+                            pkt.ssl_decapsulate_write(&mut mem_buf_hu).await?;
+                            self.ssl_check_failure(server.accept())?;
+                            info!(
+                                "{} 🔒 stage #{} of {}: HU SSL handshake: {}",
+                                get_name(),
+                                2,
+                                2,
+                                server.ssl().state_string_long(),
+                            );
+                            if server.ssl().is_init_finished() {
+                                info!(
+                                    "{} 🔒 HU SSL init complete, negotiated cipher: <b><blue>{}</>",
+                                    get_name(),
+                                    server.ssl().current_cipher().unwrap().name(),
+                                );
+                            }
+
+                            //Step5 MD:
+                            self.ssl_check_failure(client.do_handshake())?;
+                            info!(
+                                "{} 🔒 stage #{} of {}: MD SSL handshake: {}",
+                                get_name(),
+                                3,
+                                3,
+                                client.ssl().state_string_long(),
+                            );
+                            if client.ssl().is_init_finished() {
+                                ssl_handshake_done=true;
+                                info!(
+                                    "{} 🔒 MD SSL init complete, negotiated cipher: <b><blue>{}</>",
+                                    get_name(),
+                                    client.ssl().current_cipher().unwrap().name(),
+                                );
+                            }
+                            let pkt = self.ssl_encapsulate(mem_buf_md.clone()).await?;
+                            let _ = self.pkt_debug(HexdumpLevel::RawInput, self.dmp_level, &pkt, "MD".parse().unwrap()).await;
+                            pkt.transmit(&mut md_tx).await.with_context(|| format!("{}: transmit failed", get_name()))?;
+
+                            //Step4 HU: Change Cipher spec finished
+                            let pkt = self.ssl_encapsulate(mem_buf_hu.clone()).await?;
+                            let _ = self.pkt_debug(HexdumpLevel::RawOutput, self.dmp_level, &pkt, "HU".parse().unwrap()).await;
+                            pkt.transmit(&mut hu_wr).await.with_context(|| format!("{}: transmit failed", get_name()))?;
+
+                            //Step6 MD:
+                            let pkt = md_rx.recv().await.ok_or("reader channel hung up")?;
+                            let _ = self.pkt_debug(HexdumpLevel::RawInput, self.dmp_level, &pkt, "MD".parse().unwrap()).await;
+                            pkt.ssl_decapsulate_write(&mut mem_buf_md).await?;
+                    }
+                    else {
+                        msg.transmit(&mut md_tx).await.with_context(|| format!("{}: Service transmit to MD failed", get_name()))?;
+                    }
+
+                }
+            }
+            //lower priority MD>HU
+            Some(mut msg) = md_rx.recv() => {
+                if msg.flags&ENCRYPTED !=0
+                {
+                    if !ssl_handshake_done
+                    {
+                            error!( "{}: tls proxy error: received encrypted message from service before TLS handshake", get_name());
+                    }
+                    else {
+                           /* let _ = pkt_debug(
+                                HexdumpLevel::DecryptedOutput,
+                                dmp_level,
+                                &msg,
+                                "MD".parse().unwrap()
+                            ).await;*/
+                            match msg.decrypt_payload(&mut mem_buf_md, &mut client).await {
+                            Ok(_) => {
+                                match msg.encrypt_payload(&mut mem_buf_hu, &mut server).await {
+                                Ok(_) => {
+                                     self.w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
+                                    msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: Service transmit to HU failed", get_name()))?;
+                                }
+                                Err(e) => {error!( "{} encrypt_payload error: {:?}", get_name(), e);},
+                                }
+                            }
+                            Err(e) => {error!( "{} decrypt_payload error: {:?}", get_name(), e);},
+                        }
+                    }
+                }
+                else
+                {
+                       /* let _ = pkt_debug(
+                            HexdumpLevel::DecryptedOutput,
+                            dmp_level,
+                            &msg,
+                            "MD".parse().unwrap()
+                        ).await;*/
+                        // Increment byte counters for statistics
+                        // fixme: compute final_len for precise stats
+                        self.w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
+                        msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: Service transmit to HU failed", get_name()))?;
+
+                }
+            }
+            else => {
+                // all channels closed
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                error!("packet_tls_proxy ALL CHANNELS CLOSED! handle app restart needed")
+            }
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn run_pt<A: Endpoint<A>>(mut self, mut hu_wr: IoDevice<A>,
+                                      mut hu_rx: Receiver<Packet>,
+                                      mut md_rx: Receiver<Packet>,
+                                      mut md_tx: IoDevice<A>,
+    ) -> Result<()> {
+
+        info!( "{}: Starting PT message proxy loop...", get_name());
+        loop {
+            tokio::select! {
+            biased;
+
+            // 🔴 highest priority, HU>MD
+            Some(mut msg) = hu_rx.recv() => {
+                    // Increment byte counters for statistics
+                    // fixme: compute final_len for precise stats
+                    self.r_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
+                    msg.transmit(&mut md_tx).await.with_context(|| format!("{}: Service transmit to MD failed", get_name()))?;
+            }
+            //lower priority MD>HU
+            Some(mut msg) = md_rx.recv() => {
+                    // Increment byte counters for statistics
+                    // fixme: compute final_len for precise stats
+                    self.w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
+                    msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: Service transmit to HU failed", get_name()))?;
+            }
+            else => {
+                // all channels closed
+                tokio::time::sleep(Duration::from_secs(1)).await;
+                error!("packet_tls_proxy ALL CHANNELS CLOSED! handle app restart needed")
+            }
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn start<A: Endpoint<A> + 'static>(self, hu_wr: IoDevice<A>,
+                                           hu_rx: Receiver<Packet>,
+                                           md_rx: Receiver<Packet>,
+                                           md_tx: IoDevice<TcpStream>,
+    ) -> JoinHandle<Result<()>> {
+        if self.mitm
+        {
+            tokio_uring::spawn(async move {
+                self.run_mitm(hu_wr, hu_rx, md_rx, md_tx).await
+            })
+        }
+        else
+        {
+            tokio_uring::spawn(async move {
+                self.run_pt(hu_wr, hu_rx, md_rx, md_tx).await
+            })
+        }
+    }
+
+    /// creates Ssl for MobileDevice (SSL client)
+    async fn ssl_builder_md(&self) -> Result<Ssl> {
+        let mut ctx_builder = SslContextBuilder::new(SslMethod::tls())?;
+
+        // for HU/headunit we need to act as a MD/mobiledevice, so load "md" key and cert
+        ctx_builder.set_certificate_file(format!("{KEYS_PATH}/md_cert.pem"), SslFiletype::PEM)?;
+        ctx_builder.set_private_key_file(format!("{KEYS_PATH}/md_key.pem"), SslFiletype::PEM)?;
+        ctx_builder.check_private_key()?;
+        // trusted root certificates:
+        ctx_builder.set_ca_file(format!("{KEYS_PATH}/galroot_cert.pem"))?;
+
+        ctx_builder.set_min_proto_version(Some(openssl::ssl::SslVersion::TLS1_2))?;
+        ctx_builder.set_options(openssl::ssl::SslOptions::NO_TLSV1_3);
+
+        let openssl_ctx = ctx_builder.build();
+        let mut ssl = Ssl::new(&openssl_ctx)?;
+        ssl.set_accept_state(); // SSL server
+        Ok(ssl)
+    }
+
+    /// creates Ssl for HeadUnit (SSL server)
+    async fn ssl_builder_hu(&self) -> Result<Ssl> {
+        let mut ctx_builder = SslContextBuilder::new(SslMethod::tls())?;
+
+        // for MD we need to act as a HU, so load "hu" key and cert
+        ctx_builder.set_certificate_file(format!("{KEYS_PATH}/hu_cert.pem"), SslFiletype::PEM)?;
+        ctx_builder.set_private_key_file(format!("{KEYS_PATH}/hu_key.pem"), SslFiletype::PEM)?;
+        ctx_builder.check_private_key()?;
+        // trusted root certificates:
+        ctx_builder.set_ca_file(format!("{KEYS_PATH}/galroot_cert.pem"))?;
+
+        ctx_builder.set_min_proto_version(Some(openssl::ssl::SslVersion::TLS1_2))?;
+        ctx_builder.set_options(openssl::ssl::SslOptions::NO_TLSV1_3);
+
+        let openssl_ctx = ctx_builder.build();
+        let mut ssl = Ssl::new(&openssl_ctx)?;
+        ssl.set_accept_state(); // SSL server
+        Ok(ssl)
+    }
+
+    /// checking if there was a true fatal SSL error
+    /// Note that the error may not be fatal. For example if the underlying
+    /// stream is an asynchronous one then `HandshakeError::WouldBlock` may
+    /// just mean to wait for more I/O to happen later.
+    fn ssl_check_failure<T>(&self, res: std::result::Result<T, openssl::ssl::Error>) -> Result<()> {
+        if let Err(err) = res {
+            match err.code() {
+                ErrorCode::WANT_READ | ErrorCode::WANT_WRITE | ErrorCode::SYSCALL => Ok(()),
+                _ => return Err(Box::new(err)),
+            }
+        } else {
+            Ok(())
+        }
+    }
+
+    /// encapsulates SSL data into Packet
+    async fn ssl_encapsulate(&self, mut mem_buf: SslMemBuf) -> Result<Packet> {
+        // read SSL-generated data
+        let mut res: Vec<u8> = Vec::new();
+        mem_buf.read_to(&mut res)?;
+
+        // create MESSAGE_ENCAPSULATED_SSL Packet
+        let message_type = ControlMessageType::MESSAGE_ENCAPSULATED_SSL as u16;
+        res.insert(0, (message_type >> 8) as u8);
+        res.insert(1, (message_type & 0xff) as u8);
+        Ok(Packet {
+            channel: 0x00,
+            flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+            final_length: None,
+            payload: res,
+        })
+    }
+
+    /// shows packet/message contents as pretty string for debug
+    pub async fn pkt_debug(&self,
+                           hexdump: HexdumpLevel,
+                           hex_requested: HexdumpLevel,
+                           pkt: &Packet,
+                           source:String,
+    ) -> Result<()> {
+        // don't run further if we are not in Debug mode
+        if !log_enabled!(Level::Debug) {
+            return Ok(());
+        }
+
+        // if for some reason we have too small packet, bail out
+        if pkt.payload.len() < 2 {
+            return Ok(());
+        }
+        // message_id is the first 2 bytes of payload
+        let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+
+        // trying to obtain an Enum from message_id
+        let control = protos::ControlMessageType::from_i32(message_id);
+        debug!("{}> ch: {} flags: {:04X} message_id = {:04X}, {:?}",source, pkt.channel,pkt.flags, message_id, control);
+        if hex_requested >= hexdump {
+            debug!("{} {:?} {}", get_name(), hexdump, pkt);
+        }
+
+        // parsing data
+        let data = &pkt.payload[2..]; // start of message data
+        let message: &dyn MessageDyn = match control.unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) {
+            MESSAGE_VERSION_REQUEST => &VersionRequest::parse_from_bytes(data)?,
+            MESSAGE_BYEBYE_REQUEST => &ByeByeRequest::parse_from_bytes(data)?,
+            MESSAGE_BYEBYE_RESPONSE => &ByeByeResponse::parse_from_bytes(data)?,
+            MESSAGE_AUTH_COMPLETE => &AuthResponse::parse_from_bytes(data)?,
+            MESSAGE_SERVICE_DISCOVERY_REQUEST => &ServiceDiscoveryRequest::parse_from_bytes(data)?,
+            MESSAGE_SERVICE_DISCOVERY_RESPONSE => &ServiceDiscoveryResponse::parse_from_bytes(data)?,
+            MESSAGE_PING_REQUEST => &PingRequest::parse_from_bytes(data)?,
+            MESSAGE_PING_RESPONSE => &PingResponse::parse_from_bytes(data)?,
+            MESSAGE_NAV_FOCUS_REQUEST => &NavFocusRequestNotification::parse_from_bytes(data)?,
+            MESSAGE_CHANNEL_OPEN_RESPONSE => &ChannelOpenResponse::parse_from_bytes(data)?,
+            MESSAGE_CHANNEL_OPEN_REQUEST => &ChannelOpenRequest::parse_from_bytes(data)?,
+            MESSAGE_AUDIO_FOCUS_REQUEST => &AudioFocusRequestNotification::parse_from_bytes(data)?,
+            MESSAGE_AUDIO_FOCUS_NOTIFICATION => &AudioFocusNotification::parse_from_bytes(data)?,
+            MEDIA_MESSAGE_SETUP =>&Setup::parse_from_bytes(data)?,
+            MEDIA_MESSAGE_START =>&Start::parse_from_bytes(data)?,
+            MEDIA_MESSAGE_CONFIG =>&ChConfig::parse_from_bytes(data)?,
+            _ => return Ok(()),
+        };
+        // show pretty string from the message
+        debug!("{}", print_to_string_pretty(message));
+
+        Ok(())
+    }
+
+    fn get_name(&self,) -> String {
+        "PacketProxy".to_string()
+    }
+}
+
+///Used for Mirror mode only
 pub struct PacketProxy {
     //params
     r_statistics: Arc<AtomicUsize>,

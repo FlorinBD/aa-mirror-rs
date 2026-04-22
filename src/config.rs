@@ -122,6 +122,7 @@ pub struct AppConfig {
     )]
     pub webserver: Option<String>,
     pub bt_timeout_secs: u16,
+    pub mitm: bool,
     pub res_multiplier: f64,
     #[serde(default, deserialize_with = "empty_string_as_none")]
     pub wired: Option<UsbId>,
@@ -243,6 +244,7 @@ impl Default for AppConfig {
             wpa_supplicant_conf: "/var/run/wpa_supplicant.conf".into(),
             btalias: None,
             timeout_secs: 5,
+            mitm: false,
             hu_detect_timeout_secs:10,
             webserver: webserver_default_bind(),
             bt_timeout_secs: 30,
@@ -339,6 +341,7 @@ impl AppConfig {
         doc["res_multiplier"] = value(self.res_multiplier);
         doc["wired"] = value(self.wired.as_ref().map_or(String::new(), |w| w.to_string()));
         doc["dhu"] = value(self.dhu);
+        doc["mitm"] = value(self.mitm);
         doc["enable_ssh"] = value(self.enable_ssh);
         doc["enable_ftp"] = value(self.enable_ftp);
         doc["usb_serial_console"] = value(self.usb_serial_console);

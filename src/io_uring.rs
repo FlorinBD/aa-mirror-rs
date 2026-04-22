@@ -32,7 +32,7 @@ use tokio_uring::net::TcpStream;
 use tokio_uring::BufResult;
 use tokio_uring::UnsubmittedWrite;
 use crate::{bluetooth, scrcpy};
-use crate::channel_manager::{ChannelProxyHandle, PacketProxy, SslMemBuf, HEADER_LENGTH, KEYS_PATH};
+use crate::channel_manager::{ChannelProxyHandle, PacketProxy, PacketProxyMITM, SslMemBuf, HEADER_LENGTH, KEYS_PATH};
 use crate::aa_services::{VideoStreamingParams, AudioStreamingParams};
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use protos::*;
@@ -849,13 +849,9 @@ pub async fn io_loop_pt(
         tsk_md_read = tokio_uring::spawn(endpoint_reader(md_r, tx_md));
 
         //packet proxy
-        let mut tsk_packet_proxy = tokio_uring::spawn(packet_proxy_pt(
-            rx_hu, hu_w, rx_md, md_w,
-            stats_r_bytes.clone(),
-            stats_w_bytes.clone(),
-        ));
-
-
+        let pp=PacketProxyMITM::new( stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested, cfg.mitm);
+        let mut tsk_packet_proxy=pp.start(hu_w, rx_hu, rx_md, md_w);
+        
         // Thread for monitoring transfer
         let mut tsk_monitor = tokio::spawn(transfer_monitor(
             stats_interval,

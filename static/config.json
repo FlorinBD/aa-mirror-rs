@@ -103,6 +103,15 @@
       }
     },
     {
+      "title": "MITM options",
+      "values": {
+        "mitm": {
+          "typ": "boolean",
+          "description": "Enable/Disable MITM for AA mode"
+        }
+      }
+    },
+    {
       "title": "🐞 DEBUGGING",
       "values": {
         "debug": {
