@@ -103,7 +103,7 @@
       }
     },
     {
-      "title": "MITM options",
+      "title": "🕵️‍♂️ MITM CONFIGURATION",
       "values": {
         "mitm": {
           "typ": "boolean",
