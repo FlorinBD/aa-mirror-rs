@@ -631,9 +631,25 @@ pub async fn io_loop_pt(
 ) -> Result<()> {
     let shared_config = config.clone();
     #[allow(unused_variables)]
-
-
     let cfg = config.read().await.clone();
+    if cfg.mitm
+    {
+        //check if RSA cert files are present, if not, stop, this is FATAL error
+        loop {
+            let path_cert_md = format!("{KEYS_PATH}/md_cert.pem");
+            let path_prv_key_md = format!("{KEYS_PATH}/md_key.pem");
+            let path_cert_hu = format!("{KEYS_PATH}/hu_cert.pem");
+            let path_prv_key_hu = format!("{KEYS_PATH}/hu_key.pem");
+            let path_gal_cert = format!("{KEYS_PATH}/galroot_cert.pem");
+            if (!Path::new(&path_cert_md).exists()) || (!Path::new(&path_prv_key_md).exists()) || (!Path::new(&path_cert_hu).exists()) || (!Path::new(&path_prv_key_hu).exists()) || (!Path::new(&path_gal_cert).exists()){
+                error!("{}: FATAL, RSA CERT Files doesn't exists", NAME);
+                tokio::time::sleep(Duration::from_secs(10)).await;
+                continue;
+            }
+            break;
+        }
+    }
+
     let hex_requested = cfg.hexdump_level;
     // prepare/bind needed TCP listeners
     let mut dhu_listener=None;
@@ -816,7 +832,7 @@ pub async fn io_loop_pt(
         //packet proxy
         let pp=PacketProxyMITM::new( stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested, cfg.mitm);
         let mut tsk_packet_proxy=pp.start(hu_w, rx_hu, rx_md, md_w);
-        
+
         // Thread for monitoring transfer
         let mut tsk_monitor = tokio::spawn(transfer_monitor(
             stats_interval,
