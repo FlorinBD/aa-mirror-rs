@@ -366,41 +366,6 @@ async fn enable_usb_if_present(usb: &mut Option<UsbGadgetState>) {
         usb.switch_to__accessory().await;
     }
 }
-
-async fn packet_proxy_pt<A: Endpoint<A>>(mut hu_rx: Receiver<Packet>,
-                                         mut hu_tx: IoDevice<A>,
-                                         mut md_rx: Receiver<Packet>,
-                                         mut md_tx: IoDevice<TcpStream>,
-                                         r_statistics: Arc<AtomicUsize>,
-                                         w_statistics: Arc<AtomicUsize>,
-                                        ) -> Result<()>
-{
-
-    info!( "{}: Starting message proxy loop MD<>HU", NAME);
-    loop {
-        tokio::select! {
-            biased;
-
-            // 🔴 highest priority, MD>HU
-            Some(mut msg)=md_rx.recv() => {
-                     // Increment byte counters for statistics
-                        w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
-                        msg.transmit(&mut hu_tx).await.with_context(|| format!("{}: Service transmit to HU failed", NAME))?;
-            }
-            // lower priority, HU>Service
-            Some(mut msg) = hu_rx.recv() => {
-                // Increment byte counters for statistics
-                r_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
-                msg.transmit(&mut md_tx).await.with_context(|| format!("{}: Service transmit to MD failed", NAME))?;
-            }
-            else => {
-            // all channels closed
-            tokio::time::sleep(Duration::from_secs(1)).await;
-                error!("packet_proxy_pt ALL CHANNELS CLOSED! handle app restart needed")
-            }
-        }
-    }
-}
 ///
 /// IO Loop for Mirror mode only
 pub async fn io_loop(

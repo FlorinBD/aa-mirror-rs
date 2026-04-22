@@ -254,7 +254,7 @@ impl PacketProxyMITM
     async fn run_mitm<A: Endpoint<A>>(mut self, mut hu_wr: IoDevice<A>,
                                  mut hu_rx: Receiver<Packet>,
                                  mut md_rx: Receiver<Packet>,
-                                 mut md_tx: IoDevice<A>,
+                                 mut md_tx: IoDevice<TcpStream>,
     ) -> Result<()> {
         let ssl_hu = self.ssl_builder_md().await?;
         let ssl_md = self.ssl_builder_hu().await?;
@@ -477,7 +477,7 @@ impl PacketProxyMITM
     async fn run_pt<A: Endpoint<A>>(mut self, mut hu_wr: IoDevice<A>,
                                       mut hu_rx: Receiver<Packet>,
                                       mut md_rx: Receiver<Packet>,
-                                      mut md_tx: IoDevice<A>,
+                                      mut md_tx: IoDevice<TcpStream>,
     ) -> Result<()> {
 
         info!( "{}: Starting PT message proxy loop...", get_name());
