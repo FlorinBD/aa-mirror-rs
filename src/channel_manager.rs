@@ -292,7 +292,7 @@ impl PacketProxyMITM
                         match msg.decrypt_payload(&mut mem_buf_hu, &mut server).await {
                             Ok(_) => {
                                 let _ = self.pkt_debug(HexdumpLevel::DecryptedInput, self.dmp_level, &msg, "HU".parse().unwrap()).await;
-                                let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+                                let message_id: i32 = u16::from_be_bytes(msg.payload[0..=1].try_into()?).into();
                                 if (msg.channel == 0) && (message_id ==ControlMessageType::MESSAGE_SERVICE_DISCOVERY_RESPONSE as i32)
                                 {
                                     let data = &msg.payload[2..]; // start of message data, without message_id
