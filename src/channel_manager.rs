@@ -290,6 +290,7 @@ impl PacketProxyMITM
                     else {
                         match msg.decrypt_payload(&mut mem_buf_hu, &mut server).await {
                             Ok(_) => {
+                                let _ = self.pkt_debug(HexdumpLevel::DecryptedInput, self.dmp_level, &msg, "HU".parse().unwrap()).await;
                                 match msg.encrypt_payload(&mut mem_buf_md, &mut client).await {
                                 Ok(_) => {
                                      msg.transmit(&mut md_tx).await.with_context(|| format!("{}: Service transmit to MD failed", get_name()))?;
@@ -414,6 +415,7 @@ impl PacketProxyMITM
                             pkt.ssl_decapsulate_write(&mut mem_buf_md).await?;
                     }
                     else {
+                        let _ = self.pkt_debug(HexdumpLevel::DecryptedInput, self.dmp_level, &msg, "HU".parse().unwrap()).await;
                         msg.transmit(&mut md_tx).await.with_context(|| format!("{}: Service transmit to MD failed", get_name()))?;
                     }
 
@@ -436,6 +438,7 @@ impl PacketProxyMITM
                             ).await;*/
                             match msg.decrypt_payload(&mut mem_buf_md, &mut client).await {
                             Ok(_) => {
+                                let _ = self.pkt_debug(HexdumpLevel::DecryptedInput, self.dmp_level, &msg, "MD".parse().unwrap()).await;
                                 match msg.encrypt_payload(&mut mem_buf_hu, &mut server).await {
                                 Ok(_) => {
                                      self.w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
@@ -450,12 +453,7 @@ impl PacketProxyMITM
                 }
                 else
                 {
-                       /* let _ = pkt_debug(
-                            HexdumpLevel::DecryptedOutput,
-                            dmp_level,
-                            &msg,
-                            "MD".parse().unwrap()
-                        ).await;*/
+                       let _ = self.pkt_debug(HexdumpLevel::DecryptedInput, self.dmp_level, &msg, "MD".parse().unwrap()).await;
                         // Increment byte counters for statistics
                         // fixme: compute final_len for precise stats
                         self.w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
