@@ -45,6 +45,18 @@ pub enum ServiceType
     Bluetooth,
 }
 
+#[derive(Copy, Clone, Debug)]
+pub enum AAMessageType
+{
+    Unknown=-1,
+    Control=0,
+    Input,
+    Media,
+    Sensor,
+    VendorExtension,
+    Bluetooth,
+}
+
 impl Default for ServiceType {
     fn default() -> Self { ServiceType::None }
 }
