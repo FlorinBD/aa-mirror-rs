@@ -2,7 +2,7 @@ use anyhow::{anyhow, Context};
 use log::log_enabled;
 use openssl::ssl::{ErrorCode, Ssl, SslContextBuilder, SslFiletype, SslMethod};
 use simplelog::*;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::{fmt, io};
 use std::cmp::PartialEq;
 use std::io::{Read, Write};
@@ -270,6 +270,7 @@ impl PacketProxyMITM
         let mut server = openssl::ssl::SslStream::new(ssl_hu, mem_buf_hu.clone())?;
         let mut client = openssl::ssl::SslStream::new(ssl_md, mem_buf_md.clone())?;
         let sdr=None;
+        let mut sdr_msg_types = HashMap::new();
         info!( "{}: Starting MITM message proxy loop...", get_name());
         loop {
             tokio::select! {
@@ -292,12 +293,11 @@ impl PacketProxyMITM
                             Ok(_) => {
                                 let _ = self.pkt_debug(HexdumpLevel::DecryptedInput, self.dmp_level, &msg, "HU".parse().unwrap()).await;
                                 let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-                                let control = protos::ControlMessageType::from_i32(message_id);
-                                if (msg.channel == 0) && (control==ControlMessageType::MESSAGE_SERVICE_DISCOVERY_RESPONSE)
+                                if (msg.channel == 0) && (message_id ==ControlMessageType::MESSAGE_SERVICE_DISCOVERY_RESPONSE as i32)
                                 {
                                     let data = &msg.payload[2..]; // start of message data, without message_id
                                      if  let Ok(_sdr) = ServiceDiscoveryResponse::parse_from_bytes(&data){
-                                        sdr=_sdr;
+                                        sdr=Some(_sdr);
                                      }
                                 }
                                 match msg.encrypt_payload(&mut mem_buf_md, &mut client).await {
