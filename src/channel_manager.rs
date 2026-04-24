@@ -1089,7 +1089,7 @@ impl PacketProxy
 
         // parsing data
         let data = &pkt.payload[2..]; // start of message data
-        let message: &dyn MessageDyn = match control.unwrap_or(ControlMessageType::MESSAGE_UNEXPECTED_MESSAGE) {
+        let message: &dyn MessageDyn = match control.unwrap() {
             ControlMessageType::MESSAGE_VERSION_REQUEST => &VersionRequest::parse_from_bytes(data)?,
             ControlMessageType::MESSAGE_BYEBYE_REQUEST => &ByeByeRequest::parse_from_bytes(data)?,
             ControlMessageType::MESSAGE_BYEBYE_RESPONSE => &ByeByeResponse::parse_from_bytes(data)?,
@@ -1143,7 +1143,7 @@ pub async fn pkt_debug(
 
     // parsing data
     let data = &pkt.payload[2..]; // start of message data
-    let message: &dyn MessageDyn = match control.unwrap_or(ControlMessageType::MESSAGE_UNEXPECTED_MESSAGE) {
+    let message: &dyn MessageDyn = match control.unwrap() {
         ControlMessageType::MESSAGE_VERSION_REQUEST => &VersionRequest::parse_from_bytes(data)?,
         ControlMessageType::MESSAGE_BYEBYE_REQUEST => &ByeByeRequest::parse_from_bytes(data)?,
         ControlMessageType::MESSAGE_BYEBYE_RESPONSE => &ByeByeResponse::parse_from_bytes(data)?,
