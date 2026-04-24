@@ -1116,7 +1116,7 @@ impl PacketProxy
     }
 }
 /// shows packet/message contents as pretty string for debug
-pub async fn pkt_debug(
+pub async fn pkt_debug_(
     hexdump: HexdumpLevel,
     hex_requested: HexdumpLevel,
     pkt: &Packet,
