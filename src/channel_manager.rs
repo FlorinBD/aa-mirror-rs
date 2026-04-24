@@ -702,13 +702,16 @@ impl PacketProxyMITM
                         MEDIA_MESSAGE_SETUP =>&Setup::parse_from_bytes(data)?,
                         MEDIA_MESSAGE_START =>&Start::parse_from_bytes(data)?,
                         MEDIA_MESSAGE_CONFIG =>&ChConfig::parse_from_bytes(data)?,
+                        MEDIA_MESSAGE_ACK =>&Ack::parse_from_bytes(data)?,
+                        MEDIA_MESSAGE_VIDEO_FOCUS_REQUEST =>&VideoFocusRequestNotification::parse_from_bytes(data)?,
+                        MEDIA_MESSAGE_VIDEO_FOCUS_NOTIFICATION =>&VideoFocusNotification::parse_from_bytes(data)?,
                         _ => return Ok(()),
                     };
                     // show pretty string from the message
                     debug!("{}", print_to_string_pretty(message));
                 }
             _ => {
-                debug!("{}", "Unknown message type received");
+                debug!("Unknown message type received: {:?}", msg_type);
             }
         }
 
