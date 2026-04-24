@@ -1139,7 +1139,7 @@ pub async fn pkt_debug(
 
     // trying to obtain an Enum from message_id
     //let control = protos::ControlMessageType::from_i32(message_id);
-    //debug!("{}> ch: {} flags: {:04X} message_id = {:04X}, {:?}",source, pkt.channel,pkt.flags, message_id, control);
+    debug!("{}> ch: {} flags: {:04X} message_id = {:04X}",source, pkt.channel,pkt.flags, message_id);
     if hex_requested >= hexdump {
         debug!("{} {:?} {}", get_name(), hexdump, pkt);
     }
