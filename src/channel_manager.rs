@@ -677,7 +677,7 @@ impl PacketProxyMITM
             {
                 // trying to obtain an Enum from message_id
                 let control = protos::ControlMessageType::from_i32(message_id);
-                let message: &dyn MessageDyn = match control.unwrap_or(MESSAGE_UNEXPECTED_MESSAGE::MESSAGE_UNEXPECTED_MESSAGE) {
+                let message: &dyn MessageDyn = match control.unwrap_or(ControlMessageType::MESSAGE_UNEXPECTED_MESSAGE) {
                     ControlMessageType::MESSAGE_VERSION_REQUEST => &VersionRequest::parse_from_bytes(data)?,
                     ControlMessageType::MESSAGE_BYEBYE_REQUEST => &ByeByeRequest::parse_from_bytes(data)?,
                     ControlMessageType::MESSAGE_BYEBYE_RESPONSE => &ByeByeResponse::parse_from_bytes(data)?,
@@ -700,7 +700,7 @@ impl PacketProxyMITM
                 {
                     // trying to obtain an Enum from message_id
                     let control = protos::MediaMessageId::from_i32(message_id);
-                    let message: &dyn MessageDyn = match control.unwrap_or(255) {
+                    let message: &dyn MessageDyn = match control.unwrap_or(MediaMessageId::MEDIA_UNEXPECTED_MESSAGE) {
                         MediaMessageId::MEDIA_MESSAGE_SETUP =>&Setup::parse_from_bytes(data)?,
                         MediaMessageId::MEDIA_MESSAGE_START =>&Start::parse_from_bytes(data)?,
                         MediaMessageId::MEDIA_MESSAGE_CONFIG =>&ChConfig::parse_from_bytes(data)?,
