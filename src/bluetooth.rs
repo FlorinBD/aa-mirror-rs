@@ -111,7 +111,7 @@ pub async fn init(
     };
     let handle_aa = session.register_profile(profile).await?;
     info!("{} 📱 AA Wireless Profile: registered", NAME);
-    let mut _hsp_session=None;
+    let mut _hsp_session:Option<Session>=None;
     if !dongle_mode {
         // Headset profile
         let profile = Profile {
