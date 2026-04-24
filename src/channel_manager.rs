@@ -464,7 +464,6 @@ impl PacketProxyMITM
                         let _ = self.pkt_debug(AAMessageType::Control,HexdumpLevel::DecryptedInput, self.dmp_level, &msg, "HU".parse().unwrap()).await;
                         msg.transmit(&mut md_tx).await.with_context(|| format!("{}: Service transmit to MD failed", get_name()))?;
                     }
-
                 }
             }
             //lower priority MD>HU
@@ -503,14 +502,13 @@ impl PacketProxyMITM
                     {
                            let _ = self.pkt_debug(AAMessageType::Control,HexdumpLevel::DecryptedInput, self.dmp_level, &msg, "MD".parse().unwrap()).await;
                             msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: Service transmit to HU failed", get_name()))?;
-
                     }
             }
             else => {
                 // all channels closed
                 tokio::time::sleep(Duration::from_secs(1)).await;
                 error!("packet_tls_proxy ALL CHANNELS CLOSED! handle app restart needed")
-            }
+                }
             }
         }
 

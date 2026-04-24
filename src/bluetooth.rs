@@ -6,10 +6,7 @@ use crate::config_types::MACAddressList;
 use crate::web::AppState;
 use anyhow::anyhow;
 use backon::{ExponentialBuilder, Retryable};
-use bluer::{
-    rfcomm::{Profile, ProfileHandle, Role, Stream},
-    Adapter, Address, Device, Uuid,
-};
+use bluer::{rfcomm::{Profile, ProfileHandle, Role, Stream}, Adapter, Address, Device, Session, Uuid};
 use futures::StreamExt;
 use simplelog::*;
 use std::sync::atomic::AtomicBool;
@@ -61,6 +58,7 @@ enum MessageId {
 
 pub struct Bluetooth {
     adapter: Adapter,
+    hsp_session: Option<Session>,
     handle_aa: ProfileHandle,
     btle_handle: Option<bluer::gatt::local::ApplicationHandle>,
     adv_handle: Option<bluer::adv::AdvertisementHandle>,
@@ -113,7 +111,7 @@ pub async fn init(
     };
     let handle_aa = session.register_profile(profile).await?;
     info!("{} 📱 AA Wireless Profile: registered", NAME);
-
+    let mut _hsp_session=None;
     if !dongle_mode {
         // Headset profile
         let profile = Profile {
@@ -126,6 +124,7 @@ pub async fn init(
         match session.register_profile(profile).await {
             Ok(mut handle) => {
                 info!("{} 🎧 Headset Profile (HSP): registered", NAME);
+                _hsp_session=Some(session);
                 // handling connection to headset profile in own task
                 // it only accepts each incoming connection
                 let _ = Some(tokio::spawn(async move {
@@ -152,6 +151,7 @@ pub async fn init(
     Ok(Bluetooth {
         adapter,
         handle_aa,
+        hsp_session: _hsp_session,
         btle_handle: None,
         adv_handle: None,
         current_index: 0,
@@ -515,6 +515,17 @@ impl Bluetooth {
         Ok(())
     }
 
+    /// Drop HSP session here - this unregisters the profile from BlueZ.
+    /// We do it explicitly with a small delay to give BlueZ time to clean up.
+    async fn unregister_hsp(hsp_session: Option<bluer::Session>) {
+        if let Some(sess) = hsp_session {
+            info!("{} 🎧 Headset Profile (HSP): unregistering ...", NAME);
+            drop(sess);
+            tokio::time::sleep(Duration::from_millis(80)).await;
+            info!("{} 🎧 Headset Profile (HSP): unregistered", NAME);
+        }
+    }
+
     pub async fn aa_handshake(
         &mut self,
         connect: MACAddressList,
@@ -523,10 +534,9 @@ impl Bluetooth {
         stopped: bool,
         bt_poweroff: bool,
     ) -> Result<()> {
+        let mut hsp_handle = None;
         // Use the provided session and adapter instead of creating new ones
-        let (address, mut stream) = self
-            .get_aa_profile_connection(connect, bt_timeout, stopped)
-            .await?;
+        let (address, mut stream) = self.get_aa_profile_connection(connect, bt_timeout, stopped).await?;
         Self::send_params(wifi_config.clone(), &mut stream).await?;
         //tcp_start.notify_one();
 
@@ -535,6 +545,7 @@ impl Bluetooth {
         // connect to real HU for calls
         let device = self.adapter.device(bluer::Address(*address))?;
         let _ = device.disconnect().await;
+        Self::unregister_hsp(self.hsp_session.take()).await;
         if bt_poweroff {
             let _ = self.adapter.set_powered(false).await;
         }
