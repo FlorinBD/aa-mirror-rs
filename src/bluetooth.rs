@@ -517,8 +517,8 @@ impl Bluetooth {
 
     /// Drop HSP session here - this unregisters the profile from BlueZ.
     /// We do it explicitly with a small delay to give BlueZ time to clean up.
-    async fn unregister_hsp(hsp_session: Option<bluer::Session>) {
-        if let Some(sess) = hsp_session {
+    pub async fn unregister_hsp(&mut self) {
+        if let Some(sess) = self.hsp_session {
             info!("{} 🎧 Headset Profile (HSP): unregistering ...", NAME);
             drop(sess);
             tokio::time::sleep(Duration::from_millis(80)).await;
@@ -544,7 +544,7 @@ impl Bluetooth {
         // connect to real HU for calls
         let device = self.adapter.device(bluer::Address(*address))?;
         let _ = device.disconnect().await;
-        Self::unregister_hsp(self.hsp_session.take()).await;
+        self.unregister_hsp().await;
         if bt_poweroff {
             let _ = self.adapter.set_powered(false).await;
         }

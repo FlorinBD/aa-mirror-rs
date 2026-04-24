@@ -721,6 +721,7 @@ pub async fn io_loop_pt(
             .await
         {
             error!("{} bluetooth AA handshake error: {}", NAME, e);
+            bluetooth.unregister_hsp().await;
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             continue;
         }
