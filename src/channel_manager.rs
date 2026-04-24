@@ -1138,15 +1138,15 @@ pub async fn pkt_debug(
     let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
 
     // trying to obtain an Enum from message_id
-    let control = protos::ControlMessageType::from_i32(message_id);
-    debug!("{}> ch: {} flags: {:04X} message_id = {:04X}, {:?}",source, pkt.channel,pkt.flags, message_id, control);
+    //let control = protos::ControlMessageType::from_i32(message_id);
+    //debug!("{}> ch: {} flags: {:04X} message_id = {:04X}, {:?}",source, pkt.channel,pkt.flags, message_id, control);
     if hex_requested >= hexdump {
         debug!("{} {:?} {}", get_name(), hexdump, pkt);
     }
 
     // parsing data
     let data = &pkt.payload[2..]; // start of message data
-    let message: &dyn MessageDyn = match control.unwrap_or(ControlMessageType::MESSAGE_UNEXPECTED_MESSAGE) {
+    match message_id {
         ControlMessageType::MESSAGE_VERSION_REQUEST => &VersionRequest::parse_from_bytes(data)?,
         ControlMessageType::MESSAGE_BYEBYE_REQUEST => &ByeByeRequest::parse_from_bytes(data)?,
         ControlMessageType::MESSAGE_BYEBYE_RESPONSE => &ByeByeResponse::parse_from_bytes(data)?,
