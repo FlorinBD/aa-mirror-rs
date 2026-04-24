@@ -362,6 +362,7 @@ impl PacketProxyMITM
                             );
                             let pkt = self.ssl_encapsulate(mem_buf_md.clone()).await?;
                             //let _ = self.pkt_debug(HexdumpLevel::RawInput, self.dmp_level, &pkt, "MD".parse().unwrap()).await;
+                            self.r_statistics.fetch_add(HEADER_LENGTH + pkt.payload.len(), Ordering::Relaxed);
                             pkt.transmit(&mut md_tx).await.with_context(|| format!("{}: transmit failed", get_name()))?;
 
                             //Step2 MD: Read server hello
@@ -392,11 +393,13 @@ impl PacketProxyMITM
                             );
                             let pkt = self.ssl_encapsulate(mem_buf_md.clone()).await?;
                             //let _ = self.pkt_debug(HexdumpLevel::RawInput, self.dmp_level, &pkt, "MD".parse().unwrap()).await;
+                            self.r_statistics.fetch_add(HEADER_LENGTH + pkt.payload.len(), Ordering::Relaxed);
                             pkt.transmit(&mut md_tx).await.with_context(|| format!("{}: transmit failed", get_name()))?;
 
                             // Step2 HU: send server hello
                             let pkt = self.ssl_encapsulate(mem_buf_hu.clone()).await?;
                             //let _ = self.pkt_debug(HexdumpLevel::RawOutput, self.dmp_level, &pkt,"HU".parse().unwrap()).await;
+                            self.w_statistics.fetch_add(HEADER_LENGTH + pkt.payload.len(), Ordering::Relaxed);
                             pkt.transmit(&mut hu_wr).await.with_context(|| format!("{}: transmit failed", get_name()))?;
 
                             //Step4 MD:
@@ -443,11 +446,13 @@ impl PacketProxyMITM
                             }
                             let pkt = self.ssl_encapsulate(mem_buf_md.clone()).await?;
                             //let _ = self.pkt_debug(AAMessageType::Control,HexdumpLevel::RawInput, self.dmp_level, &pkt, "MD".parse().unwrap()).await;
+                            self.r_statistics.fetch_add(HEADER_LENGTH + pkt.payload.len(), Ordering::Relaxed);
                             pkt.transmit(&mut md_tx).await.with_context(|| format!("{}: transmit failed", get_name()))?;
 
                             //Step4 HU: Change Cipher spec finished
                             let pkt = self.ssl_encapsulate(mem_buf_hu.clone()).await?;
                             //let _ = self.pkt_debug(HexdumpLevel::RawOutput, self.dmp_level, &pkt, "HU".parse().unwrap()).await;
+                            self.w_statistics.fetch_add(HEADER_LENGTH + pkt.payload.len(), Ordering::Relaxed);
                             pkt.transmit(&mut hu_wr).await.with_context(|| format!("{}: transmit failed", get_name()))?;
 
                             //Step6 MD:
@@ -464,43 +469,42 @@ impl PacketProxyMITM
             }
             //lower priority MD>HU
             Some(mut msg) = md_rx.recv() => {
-                if msg.flags&ENCRYPTED !=0
-                {
-                    if !ssl_handshake_done
+                     // Increment byte counters for statistics
+                    // fixme: compute final_len for precise stats
+                    self.w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
+                    if msg.flags&ENCRYPTED !=0
                     {
-                            error!( "{}: tls proxy error: received encrypted message from service before TLS handshake", get_name());
-                    }
-                    else {
-                           /* let _ = pkt_debug(
-                                HexdumpLevel::DecryptedOutput,
-                                dmp_level,
-                                &msg,
-                                "MD".parse().unwrap()
-                            ).await;*/
-                            match msg.decrypt_payload(&mut mem_buf_md, &mut client).await {
-                            Ok(_) => {
-                                let _ = self.pkt_debug(sdr_msg_types.get(&(msg.channel as i32)).copied().unwrap_or(AAMessageType::Unknown),HexdumpLevel::DecryptedInput, self.dmp_level, &msg, "MD".parse().unwrap()).await;
-                                match msg.encrypt_payload(&mut mem_buf_hu, &mut server).await {
+                        if !ssl_handshake_done
+                        {
+                                error!( "{}: tls proxy error: received encrypted message from service before TLS handshake", get_name());
+                        }
+                        else {
+                               /* let _ = pkt_debug(
+                                    HexdumpLevel::DecryptedOutput,
+                                    dmp_level,
+                                    &msg,
+                                    "MD".parse().unwrap()
+                                ).await;*/
+                                match msg.decrypt_payload(&mut mem_buf_md, &mut client).await {
                                 Ok(_) => {
-                                     self.w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
-                                    msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: Service transmit to HU failed", get_name()))?;
+                                    let _ = self.pkt_debug(sdr_msg_types.get(&(msg.channel as i32)).copied().unwrap_or(AAMessageType::Unknown),HexdumpLevel::DecryptedInput, self.dmp_level, &msg, "MD".parse().unwrap()).await;
+                                    match msg.encrypt_payload(&mut mem_buf_hu, &mut server).await {
+                                    Ok(_) => {
+                                        msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: Service transmit to HU failed", get_name()))?;
+                                    }
+                                    Err(e) => {error!( "{} encrypt_payload error: {:?}", get_name(), e);},
+                                    }
                                 }
-                                Err(e) => {error!( "{} encrypt_payload error: {:?}", get_name(), e);},
-                                }
+                                Err(e) => {error!( "{} decrypt_payload error: {:?}", get_name(), e);},
                             }
-                            Err(e) => {error!( "{} decrypt_payload error: {:?}", get_name(), e);},
                         }
                     }
-                }
-                else
-                {
-                       let _ = self.pkt_debug(AAMessageType::Control,HexdumpLevel::DecryptedInput, self.dmp_level, &msg, "MD".parse().unwrap()).await;
-                        // Increment byte counters for statistics
-                        // fixme: compute final_len for precise stats
-                        self.w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
-                        msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: Service transmit to HU failed", get_name()))?;
+                    else
+                    {
+                           let _ = self.pkt_debug(AAMessageType::Control,HexdumpLevel::DecryptedInput, self.dmp_level, &msg, "MD".parse().unwrap()).await;
+                            msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: Service transmit to HU failed", get_name()))?;
 
-                }
+                    }
             }
             else => {
                 // all channels closed

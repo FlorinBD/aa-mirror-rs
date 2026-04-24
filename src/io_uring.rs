@@ -136,6 +136,9 @@ async fn transfer_monitor(
     let mut stall_tcp_bytes_last: usize = 0;
     let mut report_time = Instant::now();
     let mut stall_check = Instant::now();
+    //initial read timeout must be greater because of the HU-MD sync time required
+    let init_read_timeout= Duration::from_secs(30);
+    let mut stall_interval_elapsed =false;
 
     info!(
         "{} ⚙️ Showing transfer statistics: <b><blue>{}</>",
@@ -189,7 +192,16 @@ async fn transfer_monitor(
         }
 
         // transfer stall detection
-        if stall_check.elapsed() > read_timeout {
+        if usb_bytes_out == 0 || tcp_bytes_out==0
+        {
+            stall_interval_elapsed =stall_check.elapsed() > init_read_timeout;
+        }
+        else 
+        {
+            stall_interval_elapsed =stall_check.elapsed() > read_timeout;
+        }
+       
+        if stall_interval_elapsed {
             // compute delta since last check
             stall_usb_bytes_last = usb_bytes_out - stall_usb_bytes_last;
             stall_tcp_bytes_last = tcp_bytes_out - stall_tcp_bytes_last;
