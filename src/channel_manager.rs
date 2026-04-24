@@ -1942,7 +1942,7 @@ pub async fn ch_proxy(
         match scrcpy_cmd_rx.try_recv() {
             Ok(mut pkt) => {
                 let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-                if message_id == MESSAGE_CUSTOM_CMD  as i32
+                if message_id == ControlMessageType::MESSAGE_CUSTOM_CMD  as i32
                 {
                     let cmd_id: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
                     if cmd_id == CustomCommand::MD_CONNECTED as i32
