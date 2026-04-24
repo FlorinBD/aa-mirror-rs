@@ -1528,7 +1528,7 @@ fn check_control_msg_id(expected: protos::ControlMessageType, pkt: &Packet) -> R
     }
     // message_id is the first 2 bytes of payload
     let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-    if protos::ControlMessageType::from_i32(message_id).unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) != expected {
+    if protos::ControlMessageType::from_i32(message_id).unwrap_or(ControlMessageType::MESSAGE_UNEXPECTED_MESSAGE) != expected {
         Err(Box::new("Wrong message id")).expect("ControlMessageType")
     }
     Ok(())
@@ -1565,7 +1565,7 @@ pub async fn ch_proxy(
     info!( "{} Waiting for HU version request...",get_name());
     //let pkt = rx_hu.recv().await.ok_or("reader channel hung up")?;
     let pkt = rx_srv.recv().await.ok_or("rx_srv channel hung up")?;
-    let chk = check_control_msg_id(MESSAGE_VERSION_REQUEST,&pkt);
+    let chk = check_control_msg_id(ControlMessageType::MESSAGE_VERSION_REQUEST,&pkt);
     match chk {
         Ok(_v) => info!( "{} HU version request received, sending VersionResponse back...",get_name()),
         Err(e) => {error!( "{} HU sent unexpected channel message", get_name()); return Err(e)},
@@ -1574,8 +1574,8 @@ pub async fn ch_proxy(
     //let mut response = VersionResponse::new();
     //let mut payload: Vec<u8> = response.write_to_bytes()?;
     let mut payload: Vec<u8>=Vec::new();
-    payload.push(((MESSAGE_VERSION_RESPONSE as u16) >> 8) as u8);
-    payload.push( ((MESSAGE_VERSION_RESPONSE as u16) & 0xff) as u8);
+    payload.push(((ControlMessageType::MESSAGE_VERSION_RESPONSE as u16) >> 8) as u8);
+    payload.push( ((ControlMessageType::MESSAGE_VERSION_RESPONSE as u16) & 0xff) as u8);
     payload.push( pkt.payload[2]);//send back same version as requested
     payload.push( pkt.payload[3]);
     payload.push( pkt.payload[4]);
@@ -1595,7 +1595,7 @@ pub async fn ch_proxy(
 
     info!( "{} Waiting for HU MESSAGE_AUTH_COMPLETE...",get_name());
     let pkt = rx_srv.recv().await.ok_or("rx_srv channel hung up")?;
-    let chk = check_control_msg_id(MESSAGE_AUTH_COMPLETE,&pkt);
+    let chk = check_control_msg_id(ControlMessageType::MESSAGE_AUTH_COMPLETE,&pkt);
     match chk {
         Ok(_v) => info!( "{} MESSAGE_AUTH_COMPLETE received",get_name()),
         Err(e) => {error!( "{} HU sent unexpected channel message", get_name()); return Err(e)},
@@ -1807,8 +1807,8 @@ pub async fn ch_proxy(
         focus_req.set_request(AudioFocusRequestType::AUDIO_FOCUS_GAIN);
 
         let mut payload: Vec<u8>=focus_req.write_to_bytes()?;
-        payload.insert(0,((MESSAGE_AUDIO_FOCUS_REQUEST as u16) >> 8) as u8);
-        payload.insert( 1,((MESSAGE_AUDIO_FOCUS_REQUEST as u16) & 0xff) as u8);
+        payload.insert(0,((ControlMessageType::MESSAGE_AUDIO_FOCUS_REQUEST as u16) >> 8) as u8);
+        payload.insert( 1,((ControlMessageType::MESSAGE_AUDIO_FOCUS_REQUEST as u16) & 0xff) as u8);
 
         let pkt_rsp = Packet {
             channel: 0,
