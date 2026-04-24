@@ -534,7 +534,6 @@ impl Bluetooth {
         stopped: bool,
         bt_poweroff: bool,
     ) -> Result<()> {
-        let mut hsp_handle = None;
         // Use the provided session and adapter instead of creating new ones
         let (address, mut stream) = self.get_aa_profile_connection(connect, bt_timeout, stopped).await?;
         Self::send_params(wifi_config.clone(), &mut stream).await?;
