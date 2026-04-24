@@ -1624,8 +1624,8 @@ pub async fn ch_proxy(
     sdreq.set_label_text("aa-mirror-rs".to_owned());
     sdreq.set_device_name("aa-mirror-os".to_owned());
     let mut payload: Vec<u8>=sdreq.write_to_bytes()?;
-    payload.insert(0,((MESSAGE_SERVICE_DISCOVERY_REQUEST as u16) >> 8) as u8);
-    payload.insert( 1,((MESSAGE_SERVICE_DISCOVERY_REQUEST as u16) & 0xff) as u8);
+    payload.insert(0,((ControlMessageType::MESSAGE_SERVICE_DISCOVERY_REQUEST as u16) >> 8) as u8);
+    payload.insert( 1,((ControlMessageType::MESSAGE_SERVICE_DISCOVERY_REQUEST as u16) & 0xff) as u8);
 
     let pkt_rsp = Packet {
         channel: 0,
@@ -1639,7 +1639,7 @@ pub async fn ch_proxy(
 
     info!( "{} Waiting for HU MESSAGE_SERVICE_DISCOVERY_RESPONSE...",get_name());
     let pkt = rx_srv.recv().await.ok_or("rx_srv channel hung up")?;
-    let chk = check_control_msg_id(MESSAGE_SERVICE_DISCOVERY_RESPONSE,&pkt);
+    let chk = check_control_msg_id(ControlMessageType::MESSAGE_SERVICE_DISCOVERY_RESPONSE,&pkt);
     match chk {
         Ok(_v) => info!( "{} MESSAGE_SERVICE_DISCOVERY_RESPONSE received",get_name()),
         Err(e) => {error!( "{} HU sent unexpected channel message", get_name()); return Err(e)},
@@ -1849,15 +1849,15 @@ pub async fn ch_proxy(
                 else { //Default channel messages
                     let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
                     let control = protos::ControlMessageType::from_i32(message_id);
-                    match control.unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) {
+                    match control.unwrap_or(ControlMessageType::MESSAGE_UNEXPECTED_MESSAGE) {
                         ControlMessageType::MESSAGE_PING_REQUEST =>{
                             let data = &pkt.payload[2..]; // start of message data, without message_id
                             if let Ok(msg) = PingRequest::parse_from_bytes(&data) {
                                 let mut pingrsp= PingResponse::new();
                                 pingrsp.set_timestamp(msg.timestamp());
                                 let mut payload: Vec<u8>=pingrsp.write_to_bytes()?;
-                                payload.insert(0,((MESSAGE_PING_RESPONSE as u16) >> 8) as u8);
-                                payload.insert( 1,((MESSAGE_PING_RESPONSE as u16) & 0xff) as u8);
+                                payload.insert(0,((ControlMessageType::MESSAGE_PING_RESPONSE as u16) >> 8) as u8);
+                                payload.insert( 1,((ControlMessageType::MESSAGE_PING_RESPONSE as u16) & 0xff) as u8);
                                 let pkt_rsp = Packet {
                                     channel: 0,
                                     flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
@@ -1889,7 +1889,7 @@ pub async fn ch_proxy(
                                             info!( "{} Send custom CMD_OPEN_CH for ch {}",get_name(), channel_status[idx].ch_id);
 
                                             let mut payload= Vec::new();
-                                            payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+                                            payload.extend_from_slice(&(ControlMessageType::MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
                                             payload.extend_from_slice(&(CustomCommand::CMD_OPEN_CH as u16).to_be_bytes());
                                             let pkt_rsp = Packet {
                                                 channel: (channel_status[idx].ch_id) as u8,
