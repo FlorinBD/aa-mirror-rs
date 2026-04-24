@@ -665,7 +665,7 @@ impl PacketProxyMITM
         let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
 
 
-        debug!("{}> ch: {} flags: {:04X} message_id = {:04X}, {:?}",source, pkt.channel,pkt.flags, message_id, control);
+        debug!("{}> ch: {} flags: {:04X} message_id = {:04X}",source, pkt.channel,pkt.flags, message_id);
         if hex_requested >= hexdump {
             debug!("{} {:?} {}", get_name(), hexdump, pkt);
         }
@@ -1103,9 +1103,6 @@ impl PacketProxy
             ControlMessageType::MESSAGE_CHANNEL_OPEN_REQUEST => &ChannelOpenRequest::parse_from_bytes(data)?,
             ControlMessageType::MESSAGE_AUDIO_FOCUS_REQUEST => &AudioFocusRequestNotification::parse_from_bytes(data)?,
             ControlMessageType::MESSAGE_AUDIO_FOCUS_NOTIFICATION => &AudioFocusNotification::parse_from_bytes(data)?,
-            MediaMessageId::MEDIA_MESSAGE_SETUP =>&Setup::parse_from_bytes(data)?,
-            MediaMessageId::MEDIA_MESSAGE_START =>&Start::parse_from_bytes(data)?,
-            MediaMessageId::MEDIA_MESSAGE_CONFIG =>&ChConfig::parse_from_bytes(data)?,
             _ => return Ok(()),
         };
         // show pretty string from the message
@@ -1138,15 +1135,15 @@ pub async fn pkt_debug(
     let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
 
     // trying to obtain an Enum from message_id
-    //let control = protos::ControlMessageType::from_i32(message_id);
-    debug!("{}> ch: {} flags: {:04X} message_id = {:04X}",source, pkt.channel,pkt.flags, message_id);
+    let control = protos::ControlMessageType::from_i32(message_id);
+    debug!("{}> ch: {} flags: {:04X} message_id = {:04X}, {:?}",source, pkt.channel,pkt.flags, message_id, control);
     if hex_requested >= hexdump {
         debug!("{} {:?} {}", get_name(), hexdump, pkt);
     }
 
     // parsing data
     let data = &pkt.payload[2..]; // start of message data
-    match message_id {
+    let message: &dyn MessageDyn = match control.unwrap_or(ControlMessageType::MESSAGE_UNEXPECTED_MESSAGE) {
         ControlMessageType::MESSAGE_VERSION_REQUEST => &VersionRequest::parse_from_bytes(data)?,
         ControlMessageType::MESSAGE_BYEBYE_REQUEST => &ByeByeRequest::parse_from_bytes(data)?,
         ControlMessageType::MESSAGE_BYEBYE_RESPONSE => &ByeByeResponse::parse_from_bytes(data)?,
@@ -1160,9 +1157,6 @@ pub async fn pkt_debug(
         ControlMessageType::MESSAGE_CHANNEL_OPEN_REQUEST => &ChannelOpenRequest::parse_from_bytes(data)?,
         ControlMessageType::MESSAGE_AUDIO_FOCUS_REQUEST => &AudioFocusRequestNotification::parse_from_bytes(data)?,
         ControlMessageType::MESSAGE_AUDIO_FOCUS_NOTIFICATION => &AudioFocusNotification::parse_from_bytes(data)?,
-        MediaMessageId::MEDIA_MESSAGE_SETUP =>&Setup::parse_from_bytes(data)?,
-        MediaMessageId::MEDIA_MESSAGE_START =>&Start::parse_from_bytes(data)?,
-        MediaMessageId::MEDIA_MESSAGE_CONFIG =>&ChConfig::parse_from_bytes(data)?,
         _ => return Ok(()),
     };
     // show pretty string from the message
