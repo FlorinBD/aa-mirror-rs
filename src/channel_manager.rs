@@ -29,7 +29,7 @@ use tokio::sync::{mpsc};
 use tokio::task::JoinHandle;
 use tokio_uring::net::TcpStream;
 use protos::ControlMessageType::{self, *};
-use crate::aa_services::{VideoCodecResolution::*, VideoFPS::*, AudioStream, AudioConfig, MediaCodec::*, ServiceType, CommandState, ServiceStatus, th_bluetooth, VideoStreamingParams, AudioStreamingParams, SensorType};
+use crate::aa_services::{VideoCodecResolution::*, VideoFPS::*, AudioStream, AudioConfig, MediaCodec::*, ServiceType, CommandState, ServiceStatus, th_bluetooth, VideoStreamingParams, AudioStreamingParams, SensorType, AAMessageType};
 use crate::aa_services::{th_input_source, th_media_sink_audio_guidance, th_media_sink_audio_streaming, th_media_sink_video, th_media_source, th_sensor_source, th_vendor_extension};
 use crate::config::{AppConfig, SharedConfig, HU_CONFIG_DELAY_MS, MAX_DATA_LEN, MAX_PACKET_LEN};
 use crate::config_types::HexdumpLevel;
@@ -269,8 +269,8 @@ impl PacketProxyMITM
         let mut ssl_handshake_done=false;
         let mut server = openssl::ssl::SslStream::new(ssl_hu, mem_buf_hu.clone())?;
         let mut client = openssl::ssl::SslStream::new(ssl_md, mem_buf_md.clone())?;
-        let sdr=None;
-        let mut sdr_msg_types = HashMap::new();
+        let mut sdr =None;
+        let mut sdr_msg_types:HashMap<i32,AAMessageType> = HashMap::new();
         info!( "{}: Starting MITM message proxy loop...", get_name());
         loop {
             tokio::select! {
@@ -291,12 +291,44 @@ impl PacketProxyMITM
                     else {
                         match msg.decrypt_payload(&mut mem_buf_hu, &mut server).await {
                             Ok(_) => {
-                                let _ = self.pkt_debug(HexdumpLevel::DecryptedInput, self.dmp_level, &msg, "HU".parse().unwrap()).await;
+                                let _ = self.pkt_debug(sdr_msg_types.get(&(msg.channel as i32)).copied().unwrap_or(AAMessageType::Unknown),HexdumpLevel::DecryptedInput, self.dmp_level, &msg, "HU".parse().unwrap()).await;
                                 let message_id: i32 = u16::from_be_bytes(msg.payload[0..=1].try_into()?).into();
                                 if (msg.channel == 0) && (message_id ==ControlMessageType::MESSAGE_SERVICE_DISCOVERY_RESPONSE as i32)
                                 {
                                     let data = &msg.payload[2..]; // start of message data, without message_id
                                      if  let Ok(_sdr) = ServiceDiscoveryResponse::parse_from_bytes(&data){
+                                        sdr_msg_types.insert(0,AAMessageType::Control);
+                                        for (_,proto_srv) in _sdr.services.iter().enumerate() {
+                                            let sid=i32::from(proto_srv.id());
+                                            if proto_srv.media_sink_service.is_some()
+                                            {
+                                                sdr_msg_types.insert(sid,AAMessageType::Media);
+                                            }
+                                            else if proto_srv.sensor_source_service.is_some()
+                                            {
+                                                sdr_msg_types.insert(sid,AAMessageType::Sensor);
+                                            }
+                                            else if proto_srv.media_source_service.is_some()
+                                            {
+                                                sdr_msg_types.insert(sid,AAMessageType::Media);
+                                            }
+                                            else if proto_srv.input_source_service.is_some()
+                                            {
+                                                sdr_msg_types.insert(sid,AAMessageType::Input);
+                                            }
+                                            else if proto_srv.bluetooth_service.is_some()
+                                            {
+                                                sdr_msg_types.insert(sid,AAMessageType::Bluetooth);
+                                            }
+                                            else if proto_srv.vendor_extension_service.is_some()
+                                            {
+                                                sdr_msg_types.insert(sid,AAMessageType::VendorExtension);
+                                            }
+                                            else if proto_srv.wifi_projection_service.is_some()
+                                            {
+                                                sdr_msg_types.insert(sid,AAMessageType::WiFiProjection);
+                                            }
+                                        }
                                         sdr=Some(_sdr);
                                      }
                                 }
@@ -313,7 +345,7 @@ impl PacketProxyMITM
                 }
                 else
                 {
-                    let _ = self.pkt_debug(HexdumpLevel::DecryptedInput, self.dmp_level, &msg, "HU".parse().unwrap()).await;
+                    //let _ = self.pkt_debug(HexdumpLevel::DecryptedInput, self.dmp_level, &msg, "HU".parse().unwrap()).await;
                     // message_id is the first 2 bytes of payload
                     let message_id: i32 = u16::from_be_bytes(msg.payload[0..=1].try_into()?).into();
                     if !ssl_handshake_done && (message_id == ControlMessageType::MESSAGE_ENCAPSULATED_SSL as i32)
@@ -329,16 +361,16 @@ impl PacketProxyMITM
                                 client.ssl().state_string_long(),
                             );
                             let pkt = self.ssl_encapsulate(mem_buf_md.clone()).await?;
-                            let _ = self.pkt_debug(HexdumpLevel::RawInput, self.dmp_level, &pkt, "MD".parse().unwrap()).await;
+                            //let _ = self.pkt_debug(HexdumpLevel::RawInput, self.dmp_level, &pkt, "MD".parse().unwrap()).await;
                             pkt.transmit(&mut md_tx).await.with_context(|| format!("{}: transmit failed", get_name()))?;
 
                             //Step2 MD: Read server hello
                             let pkt = md_rx.recv().await.ok_or("reader channel hung up")?;
-                            let _ = self.pkt_debug(HexdumpLevel::RawInput, self.dmp_level, &pkt, "MD".parse().unwrap()).await;
+                            //let _ = self.pkt_debug(HexdumpLevel::RawInput, self.dmp_level, &pkt, "MD".parse().unwrap()).await;
                             pkt.ssl_decapsulate_write(&mut mem_buf_md).await?;
 
                             //Step1 HU: parse client hello
-                            let _ = self.pkt_debug(HexdumpLevel::RawInput, self.dmp_level, &msg, "HU".parse().unwrap()).await;
+                            //let _ = self.pkt_debug(HexdumpLevel::RawInput, self.dmp_level, &msg, "HU".parse().unwrap()).await;
                             msg.ssl_decapsulate_write(&mut mem_buf_hu).await?;
                             self.ssl_check_failure(server.accept())?;
                             info!(
@@ -359,22 +391,22 @@ impl PacketProxyMITM
                                 client.ssl().state_string_long(),
                             );
                             let pkt = self.ssl_encapsulate(mem_buf_md.clone()).await?;
-                            let _ = self.pkt_debug(HexdumpLevel::RawInput, self.dmp_level, &pkt, "MD".parse().unwrap()).await;
+                            //let _ = self.pkt_debug(HexdumpLevel::RawInput, self.dmp_level, &pkt, "MD".parse().unwrap()).await;
                             pkt.transmit(&mut md_tx).await.with_context(|| format!("{}: transmit failed", get_name()))?;
 
                             // Step2 HU: send server hello
                             let pkt = self.ssl_encapsulate(mem_buf_hu.clone()).await?;
-                            let _ = self.pkt_debug(HexdumpLevel::RawOutput, self.dmp_level, &pkt,"HU".parse().unwrap()).await;
+                            //let _ = self.pkt_debug(HexdumpLevel::RawOutput, self.dmp_level, &pkt,"HU".parse().unwrap()).await;
                             pkt.transmit(&mut hu_wr).await.with_context(|| format!("{}: transmit failed", get_name()))?;
 
                             //Step4 MD:
                             let pkt = md_rx.recv().await.ok_or("reader channel hung up")?;
-                            let _ = self.pkt_debug(HexdumpLevel::RawInput, self.dmp_level, &pkt, "MD".parse().unwrap()).await;
+                            //let _ = self.pkt_debug(HexdumpLevel::RawInput, self.dmp_level, &pkt, "MD".parse().unwrap()).await;
                             pkt.ssl_decapsulate_write(&mut mem_buf_md).await?;
 
                             //Step3 HU: ClientKeyExchange
                             let pkt = hu_rx.recv().await.ok_or("hu reader channel hung up")?;
-                            let _ = self.pkt_debug(HexdumpLevel::RawInput, self.dmp_level, &pkt, "HU".parse().unwrap()).await;
+                            //let _ = self.pkt_debug(HexdumpLevel::RawInput, self.dmp_level, &pkt, "HU".parse().unwrap()).await;
                             pkt.ssl_decapsulate_write(&mut mem_buf_hu).await?;
                             self.ssl_check_failure(server.accept())?;
                             info!(
@@ -410,21 +442,21 @@ impl PacketProxyMITM
                                 );
                             }
                             let pkt = self.ssl_encapsulate(mem_buf_md.clone()).await?;
-                            let _ = self.pkt_debug(HexdumpLevel::RawInput, self.dmp_level, &pkt, "MD".parse().unwrap()).await;
+                            //let _ = self.pkt_debug(AAMessageType::Control,HexdumpLevel::RawInput, self.dmp_level, &pkt, "MD".parse().unwrap()).await;
                             pkt.transmit(&mut md_tx).await.with_context(|| format!("{}: transmit failed", get_name()))?;
 
                             //Step4 HU: Change Cipher spec finished
                             let pkt = self.ssl_encapsulate(mem_buf_hu.clone()).await?;
-                            let _ = self.pkt_debug(HexdumpLevel::RawOutput, self.dmp_level, &pkt, "HU".parse().unwrap()).await;
+                            //let _ = self.pkt_debug(HexdumpLevel::RawOutput, self.dmp_level, &pkt, "HU".parse().unwrap()).await;
                             pkt.transmit(&mut hu_wr).await.with_context(|| format!("{}: transmit failed", get_name()))?;
 
                             //Step6 MD:
                             let pkt = md_rx.recv().await.ok_or("reader channel hung up")?;
-                            let _ = self.pkt_debug(HexdumpLevel::RawInput, self.dmp_level, &pkt, "MD".parse().unwrap()).await;
+                            //let _ = self.pkt_debug(AAMessageType::Control,HexdumpLevel::RawInput, self.dmp_level, &pkt, "MD".parse().unwrap()).await;
                             pkt.ssl_decapsulate_write(&mut mem_buf_md).await?;
                     }
                     else {
-                        let _ = self.pkt_debug(HexdumpLevel::DecryptedInput, self.dmp_level, &msg, "HU".parse().unwrap()).await;
+                        let _ = self.pkt_debug(AAMessageType::Control,HexdumpLevel::DecryptedInput, self.dmp_level, &msg, "HU".parse().unwrap()).await;
                         msg.transmit(&mut md_tx).await.with_context(|| format!("{}: Service transmit to MD failed", get_name()))?;
                     }
 
@@ -447,7 +479,7 @@ impl PacketProxyMITM
                             ).await;*/
                             match msg.decrypt_payload(&mut mem_buf_md, &mut client).await {
                             Ok(_) => {
-                                let _ = self.pkt_debug(HexdumpLevel::DecryptedInput, self.dmp_level, &msg, "MD".parse().unwrap()).await;
+                                let _ = self.pkt_debug(sdr_msg_types.get(&(msg.channel as i32)).copied().unwrap_or(AAMessageType::Unknown),HexdumpLevel::DecryptedInput, self.dmp_level, &msg, "MD".parse().unwrap()).await;
                                 match msg.encrypt_payload(&mut mem_buf_hu, &mut server).await {
                                 Ok(_) => {
                                      self.w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
@@ -462,7 +494,7 @@ impl PacketProxyMITM
                 }
                 else
                 {
-                       let _ = self.pkt_debug(HexdumpLevel::DecryptedInput, self.dmp_level, &msg, "MD".parse().unwrap()).await;
+                       let _ = self.pkt_debug(AAMessageType::Control,HexdumpLevel::DecryptedInput, self.dmp_level, &msg, "MD".parse().unwrap()).await;
                         // Increment byte counters for statistics
                         // fixme: compute final_len for precise stats
                         self.w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
@@ -611,6 +643,7 @@ impl PacketProxyMITM
 
     /// shows packet/message contents as pretty string for debug
     pub async fn pkt_debug(&self,
+                           msg_type:AAMessageType,
                            hexdump: HexdumpLevel,
                            hex_requested: HexdumpLevel,
                            pkt: &Packet,
@@ -637,27 +670,43 @@ impl PacketProxyMITM
 
         // parsing data
         let data = &pkt.payload[2..]; // start of message data
-        let message: &dyn MessageDyn = match control.unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) {
-            MESSAGE_VERSION_REQUEST => &VersionRequest::parse_from_bytes(data)?,
-            MESSAGE_BYEBYE_REQUEST => &ByeByeRequest::parse_from_bytes(data)?,
-            MESSAGE_BYEBYE_RESPONSE => &ByeByeResponse::parse_from_bytes(data)?,
-            MESSAGE_AUTH_COMPLETE => &AuthResponse::parse_from_bytes(data)?,
-            MESSAGE_SERVICE_DISCOVERY_REQUEST => &ServiceDiscoveryRequest::parse_from_bytes(data)?,
-            MESSAGE_SERVICE_DISCOVERY_RESPONSE => &ServiceDiscoveryResponse::parse_from_bytes(data)?,
-            MESSAGE_PING_REQUEST => &PingRequest::parse_from_bytes(data)?,
-            MESSAGE_PING_RESPONSE => &PingResponse::parse_from_bytes(data)?,
-            MESSAGE_NAV_FOCUS_REQUEST => &NavFocusRequestNotification::parse_from_bytes(data)?,
-            MESSAGE_CHANNEL_OPEN_RESPONSE => &ChannelOpenResponse::parse_from_bytes(data)?,
-            MESSAGE_CHANNEL_OPEN_REQUEST => &ChannelOpenRequest::parse_from_bytes(data)?,
-            MESSAGE_AUDIO_FOCUS_REQUEST => &AudioFocusRequestNotification::parse_from_bytes(data)?,
-            MESSAGE_AUDIO_FOCUS_NOTIFICATION => &AudioFocusNotification::parse_from_bytes(data)?,
-            MEDIA_MESSAGE_SETUP =>&Setup::parse_from_bytes(data)?,
-            MEDIA_MESSAGE_START =>&Start::parse_from_bytes(data)?,
-            MEDIA_MESSAGE_CONFIG =>&ChConfig::parse_from_bytes(data)?,
-            _ => return Ok(()),
-        };
-        // show pretty string from the message
-        debug!("{}", print_to_string_pretty(message));
+        match msg_type {
+            AAMessageType::Control =>
+            {
+                let message: &dyn MessageDyn = match control.unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) {
+                    MESSAGE_VERSION_REQUEST => &VersionRequest::parse_from_bytes(data)?,
+                    MESSAGE_BYEBYE_REQUEST => &ByeByeRequest::parse_from_bytes(data)?,
+                    MESSAGE_BYEBYE_RESPONSE => &ByeByeResponse::parse_from_bytes(data)?,
+                    MESSAGE_AUTH_COMPLETE => &AuthResponse::parse_from_bytes(data)?,
+                    MESSAGE_SERVICE_DISCOVERY_REQUEST => &ServiceDiscoveryRequest::parse_from_bytes(data)?,
+                    MESSAGE_SERVICE_DISCOVERY_RESPONSE => &ServiceDiscoveryResponse::parse_from_bytes(data)?,
+                    MESSAGE_PING_REQUEST => &PingRequest::parse_from_bytes(data)?,
+                    MESSAGE_PING_RESPONSE => &PingResponse::parse_from_bytes(data)?,
+                    MESSAGE_NAV_FOCUS_REQUEST => &NavFocusRequestNotification::parse_from_bytes(data)?,
+                    MESSAGE_CHANNEL_OPEN_RESPONSE => &ChannelOpenResponse::parse_from_bytes(data)?,
+                    MESSAGE_CHANNEL_OPEN_REQUEST => &ChannelOpenRequest::parse_from_bytes(data)?,
+                    MESSAGE_AUDIO_FOCUS_REQUEST => &AudioFocusRequestNotification::parse_from_bytes(data)?,
+                    MESSAGE_AUDIO_FOCUS_NOTIFICATION => &AudioFocusNotification::parse_from_bytes(data)?,
+                    _ => return Ok(()),
+                };
+                // show pretty string from the message
+                debug!("{}", print_to_string_pretty(message));
+            }
+            AAMessageType::Media =>
+                {
+                    let message: &dyn MessageDyn = match control.unwrap_or(MESSAGE_UNEXPECTED_MESSAGE) {
+                        MEDIA_MESSAGE_SETUP =>&Setup::parse_from_bytes(data)?,
+                        MEDIA_MESSAGE_START =>&Start::parse_from_bytes(data)?,
+                        MEDIA_MESSAGE_CONFIG =>&ChConfig::parse_from_bytes(data)?,
+                        _ => return Ok(()),
+                    };
+                    // show pretty string from the message
+                    debug!("{}", print_to_string_pretty(message));
+                }
+            _ => {
+                debug!("{}", "Unknown message type received");
+            }
+        }
 
         Ok(())
     }

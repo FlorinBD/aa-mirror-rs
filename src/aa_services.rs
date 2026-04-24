@@ -55,6 +55,7 @@ pub enum AAMessageType
     Sensor,
     VendorExtension,
     Bluetooth,
+    WiFiProjection,
 }
 
 impl Default for ServiceType {
