@@ -890,14 +890,14 @@ impl PacketProxy
                 }
                 else
                 {
-                    let _ = self.pkt_debug(HexdumpLevel::DecryptedInput, self.dmp_level, &msg, "HU".parse().unwrap()).await;
+                    let _ = pkt_debug(HexdumpLevel::DecryptedInput, self.dmp_level, &msg, "HU".parse().unwrap()).await;
                     // message_id is the first 2 bytes of payload
                     let message_id: i32 = u16::from_be_bytes(msg.payload[0..=1].try_into()?).into();
                     if !ssl_handshake_done && (message_id == ControlMessageType::MESSAGE_ENCAPSULATED_SSL as i32)
                     {
                         // doing SSL handshake
                             //Step1: parse client hello
-                            let _ = self.pkt_debug(HexdumpLevel::RawInput, self.dmp_level, &msg, "HU".parse().unwrap()).await;
+                            let _ = pkt_debug(HexdumpLevel::RawInput, self.dmp_level, &msg, "HU".parse().unwrap()).await;
                             msg.ssl_decapsulate_write(&mut mem_buf).await?;
                             self.ssl_check_failure(server.accept())?;
                             info!(
@@ -909,12 +909,12 @@ impl PacketProxy
                             );
                             // Step2: send server hello
                             let pkt = self.ssl_encapsulate(mem_buf.clone()).await?;
-                            let _ = self.pkt_debug(HexdumpLevel::RawOutput, self.dmp_level, &pkt,"MD".parse().unwrap()).await;
+                            let _ = pkt_debug(HexdumpLevel::RawOutput, self.dmp_level, &pkt,"MD".parse().unwrap()).await;
                             pkt.transmit(&mut hu_wr).await.with_context(|| format!("{}: transmit failed", get_name()))?;
 
                             //Step3: ClientKeyExchange
                             let pkt = hu_rx.recv().await.ok_or("hu reader channel hung up")?;
-                            let _ = self.pkt_debug(HexdumpLevel::RawInput, self.dmp_level, &pkt, "HU".parse().unwrap()).await;
+                            let _ = pkt_debug(HexdumpLevel::RawInput, self.dmp_level, &pkt, "HU".parse().unwrap()).await;
                             pkt.ssl_decapsulate_write(&mut mem_buf).await?;
                             self.ssl_check_failure(server.accept())?;
                             info!(
@@ -934,7 +934,7 @@ impl PacketProxy
                             }
                             //Step4: Change Cipher spec finished
                             let pkt = self.ssl_encapsulate(mem_buf.clone()).await?;
-                            let _ = self.pkt_debug(HexdumpLevel::RawOutput, self.dmp_level, &pkt, "MD".parse().unwrap()).await;
+                            let _ = pkt_debug(HexdumpLevel::RawOutput, self.dmp_level, &pkt, "MD".parse().unwrap()).await;
                             pkt.transmit(&mut hu_wr).await.with_context(|| format!("{}: transmit failed", get_name()))?;
                     }
                     else {
@@ -1059,56 +1059,6 @@ impl PacketProxy
             final_length: None,
             payload: res,
         })
-    }
-
-    /// shows packet/message contents as pretty string for debug
-    pub async fn pkt_debug(&self,
-        hexdump: HexdumpLevel,
-        hex_requested: HexdumpLevel,
-        pkt: &Packet,
-        source:String,
-    ) -> Result<()> {
-        // don't run further if we are not in Debug mode
-        if !log_enabled!(Level::Debug) {
-            return Ok(());
-        }
-
-        // if for some reason we have too small packet, bail out
-        if pkt.payload.len() < 2 {
-            return Ok(());
-        }
-        // message_id is the first 2 bytes of payload
-        let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-
-        // trying to obtain an Enum from message_id
-        let control = protos::ControlMessageType::from_i32(message_id);
-        debug!("{}> ch: {} flags: {:04X} message_id = {:04X}, {:?}",source, pkt.channel,pkt.flags, message_id, control);
-        if hex_requested >= hexdump {
-            debug!("{} {:?} {}", get_name(), hexdump, pkt);
-        }
-
-        // parsing data
-        let data = &pkt.payload[2..]; // start of message data
-        let message: &dyn MessageDyn = match control.unwrap() {
-            ControlMessageType::MESSAGE_VERSION_REQUEST => &VersionRequest::parse_from_bytes(data)?,
-            ControlMessageType::MESSAGE_BYEBYE_REQUEST => &ByeByeRequest::parse_from_bytes(data)?,
-            ControlMessageType::MESSAGE_BYEBYE_RESPONSE => &ByeByeResponse::parse_from_bytes(data)?,
-            ControlMessageType::MESSAGE_AUTH_COMPLETE => &AuthResponse::parse_from_bytes(data)?,
-            ControlMessageType::MESSAGE_SERVICE_DISCOVERY_REQUEST => &ServiceDiscoveryRequest::parse_from_bytes(data)?,
-            ControlMessageType::MESSAGE_SERVICE_DISCOVERY_RESPONSE => &ServiceDiscoveryResponse::parse_from_bytes(data)?,
-            ControlMessageType::MESSAGE_PING_REQUEST => &PingRequest::parse_from_bytes(data)?,
-            ControlMessageType::MESSAGE_PING_RESPONSE => &PingResponse::parse_from_bytes(data)?,
-            ControlMessageType::MESSAGE_NAV_FOCUS_REQUEST => &NavFocusRequestNotification::parse_from_bytes(data)?,
-            ControlMessageType::MESSAGE_CHANNEL_OPEN_RESPONSE => &ChannelOpenResponse::parse_from_bytes(data)?,
-            ControlMessageType::MESSAGE_CHANNEL_OPEN_REQUEST => &ChannelOpenRequest::parse_from_bytes(data)?,
-            ControlMessageType::MESSAGE_AUDIO_FOCUS_REQUEST => &AudioFocusRequestNotification::parse_from_bytes(data)?,
-            ControlMessageType::MESSAGE_AUDIO_FOCUS_NOTIFICATION => &AudioFocusNotification::parse_from_bytes(data)?,
-            _ => return Ok(()),
-        };
-        // show pretty string from the message
-        debug!("{}", print_to_string_pretty(message));
-
-        Ok(())
     }
 
     fn get_name(&self,) -> String {
