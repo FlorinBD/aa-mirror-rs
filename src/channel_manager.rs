@@ -41,7 +41,7 @@ use crate::io_uring::BUFFER_LEN;
 // module name for logging engine
 fn get_name() -> String {
     let dev = "CH Manager";
-    format!("<i><bright-black> aa-mirror/{}: </>", dev)
+    format!("<i><bright-black>{}: </>", dev)
 }
 
 // Just a generic Result type to ease error handling for us. Errors in multithreaded
@@ -367,6 +367,7 @@ impl PacketProxyMITM
                             pkt.transmit(&mut md_tx).await.with_context(|| format!("{}: transmit failed", get_name()))?;
 
                             //Step2 MD: Read server hello
+                            info!("{} 🔒 MD reading server hello",get_name());
                             let pkt = md_rx.recv().await.ok_or("reader channel hung up")?;
                             //let _ = self.pkt_debug(HexdumpLevel::RawInput, self.dmp_level, &pkt, "MD".parse().unwrap()).await;
                             pkt.ssl_decapsulate_write(&mut mem_buf_md).await?;
@@ -587,7 +588,7 @@ impl PacketProxyMITM
 
         let openssl_ctx = ctx_builder.build();
         let mut ssl = Ssl::new(&openssl_ctx)?;
-        ssl.set_accept_state(); // SSL server
+        ssl.set_connect_state(); // SSL client
         Ok(ssl)
     }
 
