@@ -333,7 +333,7 @@ impl PacketProxyMITM
                                         sdr=Some(_sdr);
                                      }
                                 }
-                                self.pkt_modify_hook(&msg, sdr_msg_types.get(&(msg.channel as i32)).copied().unwrap_or(AAMessageType::Unknown)).await?;
+                                self.pkt_modify_hook(&mut msg, sdr_msg_types.get(&(msg.channel as i32)).copied().unwrap_or(AAMessageType::Unknown)).await;
                                 match msg.encrypt_payload(&mut mem_buf_md, &mut client).await {
                                 Ok(_) => {
                                      msg.transmit(&mut md_tx).await.with_context(|| format!("{}: Service transmit to MD failed", get_name()))?;
@@ -595,7 +595,7 @@ impl PacketProxyMITM
                         }
                         info!("{}/packet_modify_hook: <yellow>enabling developer mode</>",get_name());
                         // Regenerate payload with ALL spoofed fields
-                        pkt.payload = msg.write_to_bytes()?;
+                        pkt.payload = msg.write_to_bytes();
                         pkt.payload.insert(0, (message_id >> 8) as u8);
                         pkt.payload.insert(1, (message_id & 0xff) as u8);
                     }
