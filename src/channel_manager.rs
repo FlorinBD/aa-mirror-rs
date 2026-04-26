@@ -284,7 +284,7 @@ impl PacketProxyMITM
                 // Increment byte counters for statistics
                 // fixme: compute final_len for precise stats
                 self.r_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
-                debug!("{}: Received {:?} bytes from HU on ch id: {:?}", get_name(), HEADER_LENGTH + msg.payload.len(), msg.channel);
+                //debug!("{}: Received {:?} bytes from HU on ch id: {:?}", get_name(), HEADER_LENGTH + msg.payload.len(), msg.channel);
                 ch_id_hu=msg.channel as i32;
                 if msg.flags&ENCRYPTED !=0
                 {
@@ -737,8 +737,8 @@ impl PacketProxyMITM
                     ControlMessageType::MESSAGE_AUTH_COMPLETE => &AuthResponse::parse_from_bytes(data)?,
                     ControlMessageType::MESSAGE_SERVICE_DISCOVERY_REQUEST => &ServiceDiscoveryRequest::parse_from_bytes(data)?,
                     ControlMessageType::MESSAGE_SERVICE_DISCOVERY_RESPONSE => &ServiceDiscoveryResponse::parse_from_bytes(data)?,
-                    ControlMessageType::MESSAGE_PING_REQUEST => &PingRequest::parse_from_bytes(data)?,
-                    ControlMessageType::MESSAGE_PING_RESPONSE => &PingResponse::parse_from_bytes(data)?,
+                    //ControlMessageType::MESSAGE_PING_REQUEST => &PingRequest::parse_from_bytes(data)?,
+                    //ControlMessageType::MESSAGE_PING_RESPONSE => &PingResponse::parse_from_bytes(data)?,
                     ControlMessageType::MESSAGE_NAV_FOCUS_REQUEST => &NavFocusRequestNotification::parse_from_bytes(data)?,
                     ControlMessageType::MESSAGE_CHANNEL_OPEN_RESPONSE => &ChannelOpenResponse::parse_from_bytes(data)?,
                     ControlMessageType::MESSAGE_CHANNEL_OPEN_REQUEST => &ChannelOpenRequest::parse_from_bytes(data)?,
@@ -757,7 +757,7 @@ impl PacketProxyMITM
                         MediaMessageId::MEDIA_MESSAGE_SETUP =>&Setup::parse_from_bytes(data)?,
                         MediaMessageId::MEDIA_MESSAGE_START =>&Start::parse_from_bytes(data)?,
                         MediaMessageId::MEDIA_MESSAGE_CONFIG =>&ChConfig::parse_from_bytes(data)?,
-                        MediaMessageId::MEDIA_MESSAGE_ACK =>&Ack::parse_from_bytes(data)?,
+                        //MediaMessageId::MEDIA_MESSAGE_ACK =>&Ack::parse_from_bytes(data)?,
                         MediaMessageId::MEDIA_MESSAGE_VIDEO_FOCUS_REQUEST =>&VideoFocusRequestNotification::parse_from_bytes(data)?,
                         MediaMessageId::MEDIA_MESSAGE_VIDEO_FOCUS_NOTIFICATION =>&VideoFocusNotification::parse_from_bytes(data)?,
                         _ => return Ok(()),
