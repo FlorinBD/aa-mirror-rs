@@ -272,6 +272,7 @@ impl PacketProxyMITM
         let mut client = openssl::ssl::SslStream::new(ssl_md, mem_buf_md.clone())?;
         let mut sdr =None;
         let mut sdr_msg_types:HashMap<i32,AAMessageType> = HashMap::new();
+        let mut ch_id_hu=0;
         info!( "{}: Starting MITM message proxy loop...", get_name());
         loop {
             tokio::select! {
@@ -282,7 +283,7 @@ impl PacketProxyMITM
                 // Increment byte counters for statistics
                 // fixme: compute final_len for precise stats
                 self.r_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
-
+                ch_id_hu=msg.channel as i32;
                 if msg.flags&ENCRYPTED !=0
                 {
                     if !ssl_handshake_done
@@ -333,7 +334,7 @@ impl PacketProxyMITM
                                         sdr=Some(_sdr);
                                      }
                                 }
-                                self.pkt_modify_hook(&mut msg, sdr_msg_types.get(&(msg.channel as i32)).copied().unwrap_or(AAMessageType::Unknown)).await;
+                                self.pkt_modify_hook(&mut msg, sdr_msg_types.get(&ch_id_hu).copied().unwrap_or(AAMessageType::Unknown)).await;
                                 match msg.encrypt_payload(&mut mem_buf_md, &mut client).await {
                                 Ok(_) => {
                                      msg.transmit(&mut md_tx).await.with_context(|| format!("{}: Service transmit to MD failed", get_name()))?;
@@ -614,7 +615,7 @@ impl PacketProxyMITM
                         }
 
                         // Regenerate payload with ALL spoofed fields
-                        pkt.payload = msg.write_to_bytes();
+                        pkt.payload = msg.write_to_bytes().expect("error regenerating Packet payload");
                         pkt.payload.insert(0, (message_id >> 8) as u8);
                         pkt.payload.insert(1, (message_id & 0xff) as u8);
                     }
