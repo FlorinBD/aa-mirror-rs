@@ -579,21 +579,40 @@ impl PacketProxyMITM
             let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into().unwrap()).into();
             if message_id ==ControlMessageType::MESSAGE_SERVICE_DISCOVERY_RESPONSE as i32
             {
-                if self.cfg.developer_mode
+                if self.cfg.developer_mode || self.cfg.dpi > 0
                 {
                     let data = &pkt.payload[2..]; // start of message data
                     if let Ok(mut msg) = ServiceDiscoveryResponse::parse_from_bytes(&data){
-                        msg.set_make(DHU_MAKE_DEV.into());
-                        msg.set_model(DHU_MODEL_DEV.into());
-                        msg.set_head_unit_make(DHU_MAKE_DEV.into());
-                        msg.set_head_unit_model(DHU_MODEL_DEV.into());
-                        if let Some(info) = msg.headunit_info.as_mut() {
-                            info.set_make(DHU_MAKE_DEV.into());
-                            info.set_model(DHU_MODEL_DEV.into());
-                            info.set_head_unit_make(DHU_MAKE_DEV.into());
-                            info.set_head_unit_model(DHU_MODEL_DEV.into());
+                        if self.cfg.developer_mode
+                        {
+                            msg.set_make(DHU_MAKE_DEV.into());
+                            msg.set_model(DHU_MODEL_DEV.into());
+                            msg.set_head_unit_make(DHU_MAKE_DEV.into());
+                            msg.set_head_unit_model(DHU_MODEL_DEV.into());
+                            if let Some(info) = msg.headunit_info.as_mut() {
+                                info.set_make(DHU_MAKE_DEV.into());
+                                info.set_model(DHU_MODEL_DEV.into());
+                                info.set_head_unit_make(DHU_MAKE_DEV.into());
+                                info.set_head_unit_model(DHU_MODEL_DEV.into());
+                            }
+                            info!("{}/packet_modify_hook: <yellow>enabling developer mode</>",get_name());
                         }
-                        info!("{}/packet_modify_hook: <yellow>enabling developer mode</>",get_name());
+                        if self.cfg.dpi > 0
+                        {
+                            if let Some(svc) = msg
+                                .services
+                                .iter_mut()
+                                .find(|svc| !svc.media_sink_service.video_configs.is_empty())
+                            {
+                                // get previous/original value
+                                let prev_val = svc.media_sink_service.video_configs[0].density();
+                                // set new value
+                                svc.media_sink_service.as_mut().unwrap().video_configs[0]
+                                    .set_density(self.cfg.dpi.into());
+                                info!("{}/packet_modify_hook: <yellow>replacing DPI value from <b>{}</> to <b>{}</></>",get_name(),prev_val,self.cfg.dpi);
+                            }
+                        }
+
                         // Regenerate payload with ALL spoofed fields
                         pkt.payload = msg.write_to_bytes();
                         pkt.payload.insert(0, (message_id >> 8) as u8);
