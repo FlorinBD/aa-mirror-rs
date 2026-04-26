@@ -464,6 +464,7 @@ impl PacketProxyMITM
                             let pkt = md_rx.recv().await.ok_or("reader channel hung up")?;
                             //let _ = self.pkt_debug(AAMessageType::Control,HexdumpLevel::RawInput, self.dmp_level, &pkt, "MD".parse().unwrap()).await;
                             pkt.ssl_decapsulate_write(&mut mem_buf_md).await?;
+                            debug!("{} SSL sequence for MD and HU complete",get_name());
                     }
                     else
                     {
