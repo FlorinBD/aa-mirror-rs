@@ -640,7 +640,7 @@ impl PacketProxyMITM
 
         let openssl_ctx = ctx_builder.build();
         let mut ssl = Ssl::new(&openssl_ctx)?;
-        ssl.set_connect_state(); // SSL client
+        ssl.set_accept_state(); // SSL server
         Ok(ssl)
     }
 
@@ -660,7 +660,7 @@ impl PacketProxyMITM
 
         let openssl_ctx = ctx_builder.build();
         let mut ssl = Ssl::new(&openssl_ctx)?;
-        ssl.set_accept_state(); // SSL server
+        ssl.set_connect_state(); // SSL client
         Ok(ssl)
     }
 
