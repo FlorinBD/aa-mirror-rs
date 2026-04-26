@@ -45,7 +45,7 @@ pub enum ServiceType
     Bluetooth,
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 pub enum AAMessageType
 {
     Unknown=-1,

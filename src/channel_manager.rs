@@ -32,7 +32,7 @@ use tokio_uring::net::TcpStream;
 use protos::{ControlMessageType, MediaMessageId};
 use crate::aa_services::{VideoCodecResolution::*, VideoFPS::*, AudioStream, AudioConfig, MediaCodec::*, ServiceType, CommandState, ServiceStatus, th_bluetooth, VideoStreamingParams, AudioStreamingParams, SensorType, AAMessageType};
 use crate::aa_services::{th_input_source, th_media_sink_audio_guidance, th_media_sink_audio_streaming, th_media_sink_video, th_media_source, th_sensor_source, th_vendor_extension};
-use crate::config::{AppConfig, SharedConfig, HU_CONFIG_DELAY_MS, MAX_DATA_LEN, MAX_PACKET_LEN};
+use crate::config::{AppConfig, SharedConfig, DHU_MAKE_DEV, DHU_MODEL_DEV, HU_CONFIG_DELAY_MS, MAX_DATA_LEN, MAX_PACKET_LEN};
 use crate::config_types::HexdumpLevel;
 use crate::io_uring::Endpoint;
 use crate::io_uring::{IoDevice, Result};
@@ -233,7 +233,7 @@ pub struct PacketProxyMITM {
     r_statistics: Arc<AtomicUsize>,
     w_statistics: Arc<AtomicUsize>,
     dmp_level:HexdumpLevel,
-    mitm:bool,
+    cfg:AppConfig,
 }
 
 impl PacketProxyMITM
@@ -242,13 +242,13 @@ impl PacketProxyMITM
         r_statistics: Arc<AtomicUsize>,
         w_statistics: Arc<AtomicUsize>,
         dmp_level: HexdumpLevel,
-        mitm: bool,
+        cfg: AppConfig,
     ) -> Self {
         Self {
             r_statistics,
             w_statistics,
             dmp_level,
-            mitm,
+            cfg,
         }
     }
 
@@ -333,6 +333,7 @@ impl PacketProxyMITM
                                         sdr=Some(_sdr);
                                      }
                                 }
+                                self.pkt_modify_hook(&msg, sdr_msg_types.get(&(msg.channel as i32)).copied().unwrap_or(AAMessageType::Unknown)).await?;
                                 match msg.encrypt_payload(&mut mem_buf_md, &mut client).await {
                                 Ok(_) => {
                                      msg.transmit(&mut md_tx).await.with_context(|| format!("{}: Service transmit to MD failed", get_name()))?;
@@ -558,7 +559,7 @@ impl PacketProxyMITM
                                            md_rx: Receiver<Packet>,
                                            md_tx: IoDevice<TcpStream>,
     ) -> JoinHandle<Result<()>> {
-        if self.mitm
+        if self.cfg.mitm
         {
             tokio_uring::spawn(async move {
                 self.run_mitm(hu_wr, hu_rx, md_rx, md_tx).await
@@ -569,6 +570,37 @@ impl PacketProxyMITM
             tokio_uring::spawn(async move {
                 self.run_pt(hu_wr, hu_rx, md_rx, md_tx).await
             })
+        }
+    }
+    /// packet modification hook
+    async fn pkt_modify_hook(&self, pkt: &mut Packet, pkt_type:AAMessageType) {
+        if pkt_type == AAMessageType::Control
+        {
+            let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into().unwrap()).into();
+            if message_id ==ControlMessageType::MESSAGE_SERVICE_DISCOVERY_RESPONSE as i32
+            {
+                if self.cfg.developer_mode
+                {
+                    let data = &pkt.payload[2..]; // start of message data
+                    if let Ok(mut msg) = ServiceDiscoveryResponse::parse_from_bytes(&data){
+                        msg.set_make(DHU_MAKE_DEV.into());
+                        msg.set_model(DHU_MODEL_DEV.into());
+                        msg.set_head_unit_make(DHU_MAKE_DEV.into());
+                        msg.set_head_unit_model(DHU_MODEL_DEV.into());
+                        if let Some(info) = msg.headunit_info.as_mut() {
+                            info.set_make(DHU_MAKE_DEV.into());
+                            info.set_model(DHU_MODEL_DEV.into());
+                            info.set_head_unit_make(DHU_MAKE_DEV.into());
+                            info.set_head_unit_model(DHU_MODEL_DEV.into());
+                        }
+                        info!("{}/packet_modify_hook: <yellow>enabling developer mode</>",get_name());
+                        // Regenerate payload with ALL spoofed fields
+                        pkt.payload = msg.write_to_bytes()?;
+                        pkt.payload.insert(0, (message_id >> 8) as u8);
+                        pkt.payload.insert(1, (message_id & 0xff) as u8);
+                    }
+                }
+            }
         }
     }
 

@@ -843,7 +843,7 @@ pub async fn io_loop_pt(
         tsk_md_read = tokio_uring::spawn(endpoint_reader(md_r, tx_md));
 
         //packet proxy
-        let pp=PacketProxyMITM::new( stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested, cfg.mitm);
+        let pp=PacketProxyMITM::new( stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested, cfg.clone());
         let mut tsk_packet_proxy=pp.start(hu_w, rx_hu, rx_md, md_w);
 
         // Thread for monitoring transfer

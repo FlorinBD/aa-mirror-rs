@@ -108,6 +108,18 @@
         "mitm": {
           "typ": "boolean",
           "description": "Enable/Disable MITM for AA mode"
+        },
+        "dpi": {
+          "typ": "integer",
+          "description": "Force DPI\n0 = do not change DPI\nIf you are unsure what value to use, start experimenting with e.g. 130. Logs are helpful, as they show both the original HU value and the new one."
+        },
+        "developer_mode": {
+          "typ": "boolean",
+          "description": "Enable developer mode. This option emulates a Google Head Unit, allowing installation and use of applications that are normally unavailable. Commonly used by developers when testing or developing new applications."
+        },
+        "park_mode": {
+          "typ": "boolean",
+          "description": "Override park mode. Intended for VIM and typing while moving. Might not work, depending on phone and Android version. In some cases, this also requires `developer_mode` to be enabled above."
         }
       }
     },

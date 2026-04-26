@@ -30,6 +30,10 @@ pub const MAX_PACKET_LEN: usize = 0x4000;
 ///Max unencrypted data len, we have around 50bytes overhead for TLS header and 4 bytes for AA packet
 pub const MAX_DATA_LEN: usize = MAX_PACKET_LEN-100;
 
+// DHU string consts for developer mode
+pub const DHU_MAKE_DEV: &str = "Google";
+pub const DHU_MODEL_DEV: &str = "Desktop Head Unit";
+
 pub type SharedConfig = Arc<RwLock<AppConfig>>;
 pub type SharedConfigJson = Arc<RwLock<ConfigJson>>;
 
@@ -123,6 +127,9 @@ pub struct AppConfig {
     pub webserver: Option<String>,
     pub bt_timeout_secs: u16,
     pub mitm: bool,
+    pub dpi: u16,
+    pub developer_mode: bool,
+    pub park_mode: bool,
     pub res_multiplier: f64,
     #[serde(default, deserialize_with = "empty_string_as_none")]
     pub wired: Option<UsbId>,
@@ -245,6 +252,9 @@ impl Default for AppConfig {
             btalias: None,
             timeout_secs: 5,
             mitm: false,
+            dpi: 0,
+            developer_mode: false,
+            park_mode: false,
             hu_detect_timeout_secs:10,
             webserver: webserver_default_bind(),
             bt_timeout_secs: 30,
@@ -342,6 +352,9 @@ impl AppConfig {
         doc["wired"] = value(self.wired.as_ref().map_or(String::new(), |w| w.to_string()));
         doc["dhu"] = value(self.dhu);
         doc["mitm"] = value(self.mitm);
+        doc["dpi"]=value(self.dpi as i64);
+        doc["developer_mode"] = value(self.developer_mode);
+        doc["park_mode"] = value(self.park_mode);
         doc["enable_ssh"] = value(self.enable_ssh);
         doc["enable_ftp"] = value(self.enable_ftp);
         doc["usb_serial_console"] = value(self.usb_serial_console);
