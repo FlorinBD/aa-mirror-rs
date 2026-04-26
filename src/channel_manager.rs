@@ -284,7 +284,7 @@ impl PacketProxyMITM
                 // Increment byte counters for statistics
                 // fixme: compute final_len for precise stats
                 self.r_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
-                    debug!("{}: Received {:?} bytes from HU", get_name(), HEADER_LENGTH + msg.payload.len());
+                debug!("{}: Received {:?} bytes from HU on ch id: {:?}", get_name(), HEADER_LENGTH + msg.payload.len(), msg.channel);
                 ch_id_hu=msg.channel as i32;
                 if msg.flags&ENCRYPTED !=0
                 {
@@ -465,7 +465,8 @@ impl PacketProxyMITM
                             //let _ = self.pkt_debug(AAMessageType::Control,HexdumpLevel::RawInput, self.dmp_level, &pkt, "MD".parse().unwrap()).await;
                             pkt.ssl_decapsulate_write(&mut mem_buf_md).await?;
                     }
-                    else {
+                    else
+                    {
                         let _ = self.pkt_debug(AAMessageType::Control,HexdumpLevel::DecryptedInput, self.dmp_level, &msg, "HU".parse().unwrap()).await;
                         msg.transmit(&mut md_tx).await.with_context(|| format!("{}: Service transmit to MD failed", get_name()))?;
                     }
