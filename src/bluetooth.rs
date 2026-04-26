@@ -539,7 +539,11 @@ impl Bluetooth {
         Self::send_params(wifi_config.clone(), &mut stream).await?;
         //tcp_start.notify_one();
 
-
+        // attempt graceful shutdown of the RFCOMM stream before disconnect
+        let _ = stream.shutdown().await;
+        // let some phones that have problems with handshake time to
+        // finish all bluetooth frames before disconnect
+        let _ = tokio::time::sleep(Duration::from_millis(150));
         // handshake complete, now disconnect the device so it should
         // connect to real HU for calls
         let device = self.adapter.device(bluer::Address(*address))?;
