@@ -272,6 +272,7 @@ impl PacketProxyMITM
         let mut client = openssl::ssl::SslStream::new(ssl_md, mem_buf_md.clone())?;
         let mut sdr =None;
         let mut sdr_msg_types:HashMap<i32,AAMessageType> = HashMap::new();
+        sdr_msg_types.insert(0,AAMessageType::Control);
         let mut ch_id_hu=0;
         info!( "{}: Starting MITM message proxy loop...", get_name());
         loop {
@@ -283,6 +284,7 @@ impl PacketProxyMITM
                 // Increment byte counters for statistics
                 // fixme: compute final_len for precise stats
                 self.r_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
+                    debug!("{}: Received {:?} bytes from HU", get_name(), HEADER_LENGTH + msg.payload.len());
                 ch_id_hu=msg.channel as i32;
                 if msg.flags&ENCRYPTED !=0
                 {
@@ -293,13 +295,12 @@ impl PacketProxyMITM
                     else {
                         match msg.decrypt_payload(&mut mem_buf_hu, &mut server).await {
                             Ok(_) => {
-                                let _ = self.pkt_debug(sdr_msg_types.get(&(msg.channel as i32)).copied().unwrap_or(AAMessageType::Unknown),HexdumpLevel::DecryptedInput, self.dmp_level, &msg, "HU".parse().unwrap()).await;
+                                let _ = self.pkt_debug(sdr_msg_types.get(&ch_id_hu).copied().unwrap_or(AAMessageType::Unknown),HexdumpLevel::DecryptedInput, self.dmp_level, &msg, "HU".parse().unwrap()).await;
                                 let message_id: i32 = u16::from_be_bytes(msg.payload[0..=1].try_into()?).into();
                                 if (msg.channel == 0) && (message_id ==ControlMessageType::MESSAGE_SERVICE_DISCOVERY_RESPONSE as i32)
                                 {
                                     let data = &msg.payload[2..]; // start of message data, without message_id
                                      if  let Ok(_sdr) = ServiceDiscoveryResponse::parse_from_bytes(&data){
-                                        sdr_msg_types.insert(0,AAMessageType::Control);
                                         for (_,proto_srv) in _sdr.services.iter().enumerate() {
                                             let sid=i32::from(proto_srv.id());
                                             if proto_srv.media_sink_service.is_some()
@@ -475,6 +476,7 @@ impl PacketProxyMITM
                      // Increment byte counters for statistics
                     // fixme: compute final_len for precise stats
                     self.w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
+                     debug!("{}: Received {:?} bytes from MD", get_name(), HEADER_LENGTH + msg.payload.len());
                     if msg.flags&ENCRYPTED !=0
                     {
                         if !ssl_handshake_done
