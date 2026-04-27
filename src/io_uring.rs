@@ -731,7 +731,7 @@ pub async fn io_loop_pt(
                     .split(',')
                     .map(|m| m.trim())
                     .all(|mac| mac == "00:00:00:00:00:00");
-            bt_stopped=!all_zero;
+            bt_stopped=all_zero;
         }
 
         debug!("{}: Waiting on MD to be connected over TCP", NAME);
