@@ -769,7 +769,7 @@ impl PacketProxyMITM
                 {
                     // trying to obtain an Enum from message_id
                     let control = protos::SensorMessageId::from_i32(message_id);
-                    let message: &dyn MessageDyn = match control.unwrap_or(0) {
+                    let message: &dyn MessageDyn = match control {
                         SensorMessageId::SENSOR_MESSAGE_REQUEST =>&SensorRequest::parse_from_bytes(data)?,
                         SensorMessageId::SENSOR_MESSAGE_RESPONSE =>&SensorResponse::parse_from_bytes(data)?,
                         SensorMessageId::SENSOR_MESSAGE_BATCH =>&SensorBatch::parse_from_bytes(data)?,
