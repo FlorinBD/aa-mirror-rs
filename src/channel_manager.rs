@@ -765,6 +765,20 @@ impl PacketProxyMITM
                     // show pretty string from the message
                     debug!("{}", print_to_string_pretty(message));
                 }
+            AAMessageType::Sensor =>
+                {
+                    // trying to obtain an Enum from message_id
+                    let control = protos::SensorMessageId::from_i32(message_id);
+                    let message: &dyn MessageDyn = match control.unwrap_or(0) {
+                        SensorMessageId::SENSOR_MESSAGE_REQUEST =>&SensorRequest::parse_from_bytes(data)?,
+                        SensorMessageId::SENSOR_MESSAGE_RESPONSE =>&SensorResponse::parse_from_bytes(data)?,
+                        SensorMessageId::SENSOR_MESSAGE_BATCH =>&SensorBatch::parse_from_bytes(data)?,
+                        SensorMessageId::SENSOR_MESSAGE_ERROR =>&SensorError::parse_from_bytes(data)?,
+                        _ => return Ok(()),
+                    };
+                    // show pretty string from the message
+                    debug!("{}", print_to_string_pretty(message));
+                }
             _ => {
                 debug!("Unknown message type received: {:?}", msg_type);
             }
