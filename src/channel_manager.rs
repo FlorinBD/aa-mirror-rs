@@ -729,7 +729,7 @@ impl PacketProxyMITM
             AAMessageType::Control =>
             {
                 // trying to obtain an Enum from message_id
-                let control = match protos::SensorMessageId::from_i32(message_id) {
+                let control = match protos::ControlMessageType::from_i32(message_id) {
                     Some(c) => c,
                     None => return Ok(()),
                 };
@@ -755,7 +755,7 @@ impl PacketProxyMITM
             AAMessageType::Media =>
                 {
                     // trying to obtain an Enum from message_id
-                    let control = match protos::SensorMessageId::from_i32(message_id) {
+                    let control = match protos::MediaMessageId::from_i32(message_id) {
                         Some(c) => c,
                         None => return Ok(()),
                     };
