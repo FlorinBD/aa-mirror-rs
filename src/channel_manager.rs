@@ -474,7 +474,7 @@ impl PacketProxyMITM
                      // Increment byte counters for statistics
                     // fixme: compute final_len for precise stats
                     self.w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
-                     debug!("{}: Received {:?} bytes from MD", get_name(), HEADER_LENGTH + msg.payload.len());
+                    //debug!("{}: Received {:?} bytes from MD", get_name(), HEADER_LENGTH + msg.payload.len());
                     if msg.flags&ENCRYPTED !=0
                     {
                         if !ssl_handshake_done
