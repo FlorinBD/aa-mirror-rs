@@ -733,7 +733,7 @@ impl PacketProxyMITM
                     Some(c) => c,
                     None => return Ok(()),
                 };
-                let message: &dyn MessageDyn = match control.unwrap() {
+                let message: &dyn MessageDyn = match control {
                     ControlMessageType::MESSAGE_VERSION_REQUEST => &VersionRequest::parse_from_bytes(data)?,
                     ControlMessageType::MESSAGE_BYEBYE_REQUEST => &ByeByeRequest::parse_from_bytes(data)?,
                     ControlMessageType::MESSAGE_BYEBYE_RESPONSE => &ByeByeResponse::parse_from_bytes(data)?,
@@ -759,7 +759,7 @@ impl PacketProxyMITM
                         Some(c) => c,
                         None => return Ok(()),
                     };
-                    let message: &dyn MessageDyn = match control.unwrap() {
+                    let message: &dyn MessageDyn = match control {
                         MediaMessageId::MEDIA_MESSAGE_SETUP =>&Setup::parse_from_bytes(data)?,
                         MediaMessageId::MEDIA_MESSAGE_START =>&Start::parse_from_bytes(data)?,
                         MediaMessageId::MEDIA_MESSAGE_CONFIG =>&ChConfig::parse_from_bytes(data)?,
