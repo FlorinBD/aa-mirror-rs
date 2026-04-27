@@ -639,7 +639,7 @@ impl PacketProxyMITM
                         }
                         // === GEAR: force PARK ===
                         if !msg.gear_data.is_empty() {
-                            msg.gear_data[0].set_gear(GEAR_PARK);
+                            msg.gear_data[0].set_gear(Gear::GEAR_PARK);
                         }
 
                         // === PARKING BRAKE: engaged ===
@@ -710,7 +710,7 @@ impl PacketProxyMITM
                         }*/
 
                         // Regenerate payload with ALL spoofed fields
-                        pkt.payload = msg.write_to_bytes()?;
+                        pkt.payload = msg.write_to_bytes().expect("error regenerating Packet payload");
                         pkt.payload.insert(0, (message_id >> 8) as u8);
                         pkt.payload.insert(1, (message_id & 0xff) as u8);
                     }
