@@ -14,6 +14,7 @@ use std::net::IpAddr;
 use anyhow::Context;
 use mac_address::MacAddress;
 use nix::sys::prctl::get_name;
+use sha2::digest::typenum::private::Trim;
 use tokio::sync::broadcast::Sender as BroadcastSender;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::{mpsc, Mutex, Notify};
@@ -724,7 +725,15 @@ pub async fn io_loop_pt(
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             continue;
         }
-        bt_stopped=true;
+        if let Some(addresses_to_connect) = cfg.connect.clone().0 {
+            let all_zero = !addresses_to_connect.trim().is_empty() &&
+                addresses_to_connect
+                    .split(',')
+                    .map(|m| m.trim())
+                    .all(|mac| mac == "00:00:00:00:00:00");
+            bt_stopped=!all_zero;
+        }
+
         debug!("{}: Waiting on MD to be connected over TCP", NAME);
         if let Ok((s, ip)) = tcp_wait_for_md_connection(&mut md_listener.as_mut().unwrap()).await {
             md_tcp = Some(s);
