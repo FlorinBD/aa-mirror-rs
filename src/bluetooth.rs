@@ -524,6 +524,9 @@ impl Bluetooth {
             tokio::time::sleep(Duration::from_millis(80)).await;
             info!("{} 🎧 Headset Profile (HSP): unregistered", NAME);
         }
+        else {
+            warn!("{} 🎧 Headset Profile (HSP): unregistering nothing, session lost", NAME);
+        }
     }
 
     pub async fn aa_handshake(
