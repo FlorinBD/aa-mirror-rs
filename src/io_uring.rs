@@ -726,11 +726,8 @@ pub async fn io_loop_pt(
             continue;
         }
         if let Some(addresses_to_connect) = cfg.connect.clone().0 {
-            let all_zero = !addresses_to_connect.trim().is_empty() &&
-                addresses_to_connect
-                    .split(',')
-                    .map(|m| m.trim())
-                    .all(|mac| mac == "00:00:00:00:00:00");
+            let all_zero = !addresses_to_connect.is_empty() && addresses_to_connect.iter()
+                    .all(|addr| *addr == bluer::Address::from([0, 0, 0, 0, 0, 0]));
             bt_stopped=all_zero;
         }
 
