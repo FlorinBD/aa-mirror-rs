@@ -196,11 +196,11 @@ async fn transfer_monitor(
         {
             stall_interval_elapsed =stall_check.elapsed() > init_read_timeout;
         }
-        else 
+        else
         {
             stall_interval_elapsed =stall_check.elapsed() > read_timeout;
         }
-       
+
         if stall_interval_elapsed {
             // compute delta since last check
             stall_usb_bytes_last = usb_bytes_out - stall_usb_bytes_last;
@@ -721,7 +721,6 @@ pub async fn io_loop_pt(
             .await
         {
             error!("{} bluetooth AA handshake error: {}", NAME, e);
-            bluetooth.unregister_hsp().await;
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             continue;
         }
@@ -870,7 +869,7 @@ pub async fn io_loop_pt(
         if let Some(ref mut usb) = usb {
             usb.disconnect().await;
         }
-
+        bluetooth.unregister_hsp().await;
         // Do not await these handles here: `try_join!(flatten(&mut ...))` above
         // may already have polled one of them to completion, and polling a
         // `JoinHandle` after completion panics. Aborting is enough to request
