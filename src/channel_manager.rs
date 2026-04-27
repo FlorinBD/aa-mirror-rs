@@ -813,7 +813,7 @@ impl PacketProxyMITM
         let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
 
 
-        debug!("{}> ch: {} flags: {:04X} message_id = {:04X}",source, pkt.channel,pkt.flags, message_id);
+        //debug!("{}> ch: {} flags: {:04X} message_id = {:04X}",source, pkt.channel,pkt.flags, message_id);
         if hex_requested >= hexdump {
             debug!("{} {:?} {}", get_name(), hexdump, pkt);
         }
