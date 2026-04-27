@@ -533,7 +533,6 @@ impl Bluetooth {
         // connect to real HU for calls
         let device = self.adapter.device(bluer::Address(*address))?;
         let _ = device.disconnect().await;
-        self.unregister_hsp().await;
         if bt_poweroff {
             let _ = self.adapter.set_powered(false).await;
         }
