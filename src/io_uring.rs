@@ -869,7 +869,6 @@ pub async fn io_loop_pt(
         if let Some(ref mut usb) = usb {
             usb.disconnect().await;
         }
-        bluetooth.unregister_hsp().await;
         // Do not await these handles here: `try_join!(flatten(&mut ...))` above
         // may already have polled one of them to completion, and polling a
         // `JoinHandle` after completion panics. Aborting is enough to request

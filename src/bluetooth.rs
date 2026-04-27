@@ -58,7 +58,6 @@ enum MessageId {
 
 pub struct Bluetooth {
     adapter: Adapter,
-    hsp_session: Option<Session>,
     handle_aa: ProfileHandle,
     btle_handle: Option<bluer::gatt::local::ApplicationHandle>,
     adv_handle: Option<bluer::adv::AdvertisementHandle>,
@@ -111,7 +110,6 @@ pub async fn init(
     };
     let handle_aa = session.register_profile(profile).await?;
     info!("{} 📱 AA Wireless Profile: registered", NAME);
-    let mut _hsp_session:Option<Session>=None;
     if !dongle_mode {
         // Headset profile
         let profile = Profile {
@@ -124,7 +122,6 @@ pub async fn init(
         match session.register_profile(profile).await {
             Ok(mut handle) => {
                 info!("{} 🎧 Headset Profile (HSP): registered", NAME);
-                _hsp_session=Some(session);
                 // handling connection to headset profile in own task
                 // it only accepts each incoming connection
                 let _ = Some(tokio::spawn(async move {
@@ -151,7 +148,6 @@ pub async fn init(
     Ok(Bluetooth {
         adapter,
         handle_aa,
-        hsp_session: _hsp_session,
         btle_handle: None,
         adv_handle: None,
         current_index: 0,
@@ -513,20 +509,6 @@ impl Bluetooth {
         read_message(stream, stage, MessageId::WifiConnectStatus, started).await?;
 
         Ok(())
-    }
-
-    /// Drop HSP session here - this unregisters the profile from BlueZ.
-    /// We do it explicitly with a small delay to give BlueZ time to clean up.
-    pub async fn unregister_hsp(&mut self) {
-        if let Some(sess) = self.hsp_session.take() {
-            info!("{} 🎧 Headset Profile (HSP): unregistering ...", NAME);
-            drop(sess);
-            tokio::time::sleep(Duration::from_millis(80)).await;
-            info!("{} 🎧 Headset Profile (HSP): unregistered", NAME);
-        }
-        else {
-            warn!("{} 🎧 Headset Profile (HSP): unregistering nothing, session lost", NAME);
-        }
     }
 
     pub async fn aa_handshake(
