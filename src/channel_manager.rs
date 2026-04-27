@@ -729,8 +729,11 @@ impl PacketProxyMITM
             AAMessageType::Control =>
             {
                 // trying to obtain an Enum from message_id
-                let control = protos::ControlMessageType::from_i32(message_id);
-                let message: &dyn MessageDyn = match control.unwrap_or(ControlMessageType::MESSAGE_UNEXPECTED_MESSAGE) {
+                let control = match protos::SensorMessageId::from_i32(message_id) {
+                    Some(c) => c,
+                    None => return Ok(()),
+                };
+                let message: &dyn MessageDyn = match control.unwrap() {
                     ControlMessageType::MESSAGE_VERSION_REQUEST => &VersionRequest::parse_from_bytes(data)?,
                     ControlMessageType::MESSAGE_BYEBYE_REQUEST => &ByeByeRequest::parse_from_bytes(data)?,
                     ControlMessageType::MESSAGE_BYEBYE_RESPONSE => &ByeByeResponse::parse_from_bytes(data)?,
@@ -752,8 +755,11 @@ impl PacketProxyMITM
             AAMessageType::Media =>
                 {
                     // trying to obtain an Enum from message_id
-                    let control = protos::MediaMessageId::from_i32(message_id);
-                    let message: &dyn MessageDyn = match control.unwrap_or(MediaMessageId::MEDIA_UNEXPECTED_MESSAGE) {
+                    let control = match protos::SensorMessageId::from_i32(message_id) {
+                        Some(c) => c,
+                        None => return Ok(()),
+                    };
+                    let message: &dyn MessageDyn = match control.unwrap() {
                         MediaMessageId::MEDIA_MESSAGE_SETUP =>&Setup::parse_from_bytes(data)?,
                         MediaMessageId::MEDIA_MESSAGE_START =>&Start::parse_from_bytes(data)?,
                         MediaMessageId::MEDIA_MESSAGE_CONFIG =>&ChConfig::parse_from_bytes(data)?,
@@ -768,7 +774,10 @@ impl PacketProxyMITM
             AAMessageType::Sensor =>
                 {
                     // trying to obtain an Enum from message_id
-                    let control = protos::SensorMessageId::from_i32(message_id);
+                    let control = match protos::SensorMessageId::from_i32(message_id) {
+                        Some(c) => c,
+                        None => return Ok(()),
+                    };
                     let message: &dyn MessageDyn = match control {
                         SensorMessageId::SENSOR_MESSAGE_REQUEST =>&SensorRequest::parse_from_bytes(data)?,
                         SensorMessageId::SENSOR_MESSAGE_RESPONSE =>&SensorResponse::parse_from_bytes(data)?,
