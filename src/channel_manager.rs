@@ -622,6 +622,101 @@ impl PacketProxyMITM
                 }
             }
         }
+        else if pkt_type == AAMessageType::Sensor
+        {
+            let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into().unwrap()).into();
+            if message_id ==SensorMessageId::SENSOR_MESSAGE_BATCH as i32
+            {
+                if self.cfg.park_mode
+                {
+                    let data = &pkt.payload[2..]; // start of message data
+                    if let Ok(mut msg) = SensorBatch::parse_from_bytes(&data) {
+                        // === DRIVING STATUS: must be UNRESTRICTED (0) ===
+                        // This is the primary flag AA checks. Value is a bitmask:
+                        // 0 = unrestricted, 1 = no video, 2 = no keyboard, etc.
+                        if !msg.driving_status_data.is_empty() {
+                            msg.driving_status_data[0].set_status(0);
+                        }
+                        // === GEAR: force PARK ===
+                        if !msg.gear_data.is_empty() {
+                            msg.gear_data[0].set_gear(GEAR_PARK);
+                        }
+
+                        // === PARKING BRAKE: engaged ===
+                        // Modern AA cross-checks parking brake with gear/speed.
+                        if !msg.parking_brake_data.is_empty() {
+                            msg.parking_brake_data[0].set_parking_brake(true);
+                        }
+
+                        // === VEHICLE SPEED: zero ===
+                        // SpeedData.speed_e3 is speed in m/s * 1000. Zero = stopped.
+                        /*if !msg.speed_data.is_empty() {
+                            msg.speed_data[0].set_speed_e3(0);
+                            // Also ensure cruise control is disengaged
+                            msg.speed_data[0].set_cruise_engaged(false);
+                        }*/
+
+                        // === GPS/LOCATION: zero speed, keep position ===
+                        // LocationData.speed_e3 is GPS-derived speed.
+                        // Modern AA compares this against SpeedData for consistency.
+                        /*if !msg.location_data.is_empty() {
+                            msg.location_data[0].set_speed_e3(0);
+                            // Zero bearing = not turning
+                            msg.location_data[0].set_bearing_e6(0);
+                        }*/
+
+                        // === ACCELEROMETER: gravity only (stationary) ===
+                        // A parked car only feels gravity on Z axis (~9810 mm/s²).
+                        // Any X/Y acceleration implies movement/turning.
+                        if !msg.accelerometer_data.is_empty() {
+                            msg.accelerometer_data[0].set_acceleration_x_e3(0);
+                            msg.accelerometer_data[0].set_acceleration_y_e3(0);
+                            msg.accelerometer_data[0].set_acceleration_z_e3(9810);
+                        }
+
+                        // === GYROSCOPE: zero rotation ===
+                        // Any rotation speed implies the vehicle is turning.
+                        if !msg.gyroscope_data.is_empty() {
+                            msg.gyroscope_data[0].set_rotation_speed_x_e3(0);
+                            msg.gyroscope_data[0].set_rotation_speed_y_e3(0);
+                            msg.gyroscope_data[0].set_rotation_speed_z_e3(0);
+                        }
+
+                        // === DEAD RECKONING: zero wheel speed + steering ===
+                        // Wheel speed ticks and steering angle are used by Toyota
+                        // and other modern HUs as independent motion verification.
+                        if !msg.dead_reckoning_data.is_empty() {
+                            msg.dead_reckoning_data[0].set_steering_angle_e1(0);
+                            msg.dead_reckoning_data[0].wheel_speed_e3.clear();
+                            // Push four zero values for the four wheels
+                            msg.dead_reckoning_data[0].wheel_speed_e3.push(0);
+                            msg.dead_reckoning_data[0].wheel_speed_e3.push(0);
+                            msg.dead_reckoning_data[0].wheel_speed_e3.push(0);
+                            msg.dead_reckoning_data[0].wheel_speed_e3.push(0);
+                        }
+
+                        // === COMPASS: freeze bearing ===
+                        // Changing compass bearing implies turning/moving.
+                        if !msg.compass_data.is_empty() {
+                            msg.compass_data[0].set_pitch_e6(0);
+                            msg.compass_data[0].set_roll_e6(0);
+                        }
+
+                        // === RPM: idle engine ===
+                        // High RPM with zero speed is suspicious on some HUs.
+                        // ~800 RPM idle is realistic for a parked car.
+                        /*if !msg.rpm_data.is_empty() {
+                            msg.rpm_data[0].set_rpm_e3(800_000);
+                        }*/
+
+                        // Regenerate payload with ALL spoofed fields
+                        pkt.payload = msg.write_to_bytes()?;
+                        pkt.payload.insert(0, (message_id >> 8) as u8);
+                        pkt.payload.insert(1, (message_id & 0xff) as u8);
+                    }
+                }
+            }
+        }
     }
 
     /// creates Ssl for MobileDevice (SSL client)
