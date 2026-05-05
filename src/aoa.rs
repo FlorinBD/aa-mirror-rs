@@ -31,6 +31,8 @@ pub const ACCESSORY_START: u8 = 0x35;
 pub enum AccessoryError {
     #[error("libusb error")]
     NusbError(#[from] nusb::Error),
+    #[error("usb transfer error")]
+    TransferError(#[from] nusb::transfer::TransferError),
     #[error("invalid length (size: {0})")]
     InvalidLength(usize),
     #[error("unsupported accessory protocol (size: {0})")]
@@ -243,8 +245,8 @@ impl AccessoryInterface for Interface {
                 },
                 timeout,
             )
-            .wait()
-            .map_err(nusb::Error::other)?;
+            .wait()?;
+            //.map_err(nusb::Error::other)?;
 
         if size.len() != size_of::<u16>() {
             return Err(AccessoryError::InvalidLength(size.len()));
@@ -272,8 +274,8 @@ impl AccessoryInterface for Interface {
                 },
                 timeout,
             )
-            .wait()
-            .map_err(nusb::Error::other)?;
+            .wait()?;
+            //.map_err(nusb::Error::other)?;
 
         /*if size.actual_length() != data.len() {
             return Err(AccessoryError::InvalidLength(size.actual_length()));
@@ -313,8 +315,8 @@ impl AccessoryInterface for Interface {
             },
             timeout,
         )
-            .wait()
-            .map_err(nusb::Error::other)?;
+            .wait()?;
+            //.map_err(nusb::Error::other)?;
 
         Ok(())
     }
