@@ -246,8 +246,6 @@ impl AccessoryInterface for Interface {
                 timeout,
             )
             .wait()?;
-            //.map_err(nusb::Error::other)?;
-
         if size.len() != size_of::<u16>() {
             return Err(AccessoryError::InvalidLength(size.len()));
         }
@@ -275,7 +273,6 @@ impl AccessoryInterface for Interface {
                 timeout,
             )
             .wait()?;
-            //.map_err(nusb::Error::other)?;
 
         /*if size.actual_length() != data.len() {
             return Err(AccessoryError::InvalidLength(size.actual_length()));
@@ -316,8 +313,6 @@ impl AccessoryInterface for Interface {
             timeout,
         )
             .wait()?;
-            //.map_err(nusb::Error::other)?;
-
         Ok(())
     }
 
