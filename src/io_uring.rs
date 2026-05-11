@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 use core::net::SocketAddr;
 use std::collections::VecDeque;
 use std::net::IpAddr;
+use std::thread;
 use anyhow::Context;
 use mac_address::MacAddress;
 use nix::sys::prctl::get_name;
@@ -350,6 +351,44 @@ async fn tcp_wait_for_hu_connection(listener: & TcpListener) -> Result<TcpStream
 }
 
 pub async fn usb_wait_for_hu_connection(timeout_secs: u64) -> Result<()> {
+    let notify = Arc::new(Notify::new());
+
+    let notify_thread = notify.clone();
+
+    thread::spawn(move || {
+        let path = "/sys/class/android_usb/android0/state";
+
+        loop {
+            match std::fs::read_to_string(path) {
+                Ok(state) => {
+                    let state = state.trim();
+
+                    if state == "CONFIGURED" {
+                        notify_thread.notify_waiters();
+                        break;
+                    }
+                }
+
+                Err(e) => {
+                    eprintln!("USB state read error: {:?}", e);
+                }
+            }
+
+            thread::sleep(Duration::from_millis(200));
+        }
+    });
+    match timeout(Duration::from_secs(timeout_secs), notify.notified()).await {
+        Ok(_) => {
+            Ok(())
+        }
+
+        Err(_) => {
+            Err("timeout".into())
+        }
+    }
+}
+
+pub async fn usb_wait_for_hu_connection_old(timeout_secs: u64) -> Result<()> {
     let path = "/sys/class/android_usb/android0/state";
 
     let fut = async {
