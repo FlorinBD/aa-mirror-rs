@@ -1292,7 +1292,7 @@ async fn read_input_data<A: Endpoint<A>>(
     obj: &mut IoDevice<A>,
 ) -> Result<usize> {
     let mut newdata = vec![0u8; BUFFER_LEN];
-    //let n;
+    let n;
     let len;
 
     match obj {
