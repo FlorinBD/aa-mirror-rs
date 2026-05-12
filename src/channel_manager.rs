@@ -1290,7 +1290,7 @@ pub async fn pkt_debug(
 async fn read_input_data<A: Endpoint<A>>(
     rbuf: &mut VecDeque<u8>,
     obj: &mut IoDevice<A>,
-) -> Result<()> {
+) -> Result<usize> {
     let mut newdata = vec![0u8; BUFFER_LEN];
     //let n;
     let len;
@@ -1319,22 +1319,21 @@ async fn read_input_data<A: Endpoint<A>>(
         }
         IoDevice::TcpStreamIo(device) => {
             let retval = device.read(newdata);
-            /*(n, newdata) = timeout(Duration::from_millis(15000), retval)
+            (n, newdata) = timeout(Duration::from_millis(15000), retval)
                 .await
                 .context("read_input_data: TcpStreamIo timeout")?;
-            len = n.context("read_input_data: TcpStreamIo read error")?;*/
-            let (nn, nd) = timeout(Duration::from_millis(15000), retval)
-                .await
-                .map_err(|e| anyhow::anyhow!("TcpStreamIo read timeout: {:?}", e))?;
-            len = nn?;
-            newdata = nd;
+            len = n.context("read_input_data: TcpStreamIo read error")?;
+            if len == 0 {
+                // TCP EOF means the peer closed the connection; propagate as disconnect.
+                return Err("read_input_data: TcpStreamIo EOF".into());
+            }
         }
         _ => todo!(),
     }
     if len > 0 {
         rbuf.write(&newdata.slice(..len))?;
     }
-    Ok(())
+    Ok((len))
 }
 
 /// main reader thread for a device
