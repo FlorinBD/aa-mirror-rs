@@ -1343,7 +1343,7 @@ pub async fn endpoint_reader<A: Endpoint<A>>(
 ) -> Result<()> {
     let mut rbuf: VecDeque<u8> = VecDeque::new();
     loop {
-        read_input_data(&mut rbuf, &mut device, incremental_read).await?;
+        read_input_data(&mut rbuf, &mut device).await?;
         // check if we have complete packet available
         loop {
             // Accept packets as soon as we have the complete fixed header.
