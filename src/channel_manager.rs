@@ -1305,17 +1305,10 @@ async fn read_input_data<A: Endpoint<A>>(
         }
         IoDevice::EndpointIo(device) => {
             let retval = device.read(newdata);
-
-            /*(n, newdata) = timeout(Duration::from_millis(15000), retval)
+            (n, newdata) = timeout(Duration::from_millis(15000), retval)
                 .await
                 .context("read_input_data: EndpointIo timeout")?;
-            len = n.context("read_input_data: EndpointIo read error")?;*/
-
-            let (nn, nd) = timeout(Duration::from_millis(15000), retval)
-                .await
-                .map_err(|e| anyhow::anyhow!("EndpointIo read timeout: {:?}", e))?;
-            len = nn?;
-            newdata = nd;
+            len = n.context("read_input_data: EndpointIo read error")?;
         }
         IoDevice::TcpStreamIo(device) => {
             let retval = device.read(newdata);
