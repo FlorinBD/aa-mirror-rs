@@ -1290,9 +1290,9 @@ pub async fn pkt_debug(
 async fn read_input_data<A: Endpoint<A>>(
     rbuf: &mut VecDeque<u8>,
     obj: &mut IoDevice<A>,
-) -> Result<()> {
+) -> Result<usize> {
     let mut newdata = vec![0u8; BUFFER_LEN];
-    //let n;
+    let n;
     let len;
 
     match obj {
@@ -1305,36 +1305,28 @@ async fn read_input_data<A: Endpoint<A>>(
         }
         IoDevice::EndpointIo(device) => {
             let retval = device.read(newdata);
-
-            /*(n, newdata) = timeout(Duration::from_millis(15000), retval)
+            (n, newdata) = timeout(Duration::from_millis(15000), retval)
                 .await
                 .context("read_input_data: EndpointIo timeout")?;
-            len = n.context("read_input_data: EndpointIo read error")?;*/
-
-            let (nn, nd) = timeout(Duration::from_millis(15000), retval)
-                .await
-                .map_err(|e| anyhow::anyhow!("EndpointIo read timeout: {:?}", e))?;
-            len = nn?;
-            newdata = nd;
+            len = n.context("read_input_data: EndpointIo read error")?;
         }
         IoDevice::TcpStreamIo(device) => {
             let retval = device.read(newdata);
-            /*(n, newdata) = timeout(Duration::from_millis(15000), retval)
+            (n, newdata) = timeout(Duration::from_millis(15000), retval)
                 .await
                 .context("read_input_data: TcpStreamIo timeout")?;
-            len = n.context("read_input_data: TcpStreamIo read error")?;*/
-            let (nn, nd) = timeout(Duration::from_millis(15000), retval)
-                .await
-                .map_err(|e| anyhow::anyhow!("TcpStreamIo read timeout: {:?}", e))?;
-            len = nn?;
-            newdata = nd;
+            len = n.context("read_input_data: TcpStreamIo read error")?;
+            if len == 0 {
+                // TCP EOF means the peer closed the connection; propagate as disconnect.
+                return Err("read_input_data: TcpStreamIo EOF".into());
+            }
         }
         _ => todo!(),
     }
     if len > 0 {
         rbuf.write(&newdata.slice(..len))?;
     }
-    Ok(())
+    Ok((len))
 }
 
 /// main reader thread for a device
@@ -1347,13 +1339,22 @@ pub async fn endpoint_reader<A: Endpoint<A>>(
         read_input_data(&mut rbuf, &mut device).await?;
         // check if we have complete packet available
         loop {
-            if rbuf.len() > HEADER_LENGTH {
+            // Accept packets as soon as we have the complete fixed header.
+            // Using >= is required for valid zero-payload frames (frame_size == HEADER_LENGTH).
+            if rbuf.len() >= HEADER_LENGTH {
                 let channel = rbuf[0];
                 let flags = rbuf[1];
+
+                // FIRST frames carry an extended 8-byte header. If only 4 bytes
+                // are buffered, wait for the remaining header bytes before parsing.
+                if (flags & FRAME_TYPE_MASK) == FRAME_TYPE_FIRST && rbuf.len() < 8 {
+                    break;
+                }
+
                 let mut header_size = HEADER_LENGTH;
                 let mut final_length = None;
                 let payload_size = (rbuf[3] as u16 + ((rbuf[2] as u16) << 8)) as usize;
-                if rbuf.len() > 8 && (flags & FRAME_TYPE_MASK) == FRAME_TYPE_FIRST {
+                if rbuf.len() >= 8 && (flags & FRAME_TYPE_MASK) == FRAME_TYPE_FIRST {
                     header_size += 4;
                     final_length = Some(
                         ((rbuf[4] as u32) << 24)
@@ -1375,7 +1376,6 @@ pub async fn endpoint_reader<A: Endpoint<A>>(
                         final_length,
                         payload: frame,
                     };
-                    //debug!("Channel {} received {} bytes from HU", channel ,payload_size);
                     // send packet to main thread for further process
                     tx.send(pkt).await?;
                     // check if we have another packet
