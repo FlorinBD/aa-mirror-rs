@@ -228,10 +228,10 @@ async fn tokio_main(
         if let Some(ref mut leds) = led_manager {
             leds.set_led(LedColor::Blue, LedMode::On).await;
         }
-        info!("{} 📵 Init done, waiting for restart...",NAME);
+        info!("{} 📵 Init done, waiting for main app to finnish...",NAME);
         // wait for restart notification
         let _ = need_restart.recv().await;
-        info!("{} 📵 HU/DHU connection closed or not started, trying again...",NAME);
+        info!("{} 📵 Main app finished, trying again...",NAME);
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
         // TODO: make proper main loop with cancellation
