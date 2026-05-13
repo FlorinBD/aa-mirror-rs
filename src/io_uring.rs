@@ -96,10 +96,10 @@ impl Endpoint<TcpStream> for TcpStream {
 }
 
 pub enum IoDevice<A: Endpoint<A>> {
-    UsbReader(Arc<RefCell<UsbStreamRead>>, PhantomData<A>),
-    UsbWriter(Arc<RefCell<UsbStreamWrite>>, PhantomData<A>),
-    EndpointIo(Arc<A>),
-    TcpStreamIo(Arc<TcpStream>),
+    UsbReader(Rc<RefCell<UsbStreamRead>>, PhantomData<A>),
+    UsbWriter(Rc<RefCell<UsbStreamWrite>>, PhantomData<A>),
+    EndpointIo(Rc<A>),
+    TcpStreamIo(Rc<TcpStream>),
 }
 
 /// Set SO_RCVBUF / SO_SNDBUF on any socket via its raw file descriptor.
@@ -228,7 +228,8 @@ async fn transfer_monitor(
             return Err(format!("action request: {:?}", action).into());
         }
 
-        sleep(Duration::from_millis(100)).await;
+        //sleep(Duration::from_millis(100)).await;
+        futures_timer::Delay::new(Duration::from_millis(100)).await;
     }
 }
 fn init_wifi_config(cfg: &AppConfig) -> WifiConfig {
@@ -333,10 +334,7 @@ async fn tcp_wait_for_md_connection(listener: & TcpListener) ->  Result<(TcpStre
 
     // Disable Nagle's algorithm for
     // high-throughput Android Auto video streaming.
-    use std::os::unix::io::AsRawFd;
     stream.set_nodelay(true)?;
-    //apply_tcp_buffer_sizes(stream.as_raw_fd());
-
     Ok((stream, addr))
 }
 
@@ -569,12 +567,12 @@ pub async fn io_loop(
         // HU transfer device
         if let Some(hu) = hu_usb {
             // HU connected directly via USB
-            let hu = Arc::new(hu);
+            let hu = Rc::new(hu);
             hu_r = IoDevice::EndpointIo(hu.clone());
             hu_w = IoDevice::EndpointIo(hu.clone());
         } else {
             // Head Unit Emulator via TCP
-            let hu = Arc::new(hu_tcp.unwrap());
+            let hu = Rc::new(hu_tcp.unwrap());
             hu_r = IoDevice::TcpStreamIo(hu.clone());
             hu_w = IoDevice::TcpStreamIo(hu.clone());
             //hu_tcp_stream = Some(hu.clone());
@@ -598,7 +596,7 @@ pub async fn io_loop(
         ));
 
         // Thread for monitoring transfer
-        let mut tsk_monitor = tokio::spawn(transfer_monitor(
+        let mut tsk_monitor = tokio_uring::spawn(transfer_monitor(
             stats_interval,
             stats_w_bytes,
             stats_r_bytes,
@@ -785,7 +783,7 @@ pub async fn io_loop_pt(
         // selecting I/O device for reading and writing
         // and creating desired objects for proxy functions
         // MD using TCP stream (wireless)
-        let md = Arc::new(md_tcp.unwrap());
+        let md = Rc::new(md_tcp.unwrap());
         let md_r = IoDevice::EndpointIo(md.clone());
         let md_w = IoDevice::EndpointIo(md.clone());
         md_tcp_stream = Some(md.clone());
@@ -871,12 +869,12 @@ pub async fn io_loop_pt(
         // HU transfer device
         if let Some(hu) = hu_usb {
             // HU connected directly via USB
-            let hu = Arc::new(hu);
+            let hu = Rc::new(hu);
             hu_r = IoDevice::EndpointIo(hu.clone());
             hu_w = IoDevice::EndpointIo(hu.clone());
         } else {
             // Head Unit Emulator via TCP
-            let hu = Arc::new(hu_tcp.unwrap());
+            let hu = Rc::new(hu_tcp.unwrap());
             hu_r = IoDevice::TcpStreamIo(hu.clone());
             hu_w = IoDevice::TcpStreamIo(hu.clone());
             hu_tcp_stream = Some(hu.clone());
@@ -891,7 +889,7 @@ pub async fn io_loop_pt(
         let mut tsk_packet_proxy=pp.start(hu_w, rx_hu, rx_md, md_w);
 
         // Thread for monitoring transfer
-        let mut tsk_monitor = tokio::spawn(transfer_monitor(
+        let mut tsk_monitor = tokio_uring::spawn(transfer_monitor(
             stats_interval,
             stats_w_bytes,
             stats_r_bytes,
