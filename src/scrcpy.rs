@@ -1059,6 +1059,7 @@ pub(crate) async fn tsk_adb_scrcpy(
             cmd_shell.push("cleanup=true".to_string());
             cmd_shell.push("display_ime_policy=local".to_string());
             cmd_shell.push("stay_awake=true".to_string());
+            cmd_shell.push("keep_active=true".to_string());
             cmd_shell.push(format!("audio_codec={}",audio_codec.to_string() ));
             if audio_codec_params.codec == MediaCodec::AUDIO_AAC_LC
             {
