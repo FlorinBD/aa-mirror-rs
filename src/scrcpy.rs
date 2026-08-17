@@ -287,8 +287,8 @@ impl ScrcpyMediaReader {
 
         Ok(ScrcpyVideoCodecInfo {
             codec:codec_id,
-            0,
-            0,
+            800,
+            480,
         })
     }
 
