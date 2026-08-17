@@ -176,7 +176,12 @@ impl ScrcpySize {
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct ScrcpyVideoCodecInfo {
-    pub codec: String,
+    pub codec_id: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct ScrcpySessionMeta {
+    pub flags: u32,
     pub width: u32,
     pub height: u32,
 }
@@ -265,7 +270,7 @@ impl ScrcpyMediaReader {
     }
 
     pub async fn read_video_codec_info(&mut self)  -> io::Result<ScrcpyVideoCodecInfo> {
-        const META_SIZE: usize = 12;
+        const META_SIZE: usize = 4;
         // Fill internal buffer (no allocation)
         self.read_exact_into_buf(META_SIZE).await?;
 
@@ -273,24 +278,39 @@ impl ScrcpyMediaReader {
 
 
         let mut codec_id=String::from_utf8_lossy(&metadata[0..4]).to_string();
-        codec_id=codec_id.chars()
-            .filter(|c| c.is_ascii_graphic() || *c == ' ')
-            .collect();
-
-        // ---- width ----
-        /*let width = u32::from_be_bytes(
-            metadata[4..8].try_into().unwrap()
-        );*/
-
-        // ---- height ----
-        /*let height = u32::from_be_bytes(
-            metadata[8..12].try_into().unwrap()
-        );*/
+        codec_id=codec_id.chars().filter(|c| c.is_ascii_graphic() || *c == ' ').collect();
 
         Ok(ScrcpyVideoCodecInfo {
-            codec:codec_id,
-            width: 800,
-            height: 480,
+            codec_id
+        })
+    }
+
+    pub async fn read_video_session_info(&mut self)  -> io::Result<ScrcpySessionMeta> {
+        const META_SIZE: usize = 12;
+        // Fill internal buffer (no allocation)
+        self.read_exact_into_buf(META_SIZE).await?;
+
+        let metadata = &self.buf[..META_SIZE];
+
+        // ---- flags ----
+        let flags = u32::from_be_bytes(
+            metadata[0..4].try_into().unwrap()
+        );
+
+        // ---- width ----
+        let width = u32::from_be_bytes(
+            metadata[4..8].try_into().unwrap()
+        );
+
+        // ---- height ----
+        let height = u32::from_be_bytes(
+            metadata[8..12].try_into().unwrap()
+        );
+
+        Ok(ScrcpySessionMeta {
+            flags,
+            width,
+            height,
         })
     }
 
@@ -322,14 +342,23 @@ async fn tsk_scrcpy_video(
     //codec metadata
     match reader.read_video_codec_info().await {
         Ok(info) => {
-            info!("SCRCPY Video metadata decoded: id={}, res_w={}, res_h={}", info.codec, info.width, info.height);
-            if info.codec != "h264".to_string() {
+            info!("SCRCPY Video metadata decoded: id={}", info.codec_id);
+            if info.codec_id != "h264".to_string() {
                 error!("SCRCPY Invalid Video codec configuration");
                 return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY Invalid Video codec configuration")));
             }
         }
         Err(e) => {
             error!("SCRCPY Video reading error: {:?}",e);
+            return Err(Box::new(io::Error::new(io::ErrorKind::Other, e)));
+        }
+    }
+    match reader.read_video_session_info().await {
+        Ok(info) => {
+            info!("SCRCPY Video Session metadata decoded: flags={}, res_w={}, res_h={}", info.flags, info.width, info.height);
+        }
+        Err(e) => {
+            error!("SCRCPY Video Session metadata reading error: {:?}",e);
             return Err(Box::new(io::Error::new(io::ErrorKind::Other, e)));
         }
     }
