@@ -256,9 +256,10 @@ impl ScrcpyMediaReader {
         use std::convert::TryInto;
         let pts = u64::from_be_bytes(buf[..8].try_into().unwrap());
         let size = u32::from_be_bytes(buf[8..12].try_into().unwrap()) as usize;
-        let key_frame = (pts & 0x4000_0000_0000_0000u64) != 0;
         let rec_ts = pts & 0x3FFF_FFFF_FFFF_FFFFu64;
-        let config_frame = (pts & 0x8000_0000_0000_0000u64) != 0;
+        //let session_frame = (pts & 0x8000_0000_0000_0000u64) != 0;//this is for Session metadata only
+        let config_frame = (pts & 0x4000_0000_0000_0000u64) != 0;
+        let key_frame = (pts & 0x2000_0000_0000_0000u64) != 0;
         ScrcpyMediaHeader {size:size, timestamp: rec_ts, config: config_frame, keyframe: key_frame }
     }
 
