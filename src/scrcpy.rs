@@ -276,19 +276,19 @@ impl ScrcpyMediaReader {
             .collect();
 
         // ---- width ----
-        let width = u32::from_be_bytes(
+        /*let width = u32::from_be_bytes(
             metadata[4..8].try_into().unwrap()
-        );
+        );*/
 
         // ---- height ----
-        let height = u32::from_be_bytes(
+        /*let height = u32::from_be_bytes(
             metadata[8..12].try_into().unwrap()
-        );
+        );*/
 
         Ok(ScrcpyVideoCodecInfo {
             codec:codec_id,
-            width,
-            height,
+            0,
+            0,
         })
     }
 
