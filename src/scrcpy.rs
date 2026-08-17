@@ -259,7 +259,7 @@ impl ScrcpyMediaReader {
 
     fn parse_header(buf: &[u8]) -> ScrcpyMediaHeader {
         use std::convert::TryInto;
-        debug!("ScrcpyMediaReader raw header bytes: {:02x?}",&buf);
+        //debug!("ScrcpyMediaReader raw header bytes: {:02x?}",&buf);
         let pts = u64::from_be_bytes(buf[..8].try_into().unwrap());
         let size = u32::from_be_bytes(buf[8..12].try_into().unwrap()) as usize;
         let rec_ts = pts & 0x3FFF_FFFF_FFFF_FFFFu64;
