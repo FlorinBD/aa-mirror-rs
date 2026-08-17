@@ -254,6 +254,7 @@ impl ScrcpyMediaReader {
 
     fn parse_header(buf: &[u8]) -> ScrcpyMediaHeader {
         use std::convert::TryInto;
+        debug!("ScrcpyMediaReader raw header bytes: {:02x?}",&buf);
         let pts = u64::from_be_bytes(buf[..8].try_into().unwrap());
         let size = u32::from_be_bytes(buf[8..12].try_into().unwrap()) as usize;
         let rec_ts = pts & 0x3FFF_FFFF_FFFF_FFFFu64;
@@ -514,7 +515,7 @@ async fn tsk_scrcpy_audio(
                     debug!("Audio task got frame config={:?}, ts={}, act size: {}, raw bytes: {:02x?}",media_header.config, media_header.timestamp, rd_len, &chunks[0][..dbg_len]);
                     dbg_count += 1;
                 }
-                if pause_mode.load(Ordering::Relaxed)
+                if pause_mode.load(Ordering::Relaxed) || media_header.size <=0
                 {
                     continue;
                 }
