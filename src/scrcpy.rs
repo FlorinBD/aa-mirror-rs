@@ -1049,7 +1049,7 @@ pub(crate) async fn tsk_adb_scrcpy(
             cmd_shell.push("log_level=info".to_string());
             cmd_shell.push("raw_stream=false".to_string());//enable metadata
             cmd_shell.push("send_frame_meta=true".to_string());
-            cmd_shell.push("send_codec_meta=true".to_string());
+            cmd_shell.push("send_stream_meta=true".to_string());
             cmd_shell.push("send_dummy_byte=false".to_string());
             cmd_shell.push("send_device_meta=false".to_string());//disable device name on video socket
             cmd_shell.push("tunnel_forward=true".to_string());
