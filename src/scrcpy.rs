@@ -287,8 +287,8 @@ impl ScrcpyMediaReader {
 
         Ok(ScrcpyVideoCodecInfo {
             codec:codec_id,
-            800,
-            480,
+            width: 800,
+            height: 480,
         })
     }
 
@@ -321,7 +321,7 @@ async fn tsk_scrcpy_video(
     match reader.read_video_codec_info().await {
         Ok(info) => {
             info!("SCRCPY Video metadata decoded: id={}, res_w={}, res_h={}", info.codec, info.width, info.height);
-            if (info.codec != "h264".to_string()) || (info.width != 800) || (info.height != 480) {
+            if info.codec != "h264".to_string() {
                 error!("SCRCPY Invalid Video codec configuration");
                 return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY Invalid Video codec configuration")));
             }
