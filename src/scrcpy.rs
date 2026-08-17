@@ -340,10 +340,11 @@ async fn tsk_scrcpy_video(
         match reader.read_chunks().await {
             Ok(Some((media_header, chunks))) => {
                 //let rd_len = header.size ;
-                let dbg_len = min(chunks[0].len(), 16);
+                //let dbg_len = min(media_header.size, 16);
+                let raw_bytes = chunks.first().map(|chunk| &chunk[..chunk.len().min(media_header.size).min(16)]).unwrap_or(&[]);
                 if dbg_count <  10
                 {
-                    debug!("Video task got frame config={:?}, ts={}, act size: {}, raw bytes: {:02x?}",media_header.config, media_header.timestamp, media_header.size, &chunks[0][..dbg_len]);
+                    debug!("Video task got frame config={:?}, ts={}, act size: {}, raw bytes: {:02x?}",media_header.config, media_header.timestamp, media_header.size, raw_bytes);
                     dbg_count += 1;
                 }
                 if pause_mode.load(Ordering::Relaxed)
