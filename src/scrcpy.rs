@@ -348,7 +348,7 @@ async fn tsk_scrcpy_video(
                     debug!("Video task got frame config={:?}, ts={}, act size: {}, raw bytes: {:02x?}",media_header.config, media_header.timestamp, media_header.size, raw_bytes);
                     dbg_count += 1;
                 }
-                if pause_mode.load(Ordering::Relaxed)
+                if pause_mode.load(Ordering::Relaxed) || media_header.size <=0
                 {
                     continue;
                 }
