@@ -642,25 +642,12 @@ pub async fn userdata_restore_handler(
         }
     };
 
-    // Convert body to stream and write to file in chunks
-    let mut stream = body;
-    while let Some(chunk_result) = stream.next().await {
-        match chunk_result {
-            Ok(chunk) => {
-                if let Err(err) = file.write_all(&chunk).await {
-                    return (
-                        StatusCode::INTERNAL_SERVER_ERROR,
-                        format!("Failed to write to file: {}", err),
-                    );
-                }
-            }
-            Err(err) => {
-                return (
-                    StatusCode::BAD_REQUEST,
-                    format!("Error reading body chunk: {}", err),
-                );
-            }
-        }
+    // Write body to file
+    if let Err(err) = file.write_all(&body).await {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            format!("Failed to write to file: {}", err),
+        );
     }
 
     // request reboot
