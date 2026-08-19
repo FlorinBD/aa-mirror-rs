@@ -172,8 +172,8 @@ async fn tokio_main(
     };
 
     let mut cfg = config.read().await.clone();
-
-    if let Some(ref bindaddr) = cfg.webserver.clone() {
+    let bindaddr = cfg.webserver.clone();
+    if let Some(ref bindaddr) = bindaddr {
         // preparing AppState and starting webserver
         /*let app = web::app(state.clone().into());
 
