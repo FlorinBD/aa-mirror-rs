@@ -763,7 +763,7 @@ impl PacketProxy
     ) -> Result<JoinHandle<Result<()>>> {
         if self.cfg.aa_mode == AAMode::PassThrough
         {
-            let md_tx = md_tx.ok_or_else(|| anyhow!("MD TX is NONE"))?;
+            let md_tx = md_tx.ok_or_else(|| anyhow!("md_tx is NONE"))?;
             if self.cfg.mitm
             {
                 Ok(tokio_uring::spawn(async move {
