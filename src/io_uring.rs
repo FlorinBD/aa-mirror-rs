@@ -583,7 +583,7 @@ pub async fn io_loop(
 
         //service packet proxy
         let pp= PacketProxy::new(stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested, cfg.clone());
-        tsk_packet_proxy=pp.start(hu_w, rxr_hu, rxr_srv, None, Some(tx_srv));
+        tsk_packet_proxy=pp.start(hu_w, rxr_hu, rxr_srv, None, Some(tx_srv))?;
         //let pp=PacketProxy::new( stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested, cfg.ignore_media_ack);
         //tsk_packet_proxy=pp.start(hu_w, rxr_hu, rxr_srv, tx_srv, rx_scrcpy.clone());
         //tsk_packet_proxy = tokio_uring::spawn(packet_tls_proxy(hu_w, rxr_hu, rxr_srv, tx_srv, rx_scrcpy.clone(), stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested));
@@ -888,7 +888,7 @@ pub async fn io_loop_pt(
 
         //packet proxy
         let pp= PacketProxy::new(stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested, cfg.clone());
-        let mut tsk_packet_proxy=pp.start(hu_w, rx_hu, rx_md, Some(md_w), None);
+        let mut tsk_packet_proxy=pp.start(hu_w, rx_hu, rx_md, Some(md_w), None)?;
 
         // Thread for monitoring transfer
         let mut tsk_monitor = tokio_uring::spawn(transfer_monitor(
