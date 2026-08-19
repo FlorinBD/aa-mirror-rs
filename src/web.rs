@@ -368,7 +368,7 @@ pub async fn upload_cert_bundle_handler(
     }
 
     // Prepare GZIP decoder over the byte buffer
-    let decompressed = GzDecoder::new(Cursor::new(body_bytes));
+    let decompressed = GzDecoder::new(Cursor::new(body));
     let mut archive = Archive::new(decompressed);
 
     // Unpack archive directly into /tmp
