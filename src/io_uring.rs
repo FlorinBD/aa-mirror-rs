@@ -958,7 +958,7 @@ pub async fn io_loop_pt(
         }*/
 
         // set webserver context EV stuff to None
-        let mut tx_lock = tx.lock();
+        let mut tx_lock = tx.lock()?;
         *tx_lock = None;
 
 

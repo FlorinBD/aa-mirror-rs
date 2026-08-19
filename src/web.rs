@@ -356,7 +356,7 @@ async fn download_handler(
 async fn upload_hex_model_handler(
     State(_state): State<Arc<AppState>>,
     _headers: HeaderMap,
-    body: Bytes,
+    body: bytes::Bytes,
 ) -> impl IntoResponse {
     // read body as bytes
     /*let body_bytes = match to_bytes(body).await {
@@ -416,7 +416,7 @@ async fn upload_hex_model_handler(
 pub async fn upload_cert_bundle_handler(
     State(_state): State<Arc<AppState>>,
     headers: HeaderMap,
-    body: Bytes,
+    body: bytes::Bytes,
 ) -> impl IntoResponse {
     // Validate Content-Type header
     let content_type = headers
@@ -615,7 +615,7 @@ async fn userdata_backup_handler(
 pub async fn userdata_restore_handler(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    body: Bytes,
+    body: bytes::Bytes,
 ) -> impl IntoResponse {
     // Validate Content-Type header
     let content_type = headers
@@ -694,7 +694,7 @@ async fn get_config_data(State(state): State<Arc<AppState>>) -> impl IntoRespons
 
 /// POST /set-time
 /// Body: plain text, e.g. "2025-10-15T16:20:22+02:00"
-pub async fn set_time_handler(body: Bytes) -> impl IntoResponse {
+pub async fn set_time_handler(body: bytes::Bytes) -> impl IntoResponse {
     // Read the whole body as bytes
     /*let bytes = match to_bytes(body.0).await {
         Ok(b) => b,
@@ -703,7 +703,7 @@ pub async fn set_time_handler(body: Bytes) -> impl IntoResponse {
         }
     };*/
 
-    let time_str = match std::str::from_utf8(&body.0) {
+    let time_str = match std::str::from_utf8(&body) {
         Ok(s) => s.trim(),
         Err(_) => return (StatusCode::BAD_REQUEST, "Body must be UTF-8").into_response(),
     };
