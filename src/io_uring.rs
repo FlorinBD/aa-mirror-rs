@@ -34,7 +34,7 @@ use tokio_uring::net::TcpStream;
 use tokio_uring::BufResult;
 use tokio_uring::UnsubmittedWrite;
 use crate::{bluetooth, scrcpy};
-use crate::channel_manager::{ChannelProxyHandle, PacketProxy, PacketProxy, SslMemBuf, HEADER_LENGTH, KEYS_PATH};
+use crate::channel_manager::{ChannelProxyHandle, PacketProxy, SslMemBuf, HEADER_LENGTH, KEYS_PATH};
 use crate::aa_services::{VideoStreamingParams, AudioStreamingParams};
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use protos::*;
