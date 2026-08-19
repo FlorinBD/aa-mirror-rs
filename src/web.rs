@@ -59,8 +59,6 @@ pub struct AppState {
     pub config: SharedConfig,
     pub config_json: SharedConfigJson,
     pub config_file: Arc<PathBuf>,
-    pub tx: Arc<std::sync::Mutex<Option<Sender<Packet>>>>,
-    pub sensor_channel: Arc<Mutex<Option<u8>>>,
 }
 
 pub fn app(state: Arc<AppState>) -> Router {
@@ -71,10 +69,8 @@ pub fn app(state: Arc<AppState>) -> Router {
         .route("/download", get(download_handler))
         .route("/restart", post(restart_handler))
         .route("/reboot", post(reboot_handler))
-        .route("/upload-hex-model", post(upload_hex_model_handler))
         .route("/upload-certs", post(upload_cert_bundle_handler))
         .route("/certs-info", get(certs_info_handler))
-        .route("/battery", post(battery_handler))
         .route("/userdata-backup", get(userdata_backup_handler))
         .route("/userdata-restore", post(userdata_restore_handler))
         .route("/factory-reset", post(factory_reset_handler))
@@ -218,35 +214,6 @@ async fn index(State(state): State<Arc<AppState>>) -> impl IntoResponse {
     Html(html)
 }
 
-pub async fn battery_handler(
-    State(state): State<Arc<AppState>>,
-    Json(data): Json<BatteryData>,
-) -> impl IntoResponse {
-    match data.battery_level_percentage {
-        Some(level) => {
-            if level < 0.0 || level > 100.0 {
-                let msg = format!(
-                    "battery_level_percentage out of range: {} (expected 0.0–100.0)",
-                    level
-                );
-                return (StatusCode::BAD_REQUEST, msg).into_response();
-            }
-        }
-        None => {
-            if data.battery_level_wh.is_none() {
-                let msg = format!(
-                    "Either `battery_level_percentage` or `battery_level_wh` has to be set",
-                );
-                return (StatusCode::BAD_REQUEST, msg).into_response();
-            }
-        }
-    }
-
-    info!("{} Received battery data: {:?}", NAME, data);
-
-    (StatusCode::OK, "OK").into_response()
-}
-
 fn generate_filename(kind: &str) -> String {
     let now = Local::now();
     now.format(&format!("%Y%m%d%H%M%S_aa-mirror-rs_{}.tar.gz", kind))
@@ -351,66 +318,6 @@ async fn download_handler(
         )
         .body(body)
         .unwrap()
-}
-
-async fn upload_hex_model_handler(
-    State(_state): State<Arc<AppState>>,
-    _headers: HeaderMap,
-    body: bytes::Bytes,
-) -> impl IntoResponse {
-    // read body as bytes
-    /*let body_bytes = match to_bytes(body).await {
-        Ok(bytes) => bytes,
-        Err(err) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                format!("Unable to read body: {}", err),
-            )
-        }
-    };*/
-
-    // convert to UTF-8 string
-    let hex_str = match std::str::from_utf8(&body) {
-        Ok(s) => s.trim(), // remove whitespaces
-        Err(err) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                format!("Unable to parse body to UTF-8: {}", err),
-            )
-        }
-    };
-
-    // decode into Vec<u8>
-    let binary_data = match hex::decode(hex_str) {
-        Ok(data) => data,
-        Err(err) => {
-            return (
-                StatusCode::BAD_REQUEST,
-                format!("Invalid hex data: {}", err),
-            )
-        }
-    };
-
-    // save to model file
-    let path: PathBuf = PathBuf::from(EV_MODEL_FILE);
-    match fs::File::create(&path).await {
-        Ok(mut file) => {
-            if let Err(err) = file.write_all(&binary_data).await {
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Error saving model file: {}", err),
-                );
-            }
-            (
-                StatusCode::OK,
-                format!("File saved correctly as {:?}", path),
-            )
-        }
-        Err(err) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            format!("File create error: {}", err),
-        ),
-    }
 }
 
 pub async fn upload_cert_bundle_handler(

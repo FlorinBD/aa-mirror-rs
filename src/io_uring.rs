@@ -421,7 +421,6 @@ async fn enable_usb_if_present(usb: &mut Option<UsbGadgetState>) {
 pub async fn io_loop(
     need_restart: BroadcastSender<Option<Action>>,
     config: SharedConfig,
-    tx: Arc<std::sync::Mutex<Option<Sender<Packet>>>>,
 ) -> Result<()> {
     let shared_config = config.clone();
     #[allow(unused_variables)]
@@ -663,10 +662,6 @@ pub async fn io_loop(
 
         }*/
 
-        // set webserver context EV stuff to None
-        let mut tx_lock = tx.lock();
-        *tx_lock = None;
-
 
         info!("{} ⌛ session time: {}", NAME, format_duration(started.elapsed()).to_string());
         // obtain action for passing it to broadcast sender
@@ -679,7 +674,6 @@ pub async fn io_loop(
 pub async fn io_loop_pt(
     need_restart: BroadcastSender<Option<Action>>,
     config: SharedConfig,
-    tx: Arc<std::sync::Mutex<Option<Sender<Packet>>>>,
 ) -> Result<()> {
     let shared_config = config.clone();
     #[allow(unused_variables)]
@@ -956,10 +950,6 @@ pub async fn io_loop_pt(
             drop(stream);
 
         }*/
-
-        // set webserver context EV stuff to None
-        let mut tx_lock = tx.lock()?;
-        *tx_lock = None;
 
 
         info!("{} ⌛ session time: {}", NAME, format_duration(started.elapsed()).to_string());

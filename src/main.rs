@@ -154,8 +154,6 @@ async fn tokio_main(
     config_json: SharedConfigJson,
     restart_tx: BroadcastSender<Option<Action>>,
     config_file: PathBuf,
-    tx: Arc<std::sync::Mutex<Option<Sender<Packet>>>>,
-    sensor_channel: Arc<std::sync::Mutex<Option<u8>>>,
     led_support: bool,
 
 ) -> Result<()> {
@@ -164,8 +162,6 @@ async fn tokio_main(
         config: config.clone(),
         config_json: config_json.clone(),
         config_file: config_file.into(),
-        tx,
-        sensor_channel,
     };
 
     // LED support
@@ -546,10 +542,7 @@ fn main() -> Result<()> {
     let config_lck = Arc::new(RwLock::new(config));
     let config_json = Arc::new(RwLock::new(config_json));
     let config_lck_cloned = config_lck.clone();
-    let tx = Arc::new(std::sync::Mutex::new(None));
-    let tx_cloned = tx.clone();
-    let sensor_channel = Arc::new(std::sync::Mutex::new(None));
-    let sensor_channel_cloned = sensor_channel.clone();
+    
     // build and spawn main tokio runtime
     let runtime = Builder::new_multi_thread().enable_all().build().unwrap();
     let restart_tx_cloned = restart_tx.clone();
@@ -560,8 +553,6 @@ fn main() -> Result<()> {
             config_json.clone(),
             restart_tx_cloned,
             args.config.clone(),
-            tx_cloned,
-            sensor_channel_cloned,
             led_support,
         )
         .await
@@ -573,7 +564,6 @@ fn main() -> Result<()> {
         let _ = tokio_uring::start(io_loop(
             restart_tx,
             config_lck,
-            tx,
         ));
     }
     else
@@ -581,7 +571,6 @@ fn main() -> Result<()> {
         let _ = tokio_uring::start(io_loop_pt(
             restart_tx,
             config_lck,
-            tx,
         ));
     }
 
