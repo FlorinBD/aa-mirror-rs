@@ -173,7 +173,7 @@ async fn tokio_main(
 
     let mut cfg = config.read().await.clone();
 
-    if let Some(ref bindaddr) = cfg.webserver {
+    if let Some(ref bindaddr) = cfg.webserver.clone() {
         // preparing AppState and starting webserver
         /*let app = web::app(state.clone().into());
 
@@ -542,7 +542,7 @@ fn main() -> Result<()> {
     let config_lck = Arc::new(RwLock::new(config));
     let config_json = Arc::new(RwLock::new(config_json));
     let config_lck_cloned = config_lck.clone();
-    
+
     // build and spawn main tokio runtime
     let runtime = Builder::new_multi_thread().enable_all().build().unwrap();
     let restart_tx_cloned = restart_tx.clone();
