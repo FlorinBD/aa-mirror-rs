@@ -1,7 +1,7 @@
 [package]
 name = "aa-mirror-rs"
 authors = ['FBD']
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 license = 'GPL-2.0'
 description = 'AndroidAuto wired/wireless screen mirror using SCRCPY server as media source'
@@ -34,7 +34,7 @@ config = "0.14"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1"
 serde_with = { version = "3" }
-axum = "0.6"
+axum = "0.8"
 hyper = { version = "0.14", features = ["full"] }
 toml_edit = "0.22"
 chrono = "0.4.42"

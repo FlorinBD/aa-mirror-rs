@@ -9,7 +9,7 @@ use crate::ev::EV_MODEL_FILE;
 use crate::channel_manager::Packet;
 use axum::{
     body::Body,
-    extract::{Query, RawBody, State},
+    extract::{Query, State},
     http::{header, HeaderMap, Response, StatusCode},
     response::{Html, IntoResponse},
     routing::{get, post},
@@ -30,6 +30,8 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 use std::path::PathBuf;
 use std::{io::Cursor, path::Path, sync::Arc};
+use std::sync::Mutex;
+use serde::de::Unexpected::Bytes;
 use tar::Archive;
 use tar::Builder;
 use time::OffsetDateTime;
@@ -39,7 +41,7 @@ use tokio::io::duplex;
 use tokio::io::AsyncWriteExt;
 use tokio::io::DuplexStream;
 use tokio::sync::mpsc::Sender;
-use tokio::sync::Mutex;
+
 use tokio_util::io::ReaderStream;
 
 const TEMPLATE: &str = include_str!("../static/index.html");
@@ -337,7 +339,7 @@ async fn download_handler(
 
     // Wrap the duplex reader in a stream for the response body
     let stream = ReaderStream::new(reader);
-    let body = Body::wrap_stream(stream);
+    let body = Body::from_stream(stream);
 
     // Build HTTP response with appropriate headers
     Response::builder()
@@ -354,7 +356,7 @@ async fn download_handler(
 async fn upload_hex_model_handler(
     State(_state): State<Arc<AppState>>,
     _headers: HeaderMap,
-    RawBody(body): RawBody,
+    body: Bytes,
 ) -> impl IntoResponse {
     // read body as bytes
     let body_bytes = match to_bytes(body).await {
@@ -414,7 +416,7 @@ async fn upload_hex_model_handler(
 pub async fn upload_cert_bundle_handler(
     State(_state): State<Arc<AppState>>,
     headers: HeaderMap,
-    RawBody(body): RawBody,
+    body: Bytes,
 ) -> impl IntoResponse {
     // Validate Content-Type header
     let content_type = headers
@@ -597,7 +599,7 @@ async fn userdata_backup_handler(
     });
 
     let stream = ReaderStream::new(reader);
-    let body = Body::wrap_stream(stream);
+    let body = Body::from_stream(stream);
 
     Response::builder()
         .status(StatusCode::OK)
@@ -613,7 +615,7 @@ async fn userdata_backup_handler(
 pub async fn userdata_restore_handler(
     State(state): State<Arc<AppState>>,
     headers: HeaderMap,
-    RawBody(body): RawBody,
+    body: Bytes,
 ) -> impl IntoResponse {
     // Validate Content-Type header
     let content_type = headers
@@ -705,7 +707,7 @@ async fn get_config_data(State(state): State<Arc<AppState>>) -> impl IntoRespons
 
 /// POST /set-time
 /// Body: plain text, e.g. "2025-10-15T16:20:22+02:00"
-pub async fn set_time_handler(body: RawBody) -> impl IntoResponse {
+pub async fn set_time_handler(body: Bytes) -> impl IntoResponse {
     // Read the whole body as bytes
     let bytes = match to_bytes(body.0).await {
         Ok(b) => b,

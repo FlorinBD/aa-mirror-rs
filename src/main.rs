@@ -154,8 +154,8 @@ async fn tokio_main(
     config_json: SharedConfigJson,
     restart_tx: BroadcastSender<Option<Action>>,
     config_file: PathBuf,
-    tx: Arc<Mutex<Option<Sender<Packet>>>>,
-    sensor_channel: Arc<Mutex<Option<u8>>>,
+    tx: Arc<std::sync::Mutex<Option<Sender<Packet>>>>,
+    sensor_channel: Arc<std::sync::Mutex<Option<u8>>>,
     led_support: bool,
 
 ) -> Result<()> {
@@ -176,9 +176,10 @@ async fn tokio_main(
     };
 
     let mut cfg = config.read().await.clone();
+
     if let Some(ref bindaddr) = cfg.webserver {
         // preparing AppState and starting webserver
-        let app = web::app(state.clone().into());
+        /*let app = web::app(state.clone().into());
 
         match bindaddr.parse::<SocketAddr>() {
             Ok(addr) => {
@@ -196,7 +197,39 @@ async fn tokio_main(
             Err(e) => {
                 error!("{} webserver address/port parse: {}", NAME, e);
             }
-        }
+        }*/
+        let app = web::app(Arc::new(state));
+        //start webserver in a dedicated Tokyo runtime
+        std::thread::spawn(move || {
+            let rt = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .expect("failed to create webserver runtime");
+
+            rt.block_on(async move {
+                let addr: SocketAddr = match bindaddr.parse() {
+                    Ok(addr) => addr,
+                    Err(e) => {
+                        error!("{} webserver address/port parse: {}", NAME, e);
+                        return;
+                    }
+                };
+
+                let listener = match tokio::net::TcpListener::bind(addr).await {
+                    Ok(listener) => listener,
+                    Err(e) => {
+                        error!("{} webserver bind error: {}", NAME, e);
+                        return;
+                    }
+                };
+
+                info!("{} webserver running at http://{addr}/", NAME);
+
+                if let Err(e) = axum::serve(listener, app).await {
+                    error!("{} webserver error: {}", NAME, e);
+                }
+            });
+        });
     }
 
     // spawn a background task for reboot detection
@@ -513,9 +546,9 @@ fn main() -> Result<()> {
     let config_lck = Arc::new(RwLock::new(config));
     let config_json = Arc::new(RwLock::new(config_json));
     let config_lck_cloned = config_lck.clone();
-    let tx = Arc::new(Mutex::new(None));
+    let tx = Arc::new(std::sync::Mutex::new(None));
     let tx_cloned = tx.clone();
-    let sensor_channel = Arc::new(Mutex::new(None));
+    let sensor_channel = Arc::new(std::sync::Mutex::new(None));
     let sensor_channel_cloned = sensor_channel.clone();
     // build and spawn main tokio runtime
     let runtime = Builder::new_multi_thread().enable_all().build().unwrap();

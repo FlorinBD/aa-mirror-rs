@@ -421,7 +421,7 @@ async fn enable_usb_if_present(usb: &mut Option<UsbGadgetState>) {
 pub async fn io_loop(
     need_restart: BroadcastSender<Option<Action>>,
     config: SharedConfig,
-    tx: Arc<Mutex<Option<Sender<Packet>>>>,
+    tx: Arc<std::sync::Mutex<Option<Sender<Packet>>>>,
 ) -> Result<()> {
     let shared_config = config.clone();
     #[allow(unused_variables)]
@@ -679,7 +679,7 @@ pub async fn io_loop(
 pub async fn io_loop_pt(
     need_restart: BroadcastSender<Option<Action>>,
     config: SharedConfig,
-    tx: Arc<Mutex<Option<Sender<Packet>>>>,
+    tx: Arc<std::sync::Mutex<Option<Sender<Packet>>>>,
 ) -> Result<()> {
     let shared_config = config.clone();
     #[allow(unused_variables)]
