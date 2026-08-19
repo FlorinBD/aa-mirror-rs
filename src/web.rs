@@ -59,7 +59,7 @@ pub struct AppState {
     pub config: SharedConfig,
     pub config_json: SharedConfigJson,
     pub config_file: Arc<PathBuf>,
-    pub tx: Arc<Mutex<Option<Sender<Packet>>>>,
+    pub tx: Arc<std::sync::Mutex<Option<Sender<Packet>>>>,
     pub sensor_channel: Arc<Mutex<Option<u8>>>,
 }
 
@@ -359,7 +359,7 @@ async fn upload_hex_model_handler(
     body: Bytes,
 ) -> impl IntoResponse {
     // read body as bytes
-    let body_bytes = match to_bytes(body).await {
+    /*let body_bytes = match to_bytes(body).await {
         Ok(bytes) => bytes,
         Err(err) => {
             return (
@@ -367,10 +367,10 @@ async fn upload_hex_model_handler(
                 format!("Unable to read body: {}", err),
             )
         }
-    };
+    };*/
 
     // convert to UTF-8 string
-    let hex_str = match std::str::from_utf8(&body_bytes) {
+    let hex_str = match std::str::from_utf8(&body) {
         Ok(s) => s.trim(), // remove whitespaces
         Err(err) => {
             return (
@@ -432,7 +432,7 @@ pub async fn upload_cert_bundle_handler(
     }
 
     // Read request body into bytes
-    let body_bytes = match hyper::body::to_bytes(body).await {
+    /*let body_bytes = match hyper::body::to_bytes(body).await {
         Ok(bytes) => bytes,
         Err(err) => {
             return (
@@ -440,10 +440,10 @@ pub async fn upload_cert_bundle_handler(
                 format!("Unable to read body: {}", err),
             );
         }
-    };
+    };*/
 
     // Compute sha256 for the tarball
-    let hash = Sha256::digest(&body_bytes); // [u8; 32]
+    let hash = Sha256::digest(&body); // [u8; 32]
     let hash_hex = hex::encode(hash); // hex hash String
 
     // temp dir
@@ -709,14 +709,14 @@ async fn get_config_data(State(state): State<Arc<AppState>>) -> impl IntoRespons
 /// Body: plain text, e.g. "2025-10-15T16:20:22+02:00"
 pub async fn set_time_handler(body: Bytes) -> impl IntoResponse {
     // Read the whole body as bytes
-    let bytes = match to_bytes(body.0).await {
+    /*let bytes = match to_bytes(body.0).await {
         Ok(b) => b,
         Err(e) => {
             return (StatusCode::BAD_REQUEST, format!("Failed to read body: {e}")).into_response()
         }
-    };
+    };*/
 
-    let time_str = match std::str::from_utf8(&bytes) {
+    let time_str = match std::str::from_utf8(&body.0) {
         Ok(s) => s.trim(),
         Err(_) => return (StatusCode::BAD_REQUEST, "Body must be UTF-8").into_response(),
     };

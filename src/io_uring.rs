@@ -664,7 +664,7 @@ pub async fn io_loop(
         }*/
 
         // set webserver context EV stuff to None
-        let mut tx_lock = tx.lock().await;
+        let mut tx_lock = tx.lock();
         *tx_lock = None;
 
 
@@ -958,7 +958,7 @@ pub async fn io_loop_pt(
         }*/
 
         // set webserver context EV stuff to None
-        let mut tx_lock = tx.lock().await;
+        let mut tx_lock = tx.lock();
         *tx_lock = None;
 
 
