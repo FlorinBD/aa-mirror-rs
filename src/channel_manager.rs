@@ -785,7 +785,7 @@ impl PacketProxy
         }
 
     }
-    /// packet modification hook
+    /// packet modification hook for AA MITM mode only
     async fn pkt_modify_hook(&self, pkt: &mut Packet, pkt_type:AAMessageType) {
         if pkt_type == AAMessageType::Control
         {
