@@ -347,9 +347,8 @@ impl PacketProxyMITM
                                 self.pkt_modify_hook(&mut msg, sdr_msg_types.get(&ch_id_hu).copied().unwrap_or(AAMessageType::Unknown)).await;
                                 match msg.encrypt_payload(&mut mem_buf_md, &mut client).await {
                                 Ok(_) => {
-                                    if let Some(md_tx) = md_tx.as_mut() {
-                                        msg.transmit(md_tx).await.with_context(|| format!("{}: Service transmit to MD failed", get_name()))?;
-                                    }
+                                    let md_tx = md_tx.as_mut().ok_or_else(|| anyhow!("MD TX is NONE"))?;
+                                    msg.transmit(md_tx).await.with_context(|| format!("{}: Service transmit to MD failed", get_name()))?;
                                 }
                                 Err(e) => {error!( "{} encrypt_payload error: {:?}", get_name(), e);},
                                 }
@@ -378,9 +377,8 @@ impl PacketProxyMITM
                             let pkt = self.ssl_encapsulate(mem_buf_md.clone()).await?;
                             //let _ = self.pkt_debug(HexdumpLevel::RawInput, self.dmp_level, &pkt, "MD".parse().unwrap()).await;
                             self.r_statistics.fetch_add(HEADER_LENGTH + pkt.payload.len(), Ordering::Relaxed);
-                            if let Some(md_tx) = md_tx.as_mut() {
-                                pkt.transmit(md_tx).await.with_context(|| format!("{}: transmit failed", get_name()))?;
-                            }
+                            let md_tx = md_tx.as_mut().ok_or_else(|| anyhow!("MD TX is NONE"))?;
+                            pkt.transmit(md_tx).await.with_context(|| format!("{}: transmit failed", get_name()))?;
 
 
                             //Step2 MD: Read server hello
@@ -413,9 +411,9 @@ impl PacketProxyMITM
                             let pkt = self.ssl_encapsulate(mem_buf_md.clone()).await?;
                             //let _ = self.pkt_debug(HexdumpLevel::RawInput, self.dmp_level, &pkt, "MD".parse().unwrap()).await;
                             self.r_statistics.fetch_add(HEADER_LENGTH + pkt.payload.len(), Ordering::Relaxed);
-                            if let Some(md_tx) = md_tx.as_mut() {
-                                pkt.transmit(md_tx).await.with_context(|| format!("{}: transmit failed", get_name()))?;
-                            }
+                            let md_tx = md_tx.as_mut().ok_or_else(|| anyhow!("MD TX is NONE"))?;
+                            pkt.transmit(md_tx).await.with_context(|| format!("{}: transmit failed", get_name()))?;
+
                             // Step2 HU: send server hello
                             let pkt = self.ssl_encapsulate(mem_buf_hu.clone()).await?;
                             //let _ = self.pkt_debug(HexdumpLevel::RawOutput, self.dmp_level, &pkt,"HU".parse().unwrap()).await;
@@ -467,9 +465,9 @@ impl PacketProxyMITM
                             let pkt = self.ssl_encapsulate(mem_buf_md.clone()).await?;
                             //let _ = self.pkt_debug(AAMessageType::Control,HexdumpLevel::RawInput, self.dmp_level, &pkt, "MD".parse().unwrap()).await;
                             self.r_statistics.fetch_add(HEADER_LENGTH + pkt.payload.len(), Ordering::Relaxed);
-                            if let Some(md_tx) = md_tx.as_mut() {
-                                pkt.transmit(md_tx).await.with_context(|| format!("{}: transmit failed", get_name()))?;
-                            }
+                            let md_tx = md_tx.as_mut().ok_or_else(|| anyhow!("MD TX is NONE"))?;
+                            pkt.transmit(md_tx).await.with_context(|| format!("{}: transmit failed", get_name()))?;
+
                             //Step4 HU: Change Cipher spec finished
                             let pkt = self.ssl_encapsulate(mem_buf_hu.clone()).await?;
                             //let _ = self.pkt_debug(HexdumpLevel::RawOutput, self.dmp_level, &pkt, "HU".parse().unwrap()).await;
@@ -481,9 +479,8 @@ impl PacketProxyMITM
                     else
                     {
                         let _ = self.pkt_debug(AAMessageType::Control,HexdumpLevel::DecryptedInput, self.dmp_level, &msg, "HU".parse().unwrap()).await;
-                        if let Some(md_tx) = md_tx.as_mut() {
-                            msg.transmit(md_tx).await.with_context(|| format!("{}: Service transmit to MD failed", get_name()))?;
-                        }
+                        let md_tx = md_tx.as_mut().ok_or_else(|| anyhow!("MD TX is NONE"))?;
+                        msg.transmit(md_tx).await.with_context(|| format!("{}: Service transmit to MD failed", get_name()))?;
                     }
                 }
             }
@@ -553,9 +550,8 @@ impl PacketProxyMITM
                     // Increment byte counters for statistics
                     // fixme: compute final_len for precise stats
                     self.r_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
-                    if let Some(md_tx) = md_tx.as_mut() {
-                        msg.transmit(md_tx).await.with_context(|| format!("{}: Service transmit to MD failed", get_name()))?;
-                    }
+                    let md_tx = md_tx.as_mut().ok_or_else(|| anyhow!("MD TX is NONE"))?;
+                    msg.transmit(md_tx).await.with_context(|| format!("{}: Service transmit to MD failed", get_name()))?;
             }
             //lower priority MD>HU
             Some(mut msg) = md_rx.recv() => {
@@ -689,11 +685,9 @@ impl PacketProxyMITM
                                 }
                                 else
                                 {
-                                    if let Some(tx) = &srv_tx
-                                    {
-                                        if let Err(_) = tx.send(msg).await{
+                                    let tx = srv_tx.as_ref().ok_or_else(|| anyhow!("srv_tx is NONE"))?;
+                                    if let Err(_) = tx.send(msg).await{
                                             error!( "{} tls proxy send to service error",get_name());
-                                        };
                                     }
                                 }
                             }
@@ -751,11 +745,9 @@ impl PacketProxyMITM
                             pkt.transmit(&mut hu_wr).await.with_context(|| format!("{}: transmit failed", get_name()))?;
                     }
                     else {
-                        if let Some(tx) = &srv_tx
-                        {
-                            if let Err(_) = tx.send(msg).await{
-                                error!( "{} tls proxy send to service error",get_name());
-                            };
+                        let tx = srv_tx.as_ref().ok_or_else(|| anyhow!("srv_tx is NONE"))?;
+                        if let Err(_) = tx.send(msg).await{
+                            error!( "{} tls proxy send to service error",get_name());
                         }
                     }
 
