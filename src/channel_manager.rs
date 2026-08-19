@@ -264,7 +264,7 @@ impl PacketProxy
     async fn run_aa_mitm<A: Endpoint<A>>(mut self, mut hu_wr: IoDevice<A>,
                                          mut hu_rx: Receiver<Packet>,
                                          mut md_rx: Receiver<Packet>,
-                                         mut md_tx: Option<IoDevice<TcpStream>>,
+                                         mut md_tx: IoDevice<TcpStream>,
     ) -> Result<()> {
         let ssl_hu = self.ssl_builder_md().await?;
         let ssl_md = self.ssl_builder_hu().await?;
@@ -347,8 +347,7 @@ impl PacketProxy
                                 self.pkt_modify_hook(&mut msg, sdr_msg_types.get(&ch_id_hu).copied().unwrap_or(AAMessageType::Unknown)).await;
                                 match msg.encrypt_payload(&mut mem_buf_md, &mut client).await {
                                 Ok(_) => {
-                                    let md_tx = md_tx.as_mut().ok_or_else(|| anyhow!("MD TX is NONE"))?;
-                                    msg.transmit(md_tx).await.with_context(|| format!("{}: Service transmit to MD failed", get_name()))?;
+                                    msg.transmit(&mut md_tx).await.with_context(|| format!("{}: Service transmit to MD failed", get_name()))?;
                                 }
                                 Err(e) => {error!( "{} encrypt_payload error: {:?}", get_name(), e);},
                                 }
@@ -377,8 +376,7 @@ impl PacketProxy
                             let pkt = self.ssl_encapsulate(mem_buf_md.clone()).await?;
                             //let _ = self.pkt_debug(HexdumpLevel::RawInput, self.dmp_level, &pkt, "MD".parse().unwrap()).await;
                             self.r_statistics.fetch_add(HEADER_LENGTH + pkt.payload.len(), Ordering::Relaxed);
-                            let md_tx = md_tx.as_mut().ok_or_else(|| anyhow!("MD TX is NONE"))?;
-                            pkt.transmit(md_tx).await.with_context(|| format!("{}: transmit failed", get_name()))?;
+                            pkt.transmit(&mut md_tx).await.with_context(|| format!("{}: transmit failed", get_name()))?;
 
 
                             //Step2 MD: Read server hello
@@ -411,8 +409,7 @@ impl PacketProxy
                             let pkt = self.ssl_encapsulate(mem_buf_md.clone()).await?;
                             //let _ = self.pkt_debug(HexdumpLevel::RawInput, self.dmp_level, &pkt, "MD".parse().unwrap()).await;
                             self.r_statistics.fetch_add(HEADER_LENGTH + pkt.payload.len(), Ordering::Relaxed);
-                            let md_tx = md_tx.as_mut().ok_or_else(|| anyhow!("MD TX is NONE"))?;
-                            pkt.transmit(md_tx).await.with_context(|| format!("{}: transmit failed", get_name()))?;
+                            pkt.transmit(&mut md_tx).await.with_context(|| format!("{}: transmit failed", get_name()))?;
 
                             // Step2 HU: send server hello
                             let pkt = self.ssl_encapsulate(mem_buf_hu.clone()).await?;
@@ -465,8 +462,7 @@ impl PacketProxy
                             let pkt = self.ssl_encapsulate(mem_buf_md.clone()).await?;
                             //let _ = self.pkt_debug(AAMessageType::Control,HexdumpLevel::RawInput, self.dmp_level, &pkt, "MD".parse().unwrap()).await;
                             self.r_statistics.fetch_add(HEADER_LENGTH + pkt.payload.len(), Ordering::Relaxed);
-                            let md_tx = md_tx.as_mut().ok_or_else(|| anyhow!("MD TX is NONE"))?;
-                            pkt.transmit(md_tx).await.with_context(|| format!("{}: transmit failed", get_name()))?;
+                            pkt.transmit(&mut md_tx).await.with_context(|| format!("{}: transmit failed", get_name()))?;
 
                             //Step4 HU: Change Cipher spec finished
                             let pkt = self.ssl_encapsulate(mem_buf_hu.clone()).await?;
@@ -479,8 +475,7 @@ impl PacketProxy
                     else
                     {
                         let _ = self.pkt_debug(AAMessageType::Control,HexdumpLevel::DecryptedInput, self.dmp_level, &msg, "HU".parse().unwrap()).await;
-                        let md_tx = md_tx.as_mut().ok_or_else(|| anyhow!("MD TX is NONE"))?;
-                        msg.transmit(md_tx).await.with_context(|| format!("{}: Service transmit to MD failed", get_name()))?;
+                        msg.transmit(&mut md_tx).await.with_context(|| format!("{}: Service transmit to MD failed", get_name()))?;
                     }
                 }
             }
@@ -537,7 +532,7 @@ impl PacketProxy
     async fn run_aa_pt<A: Endpoint<A>>(mut self, mut hu_wr: IoDevice<A>,
                                        mut hu_rx: Receiver<Packet>,
                                        mut md_rx: Receiver<Packet>,
-                                       mut md_tx: Option<IoDevice<TcpStream>>,
+                                       mut md_tx: IoDevice<TcpStream>,
     ) -> Result<()> {
 
         info!( "{}: Starting AA PT message proxy loop...", get_name());
@@ -550,8 +545,7 @@ impl PacketProxy
                     // Increment byte counters for statistics
                     // fixme: compute final_len for precise stats
                     self.r_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
-                    let md_tx = md_tx.as_mut().ok_or_else(|| anyhow!("MD TX is NONE"))?;
-                    msg.transmit(md_tx).await.with_context(|| format!("{}: Service transmit to MD failed", get_name()))?;
+                    msg.transmit(&mut md_tx).await.with_context(|| format!("{}: Service transmit to MD failed", get_name()))?;
             }
             //lower priority MD>HU
             Some(mut msg) = md_rx.recv() => {
@@ -574,7 +568,7 @@ impl PacketProxy
     async fn run_mirror<A: Endpoint<A>>(mut self, mut hu_wr: IoDevice<A>,
                                         mut hu_rx: Receiver<Packet>,
                                         mut srv_rx: Receiver<Packet>,
-                                        srv_tx: Option<Sender<Packet>>,
+                                        srv_tx: Sender<Packet>,
     ) -> Result<()> {
         let ssl = self.ssl_builder_md().await?;
         let mut mem_buf = SslMemBuf {
@@ -685,8 +679,7 @@ impl PacketProxy
                                 }
                                 else
                                 {
-                                    let tx = srv_tx.as_ref().ok_or_else(|| anyhow!("srv_tx is NONE"))?;
-                                    if let Err(_) = tx.send(msg).await{
+                                    if let Err(_) = srv_tx.send(msg).await{
                                             error!( "{} tls proxy send to service error",get_name());
                                     }
                                 }
@@ -745,8 +738,7 @@ impl PacketProxy
                             pkt.transmit(&mut hu_wr).await.with_context(|| format!("{}: transmit failed", get_name()))?;
                     }
                     else {
-                        let tx = srv_tx.as_ref().ok_or_else(|| anyhow!("srv_tx is NONE"))?;
-                        if let Err(_) = tx.send(msg).await{
+                        if let Err(_) = srv_tx.send(msg).await{
                             error!( "{} tls proxy send to service error",get_name());
                         }
                     }
@@ -768,26 +760,28 @@ impl PacketProxy
                                            md_rx: Receiver<Packet>,
                                            md_tx: Option<IoDevice<TcpStream>>,
                                            srv_tx: Option<Sender<Packet>>,
-    ) -> JoinHandle<Result<()>> {
+    ) -> Result<JoinHandle<Result<()>>> {
         if self.cfg.aa_mode == AAMode::PassThrough
         {
+            let md_tx = md_tx.ok_or_else(|| anyhow!("MD TX is NONE"))?;
             if self.cfg.mitm
             {
-                tokio_uring::spawn(async move {
+                Ok(tokio_uring::spawn(async move {
                     self.run_aa_mitm(hu_wr, hu_rx, md_rx, md_tx).await
-                })
+                }))
             }
             else
             {
-                tokio_uring::spawn(async move {
+                Ok(tokio_uring::spawn(async move {
                     self.run_aa_pt(hu_wr, hu_rx, md_rx, md_tx).await
-                })
+                }))
             }
         }
         else {
-            tokio_uring::spawn(async move {
+            let srv_tx = srv_tx.ok_or_else(|| anyhow!("srv_tx is NONE"))?;
+            Ok(tokio_uring::spawn(async move {
                 self.run_mirror(hu_wr, hu_rx, md_rx, srv_tx).await
-            })
+            }))
         }
 
     }
