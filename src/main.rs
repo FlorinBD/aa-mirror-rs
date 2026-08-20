@@ -194,37 +194,32 @@ async fn tokio_main(
             }
         }*/
         let app = web::app(Arc::new(state));
-        //start webserver in a dedicated Tokyo runtime
-        std::thread::spawn(move || {
-            let rt = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .expect("failed to create webserver runtime");
+        //start webserver in a dedicated OS thread
+        std::thread::Builder::new()
+            .name("axum-webserver".into())
+            .spawn(move || {
+                let rt = tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .unwrap();
 
-            rt.block_on(async move {
-                let addr: SocketAddr = match bindaddr.parse() {
-                    Ok(addr) => addr,
-                    Err(e) => {
-                        error!("{} webserver address/port parse: {}", NAME, e);
-                        return;
+                rt.block_on(async move {
+                    let listener = match tokio::net::TcpListener::bind(&bindaddr).await {
+                        Ok(listener) => listener,
+                        Err(e) => {
+                            error!("{} webserver bind error: {}", NAME, e);
+                            return;
+                        }
+                    };
+
+                    info!("{} webserver running at http://{bindaddr}/", NAME);
+
+                    if let Err(e) = axum::serve(listener, app).await {
+                        error!("{} webserver error: {}", NAME, e);
                     }
-                };
-
-                let listener = match tokio::net::TcpListener::bind(addr).await {
-                    Ok(listener) => listener,
-                    Err(e) => {
-                        error!("{} webserver bind error: {}", NAME, e);
-                        return;
-                    }
-                };
-
-                info!("{} webserver running at http://{addr}/", NAME);
-
-                if let Err(e) = axum::serve(listener, app).await {
-                    error!("{} webserver error: {}", NAME, e);
-                }
-            });
-        });
+                });
+            })
+            .unwrap();
     }
 
     // spawn a background task for reboot detection
