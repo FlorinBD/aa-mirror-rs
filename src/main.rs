@@ -193,8 +193,8 @@ async fn tokio_main(
                 error!("{} webserver address/port parse: {}", NAME, e);
             }
         }*/
+        //start webserver in a dedicated OS thread, still broken when AA is streaming, FIXME
         let app = web::app(Arc::new(state));
-        //start webserver in a dedicated OS thread
         std::thread::Builder::new()
             .name("axum-webserver".into())
             .spawn(move || {
