@@ -1394,7 +1394,7 @@ pub async fn ch_proxy(
                     ).await;
     let mut srv_senders;
     let mut srv_tsk_handles;
-    let mut services: Vec<AAService>;
+    let mut services: Vec<Option<AAService>>;
     let mut channel_status;
     let data = &pkt.payload[2..]; // start of message data, without message_id
     let mut video_codec_params = VideoStreamingParams::default();
@@ -1581,6 +1581,13 @@ pub async fn ch_proxy(
                 if pkt.channel !=0
                 {
                     let ch=pkt.channel;
+                    if let Some(service) = services.get(pkt.channel as usize).and_then(|s| s.as_ref()) {
+                        service.enqueue_message(pkt)?;
+                    }
+                    else
+                    {
+                        error!( "{} Invalid channel {}",get_name(), pkt.channel);
+                    }
                     let idx=get_service_index(&channel_status, ch as i32);
                     if idx !=255
                     {

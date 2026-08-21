@@ -318,13 +318,61 @@ pub struct SrvSensorSource {
     sensors: Vec<SensorType>,
     prev_nt_mode:bool,
 }
+
+pub struct SrvMediaSinkVideo {
+    pub base: AAService,
+    rx: Receiver<Packet>,
+    proxy_tx: Sender<Packet>,
+    scrcpy_tx: Sender<Packet>,
+    projection_state:ProjectionStatus,
+    video_params:VideoStreamingParams,
+    enabled:bool,
+    video_focus:bool,
+    config_recived:bool,
+    session_id:i32
+}
+
+pub struct SrvMediaSinkAudioGuidance {
+    pub base: AAService,
+    rx: Receiver<Packet>,
+    proxy_tx: Sender<Packet>,
+}
+
+pub struct SrvMediaSinkAudioStreaming {
+    pub base: AAService,
+    rx: Receiver<Packet>,
+    proxy_tx: Sender<Packet>,
+}
+
+pub struct SrvMediaSource {
+    pub base: AAService,
+    rx: Receiver<Packet>,
+    proxy_tx: Sender<Packet>,
+}
+pub struct SrvInputSource {
+    pub base: AAService,
+    rx: Receiver<Packet>,
+    proxy_tx: Sender<Packet>,
+}
+
+pub struct SrvVendorExtension {
+    pub base: AAService,
+    rx: Receiver<Packet>,
+    proxy_tx: Sender<Packet>,
+}
+
+pub struct SrvBluetooth {
+    pub base: AAService,
+    rx: Receiver<Packet>,
+    proxy_tx: Sender<Packet>,
+}
 impl SrvSensorSource {
     pub fn new(sid:i8, proxy_tx: Sender<Packet>, sensors: Vec<SensorType>) -> Self {
         let (tx, rx) = mpsc::channel(5);
         Self {
             base: AAService {
                 sid,
-                srv_type: ServiceType::MediaSink,
+                srv_type: ServiceType::SensorSource,
                 tx,
             },
             rx,
@@ -493,7 +541,315 @@ impl SrvSensorSource {
         Ok(())
     }
 }
+impl SrvMediaSinkVideo {
+    pub fn new(sid:i8, proxy_tx: Sender<Packet>, scrcpy_tx:Sender<Packet>, video_params:VideoStreamingParams, enabled:bool) -> Self {
+        let (tx, rx) = mpsc::channel(5);
+        Self {
+            base: AAService {
+                sid,
+                srv_type: ServiceType::MediaSink,
+                tx,
+            },
+            rx,
+            proxy_tx,
+            scrcpy_tx,
+            video_params,
+            enabled,
+            projection_state:ProjectionStatus::TransitionToProjected,
+            video_focus:false,
+            config_recived:false,
+            session_id:0
+        }
+    }
 
+    pub fn start(self,cancel: CancellationToken,) -> (AAService, JoinHandle<Result<()>>) {
+        let handle = self.base.clone();
+        let task =tokio::spawn(async move {
+            let mut service = self;
+            loop {
+                tokio::select! {
+                    _ = cancel.cancelled() => {
+                        info!("{:?}: Stopping...",service.base.srv_type);
+                        break;
+                    }
+
+                    msg = service.rx.recv() => {
+                        match msg {
+                            Some(msg) => {
+                                service.handle_message(msg).await?;
+                            }
+
+                            None => {
+                                // All Senders dropped
+                                info!("{:?}: Channel closed",service.base.srv_type);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            Ok(())
+        });
+        (handle, task)
+    }
+
+    async fn handle_message(&mut self, pkt: Packet) -> Result<()> {
+
+        let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+        if message_id == ControlMessageType::MESSAGE_CHANNEL_OPEN_RESPONSE  as i32
+        {
+            info!("{:?} Received {} message", self.base.srv_type, message_id);
+            let data = &pkt.payload[2..]; // start of message data, without message_id
+            if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
+                if rsp.status() != MessageStatus::STATUS_SUCCESS
+                {
+                    error!( "{:?}, channel {:?}: Wrong message status received", self.base.srv_type, pkt.channel);
+                }
+                else {
+                    if self.enabled
+                    {
+                        self.video_setup().await?;
+                    }
+                }
+            }
+            else {
+                error!( "{:?}, channel {:?}: Unable to parse received message", self.base.srv_type, pkt.channel);
+            }
+        }
+        else if message_id == ControlMessageType::MESSAGE_CUSTOM_CMD  as i32
+        {
+            info!("{:?} Received {} message", self.base.srv_type, message_id);
+            let cmd: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
+            if cmd == CustomCommand::CMD_OPEN_CH as i32
+            {
+                let mut open_req = ChannelOpenRequest::new();
+                open_req.set_priority(0);
+                open_req.set_service_id(self.base.sid as i32);
+                let mut payload: Vec<u8> = open_req.write_to_bytes().expect("serialization failed");
+                payload.insert(0, ((ControlMessageType::MESSAGE_CHANNEL_OPEN_REQUEST as u16) >> 8) as u8);
+                payload.insert(1, ((ControlMessageType::MESSAGE_CHANNEL_OPEN_REQUEST as u16) & 0xff) as u8);
+
+                let pkt_rsp = Packet {
+                    channel: self.base.sid as u8,
+                    flags: ENCRYPTED | FRAME_TYPE_CONTROL | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                    final_length: None,
+                    payload: payload,
+                };
+                if let Err(_) = self.proxy_tx.send(pkt_rsp).await{
+                    error!( "{:?} response send error",self.base.srv_type);
+                };
+            }
+            else if cmd == CustomCommand::MD_DISCONNECTED as i32 {
+                info!("{:?} MD disconnected, send media STOP to HU", self.base.srv_type);
+                self.stop_media().await?;
+                self.video_setup().await?;
+            }
+        }
+        else if message_id == MediaMessageId::MEDIA_MESSAGE_CONFIG  as i32
+        {
+            info!("{:?} Received {} message", self.base.srv_type, message_id);
+            let data = &pkt.payload[2..]; // start of message data, without message_id
+            if  let Ok(rsp) = ChConfig::parse_from_bytes(&data)
+            {
+                info!( "{}, channel {:?} MEDIA_MESSAGE_CONFIG received: Message status: {:?}, max_unack: {}", get_name(), pkt.channel, rsp.status(), rsp.max_unacked());
+                if rsp.status() == ConfigStatus::STATUS_READY
+                {
+                    self.config_recived=true;
+                    self.video_params.max_unack=rsp.max_unacked();
+                }
+            }
+            else
+            {
+                error!( "{:?}, channel {:?}: Unable to parse received message", self.base.srv_type, pkt.channel);
+            }
+        }
+        else if message_id == MediaMessageId::MEDIA_MESSAGE_VIDEO_FOCUS_NOTIFICATION  as i32
+        {
+            info!("{:?} Received {} message",  message_id);
+            let data = &pkt.payload[2..]; // start of message data, without message_id
+            if  let Ok(rsp) = VideoFocusNotification::parse_from_bytes(&data)
+            {
+                info!( "{:?}, channel {:?}: Message status: {:?}", self.base.srv_type, pkt.channel, rsp.focus());
+                if (rsp.focus() == VideoFocusMode::VIDEO_FOCUS_PROJECTED) || (rsp.focus()==VideoFocusMode::VIDEO_FOCUS_PROJECTED_NO_INPUT_FOCUS)
+                {
+                    info!( "{:?}, channel {:?}: VIDEO_FOCUS_PROJECTED received", self.base.srv_type, pkt.channel);
+                    self.video_focus=true;
+
+                    if self.projection_state==ProjectionStatus::TransitionToProjected
+                    {
+                        self.session_id +=1;
+                        self.start_media().await?;
+                        self.start_scrcpy_media().await?;
+                        self.projection_state=ProjectionStatus::ProjectedRecording;
+                    }
+                    else if self.projection_state==ProjectionStatus::ProjectedPause
+                    {
+                        self.resume_scrcpy_media().await?;
+                        self.session_id +=1;
+                        self.start_media().await?;
+                        self.projection_state=ProjectionStatus::ProjectedRecording;
+                    }
+                    else
+                    {
+                        debug!("{:?}, channel {:?}: video streaming already started, ignoring packet", self.base.srv_type, pkt.channel);
+                    }
+                }
+                else
+                {
+                    self.video_focus=false;
+                    debug!( "{:?} video focus lost",self.base.srv_type);
+                    if self.projection_state==ProjectionStatus::ProjectedRecording
+                    {
+                        self.pause_scrcpy_media().await?;
+                        self.stop_media().await?;
+                        self.projection_state=ProjectionStatus::ProjectedPause;
+                    }
+                }
+            }
+            else
+            {
+                error!( "{:?}, channel {:?}: Unable to parse received message", self.base.srv_type, pkt.channel);
+            }
+        }
+        else if message_id == MediaMessageId::MEDIA_MESSAGE_START  as i32//HU send this response as confirmation to START from MD, but only if STOP was sent before START
+        {
+            info!("{:?} Received {} message", self.base.srv_type, message_id);
+            info!( "{:?}, channel {:?}: MEDIA_MESSAGE_START received", self.base.srv_type, pkt.channel);
+        }
+        else if message_id == MediaMessageId::MEDIA_MESSAGE_STOP  as i32
+        {
+            error!( "{:?}, channel {:?}: MEDIA_MESSAGE_STOP received but not managed", self.base.srv_type, pkt.channel);
+
+        }
+        else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK  as i32//now this is done by PacketProxy, not needed
+        {
+            error!("{:?}: Media ACK received by service, was not handled by PacketProxy", self.base.srv_type)
+            /*if video_stream_started
+            {
+
+                if let Err(_) = scrcpy_cmd.send_async(pkt).await{
+                    error!( "{} mpsc send error",get_name());
+                };
+
+            }*/
+        }
+        else
+        {
+            info!( "{:?} Unknown message ID: {} received", self.base.srv_type, message_id);
+        }
+        Ok(())
+    }
+
+    async fn video_setup(&self)->Result<()> {
+        info!( "{:?}, channel {:?}: Sending SETUP command", self.base.srv_type, self.base.sid);
+        let mut media_setup= Setup::new();
+        media_setup.set_type(MediaCodecType::MEDIA_CODEC_VIDEO_H264_BP);
+        let mut payload: Vec<u8>=Vec::new();
+        payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_SETUP as u16).to_be_bytes());
+        payload.extend_from_slice(&(media_setup.write_to_bytes()?));
+        let pkt_rsp = Packet {
+            channel: self.base.sid as u8,
+            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+            final_length: None,
+            payload: payload,
+        };
+        if let Err(_) = self.proxy_tx.send(pkt_rsp).await{
+            error!( "{:?} send error",self.base.srv_type);
+        };
+        Ok(())
+    }
+    async fn start_media(&self)->Result<()> {
+        info!( "{}, channel {:?}: Sending START command, session id= {}", get_name(), ch_id, session_id);
+        let mut start_req = Start::new();
+        start_req.set_session_id(self.session_id);
+        start_req.set_configuration_index(0);
+        let mut payload: Vec<u8> = start_req.write_to_bytes().expect("serialization failed");
+        payload.insert(0, ((MediaMessageId::MEDIA_MESSAGE_START as u16) >> 8) as u8);
+        payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_START as u16) & 0xff) as u8);
+
+        let pkt_rsp = Packet {
+            channel: self.base.sid as u8,
+            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+            final_length: None,
+            payload: payload,
+        };
+        if let Err(_) = self.proxy_tx.send(pkt_rsp).await{
+            error!( "{:?} response send error",self.base.srv_type);
+        };
+        Ok(())
+    }
+    async fn stop_media(&self)->Result<()> {
+        info!( "{:?}, channel {:?}: Sending STOP command", self.base.srv_type, self.base.sid);
+        let media_stop= Stop::new();
+        let mut payload: Vec<u8>=Vec::new();
+        payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_STOP as u16).to_be_bytes());
+        payload.extend_from_slice(&(media_stop.write_to_bytes()?));
+        let pkt_rsp = Packet {
+            channel: self.base.sid as u8,
+            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+            final_length: None,
+            payload: payload,
+        };
+        if let Err(_) = self.proxy_tx.send(pkt_rsp).await{
+            error!( "{:?} send error", self.base.srv_type);
+        };
+        Ok(())
+    }
+    async fn start_scrcpy_media(&self)->Result<()> {
+        debug!( "{:?}, Starting video streaming", self.base.srv_type);
+        let bytes: Vec<u8> = postcard::to_stdvec(&self.video_params)?;
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+        payload.extend_from_slice(&(CustomCommand::CMD_START_VIDEO_RECORDING as u16).to_be_bytes());
+        payload.extend_from_slice(&bytes);
+
+        let pkt_rsp = Packet {
+            channel: self.base.sid as u8,
+            flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+            final_length: None,
+            payload: payload.clone(),
+        };
+        if let Err(_) = self.scrcpy_tx.send(pkt_rsp).await{
+            error!( "{:?} mpsc send error",self.base.srv_type);
+        };
+        Ok(())
+    }
+    async fn pause_scrcpy_media(&self)->Result<()> {
+        debug!( "{:?}, Pausing video streaming", self.base.srv_type);
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+        payload.extend_from_slice(&(CustomCommand::CMD_PAUSE_VIDEO_RECORDING as u16).to_be_bytes());
+
+        let pkt_rsp = Packet {
+            channel: self.base.sid as u8,
+            flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+            final_length: None,
+            payload: payload.clone(),
+        };
+        if let Err(_) = self.scrcpy_tx.send(pkt_rsp).await{
+            error!( "{:?} mpsc send error",self.base.srv_type);
+        };
+        Ok(())
+    }
+    async fn resume_scrcpy_media(&self)->Result<()> {
+        debug!( "{:?}, Resuming video streaming", self.base.srv_type);
+        let mut payload = Vec::new();
+        payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+        payload.extend_from_slice(&(CustomCommand::CMD_RESUME_VIDEO_RECORDING as u16).to_be_bytes());
+
+        let pkt_rsp = Packet {
+            channel: self.base.sid as u8,
+            flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+            final_length: None,
+            payload: payload.clone(),
+        };
+        if let Err(_) = self.scrcpy_tx.send(pkt_rsp).await{
+            error!( "{:?} mpsc send error",self.base.srv_type);
+        };
+        Ok(())
+    }
+}
 
 pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, sensors: Vec<SensorType>) -> Result<()> {
     info!( "{}: Starting...", get_name());
@@ -633,9 +989,7 @@ pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, 
     }
 }
 pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, scrcpy_cmd: flume::Sender<Packet>, mut video_params:VideoStreamingParams, dhu:bool) -> Result<()>{
-
-    info!( "{}: Starting...", get_name());
-    //let mut md_connected=false;
+    
     let mut projection_state=ProjectionStatus::TransitionToProjected;
     let mut video_focus=false;
     let mut config_recived=false;
