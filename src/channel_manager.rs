@@ -28,9 +28,10 @@ use protobuf::{Enum, Message, MessageDyn};
 use tokio::sync::{mpsc};
 use tokio::task::JoinHandle;
 use tokio_uring::net::TcpStream;
+use tokio_util::sync::CancellationToken;
 //use protos::ControlMessageType::{self, *};
 use protos::{ControlMessageType, MediaMessageId};
-use crate::aa_services::{VideoCodecResolution::*, VideoFPS::*, AudioStream, AudioConfig, MediaCodec::*, ServiceType, CommandState, ServiceStatus, th_bluetooth, VideoStreamingParams, AudioStreamingParams, SensorType, AAMessageType};
+use crate::aa_services::{VideoCodecResolution::*, VideoFPS::*, AudioStream, AudioConfig, MediaCodec::*, ServiceType, CommandState, ServiceStatus, th_bluetooth, VideoStreamingParams, AudioStreamingParams, SensorType, AAMessageType, SrvSensorSource, AAService};
 use crate::aa_services::{th_input_source, th_media_sink_audio_guidance, th_media_sink_audio_streaming, th_media_sink_video, th_media_source, th_sensor_source, th_vendor_extension};
 use crate::config::{AppConfig, SharedConfig, DHU_MAKE_DEV, DHU_MODEL_DEV, HU_CONFIG_DELAY_MS, MAX_DATA_LEN, MAX_PACKET_LEN};
 use crate::config_types::{AAMode, HexdumpLevel};
@@ -1393,6 +1394,7 @@ pub async fn ch_proxy(
                     ).await;
     let mut srv_senders;
     let mut srv_tsk_handles;
+    let services: Vec<AAService>;
     let mut channel_status;
     let data = &pkt.payload[2..]; // start of message data, without message_id
     let mut video_codec_params = VideoStreamingParams::default();
@@ -1514,7 +1516,11 @@ pub async fn ch_proxy(
 
                     }
                 }
-
+                let service = SrvSensorSource::new(ch_id as i8);
+                let cancel = CancellationToken::new();
+                let (service_handle, task) = service.start(cancel.clone());
+                services = vec![service_handle];
+                srv_tsk_handles.push(task);
                 srv_tsk_handles.push(tokio_uring::spawn(th_sensor_source(ch_id,false, tx_srv.clone(), rx, sensors)));
             }
             else if proto_srv.input_source_service.is_some()

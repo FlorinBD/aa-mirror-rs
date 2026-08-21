@@ -418,7 +418,7 @@ async fn enable_usb_if_present(usb: &mut Option<UsbGadgetState>) {
 }
 ///
 /// IO Loop for Mirror mode only
-pub async fn io_loop(
+pub async fn io_loop_mirror(
     need_restart: BroadcastSender<Option<Action>>,
     config: SharedConfig,
 ) -> Result<()> {
@@ -670,8 +670,8 @@ pub async fn io_loop(
         let _ = need_restart.send(action);
     }
 }
-/// IO Loop for PassTrough mode only
-pub async fn io_loop_pt(
+/// IO Loop for AA MITM/PassTrough mode only
+pub async fn io_loop_aa(
     need_restart: BroadcastSender<Option<Action>>,
     config: SharedConfig,
 ) -> Result<()> {

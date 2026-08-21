@@ -4,7 +4,7 @@ use aa_mirror_rs::config::SharedConfigJson;
 use aa_mirror_rs::config::WifiConfig;
 use aa_mirror_rs::config::{Action, AppConfig};
 use aa_mirror_rs::config::{DEFAULT_WLAN_ADDR, TCP_MD_SERVER_PORT};
-use aa_mirror_rs::io_uring::{io_loop, io_loop_pt};
+use aa_mirror_rs::io_uring::{io_loop_mirror, io_loop_aa};
 use aa_mirror_rs::led::{LedColor, LedManager, LedMode};
 use aa_mirror_rs::channel_manager::Packet;
 //use aa_mirror_rs::usb_gadget::uevent_listener;
@@ -555,14 +555,14 @@ fn main() -> Result<()> {
     // start tokio_uring runtime simultaneously
     if cfg.aa_mode == AAMode::Mirror
     {
-        let _ = tokio_uring::start(io_loop(
+        let _ = tokio_uring::start(io_loop_mirror(
             restart_tx,
             config_lck,
         ));
     }
     else
     {
-        let _ = tokio_uring::start(io_loop_pt(
+        let _ = tokio_uring::start(io_loop_aa(
             restart_tx,
             config_lck,
         ));

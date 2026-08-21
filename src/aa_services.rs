@@ -2,7 +2,10 @@
 
 use simplelog::*;
 use std::fmt;
+use std::sync::Arc;
+use std::sync::atomic::AtomicUsize;
 use std::time::{Duration, SystemTime};
+use anyhow::anyhow;
 use futures::future::err;
 use futures_timer::Delay;
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -22,13 +25,18 @@ use crate::aa_services::SensorMessageId::*;
 //use crate::aa_services::SensorType::*;
 use crate::aa_services::MediaCodecType::*;
 use protobuf::{Message};
+use tokio::sync::mpsc;
+use tokio::task::JoinHandle;
 //use tokio::sync::broadcast;
 use tokio_uring::net::{TcpStream, TcpListener};
+use tokio_util::sync::CancellationToken;
 use protos::*;
 use protos::ControlMessageType::{self, *};
 use crate::adb;
-use crate::channel_manager::{Packet, ENCRYPTED, FRAME_TYPE_CONTROL, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
-use crate::config::{HU_CONFIG_DELAY_MS, SCRCPY_PORT};
+use crate::channel_manager::{Packet, PacketProxy, ENCRYPTED, FRAME_TYPE_CONTROL, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
+use crate::config::{AppConfig, HU_CONFIG_DELAY_MS, SCRCPY_PORT};
+use crate::config_types::HexdumpLevel;
+use crate::io_uring::{Endpoint, IoDevice};
 use crate::scrcpy::ScrcpyControlMessageType;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -259,6 +267,108 @@ impl fmt::Display for ServiceType {
         // fmt::Debug::fmt(self, f)
     }
 }
+
+pub struct  AAService {
+    sid: i8,
+    pub srv_type: ServiceType,
+    tx: Sender<Packet>,
+}
+
+impl AAService {
+    pub fn new(srv_type: ServiceType, sid:i8) -> Self {
+        Self {
+            sid,
+            srv_type,
+            tx,
+        }
+    }
+
+    pub fn sid(&self) -> i8 {
+        self.sid
+    }
+
+    pub fn enqueue_message(&self, msg: Packet) -> Result<()> {
+        match self.tx.try_send(msg) {
+            Ok(()) => Ok(()),
+
+            Err(mpsc::error::TrySendError::Full(_)) => {
+                info!(
+                "{:?}: Queue full, failed to enqueue message for sid {}",
+                self.srv_type,
+                self.sid
+            );
+                Ok(())
+            }
+
+            Err(mpsc::error::TrySendError::Closed(_)) => {
+                Err(format!("{:?}: Queue closed for sid {}",
+                    self.srv_type,
+                    self.sid
+                ).into())
+            }
+        }
+    }
+
+}
+
+pub struct SrvSensorSource {
+    pub base: AAService,
+    rx: Receiver<Packet>,
+}
+impl SrvSensorSource {
+    pub fn new(sid:i8) -> Self {
+        let (tx, rx) = mpsc::channel(5);
+        Self {
+            base: AAService {
+                sid,
+                srv_type: ServiceType::MediaSink,
+                tx,
+            },
+            rx,
+        }
+    }
+
+    pub fn start(self,cancel: CancellationToken,) -> (AAService, JoinHandle<Result<()>>) {
+        let SrvSensorSource { base, mut rx } = self;
+        let task =tokio::spawn(async move {
+            loop {
+                tokio::select! {
+                    _ = cancel.cancelled() => {
+                        info!("{:?}: Stopping...",self.base.srv_type);
+                        break;
+                    }
+
+                    msg = rx.recv() => {
+                        match msg {
+                            Some(msg) => {
+                                Self::handle_message(msg).await?;
+                            }
+
+                            None => {
+                                // All Senders dropped
+                                info!("{:?}: Channel closed",self.base.srv_type);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            Ok(())
+        });
+        (base, task)
+    }
+
+    async fn handle_message(msg: Packet) -> Result<()> {
+
+
+        // Process message...
+
+        Ok(())
+    }
+}
+
+
 pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, sensors: Vec<SensorType>) -> Result<()> {
     info!( "{}: Starting...", get_name());
     let mut prev_nt_mode=false;
