@@ -652,7 +652,7 @@ impl SrvMediaSinkVideo {
             let data = &pkt.payload[2..]; // start of message data, without message_id
             if  let Ok(rsp) = ChConfig::parse_from_bytes(&data)
             {
-                info!( "{}, channel {:?} MEDIA_MESSAGE_CONFIG received: Message status: {:?}, max_unack: {}", get_name(), pkt.channel, rsp.status(), rsp.max_unacked());
+                info!( "{:?}, channel {:?} MEDIA_MESSAGE_CONFIG received: Message status: {:?}, max_unack: {}", self.base.srv_type, pkt.channel, rsp.status(), rsp.max_unacked());
                 if rsp.status() == ConfigStatus::STATUS_READY
                 {
                     self.config_recived=true;
@@ -666,7 +666,7 @@ impl SrvMediaSinkVideo {
         }
         else if message_id == MediaMessageId::MEDIA_MESSAGE_VIDEO_FOCUS_NOTIFICATION  as i32
         {
-            info!("{:?} Received {} message",  message_id);
+            info!("{:?} Received {} message",self.base.srv_type  message_id);
             let data = &pkt.payload[2..]; // start of message data, without message_id
             if  let Ok(rsp) = VideoFocusNotification::parse_from_bytes(&data)
             {
@@ -760,7 +760,7 @@ impl SrvMediaSinkVideo {
         Ok(())
     }
     async fn start_media(&self)->Result<()> {
-        info!( "{}, channel {:?}: Sending START command, session id= {}", get_name(), ch_id, session_id);
+        info!( "{:?}, channel {:?}: Sending START command, session id= {}", self.base.srv_type, self.base.sid, self.session_id);
         let mut start_req = Start::new();
         start_req.set_session_id(self.session_id);
         start_req.set_configuration_index(0);

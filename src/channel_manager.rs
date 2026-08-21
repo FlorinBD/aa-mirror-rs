@@ -1293,7 +1293,16 @@ fn get_service_index(arr:&Vec<ServiceStatus>, ch:i32)->usize
     }
     255
 }
+fn add_service(services: &mut Vec<Option<AAService>>, service: AAService) {
+    let sid = service.sid() as usize;
 
+    if services.len() <= sid
+    {
+        services.resize_with(sid + 1, || None);
+    }
+
+    services[sid] = Some(service);
+}
 /// main thread doing all packet processing between HU and device
 pub async fn ch_proxy(
     mut rx_srv: Receiver<Packet>,
@@ -1394,7 +1403,7 @@ pub async fn ch_proxy(
                     ).await;
     let mut srv_senders;
     let mut srv_tsk_handles;
-    let mut services: Vec<Option<AAService>>;
+    let mut services: Vec<Option<AAService>> = Vec::new();
     let mut channel_status;
     let data = &pkt.payload[2..]; // start of message data, without message_id
     let mut video_codec_params = VideoStreamingParams::default();
@@ -1519,7 +1528,7 @@ pub async fn ch_proxy(
                 let service = SrvSensorSource::new(ch_id as i8, tx_srv.clone(), sensors.clone());
                 let cancel = CancellationToken::new();
                 let (service_handle, task) = service.start(cancel.clone());
-                services = vec![service_handle];
+                add_service(&mut services, service_handle);
                 srv_tsk_handles.push(task);
                 srv_tsk_handles.push(tokio_uring::spawn(th_sensor_source(ch_id,false, tx_srv.clone(), rx, sensors)));
             }
