@@ -1394,7 +1394,7 @@ pub async fn ch_proxy(
                     ).await;
     let mut srv_senders;
     let mut srv_tsk_handles;
-    let services: Vec<AAService>;
+    let mut services: Vec<AAService>;
     let mut channel_status;
     let data = &pkt.payload[2..]; // start of message data, without message_id
     let mut video_codec_params = VideoStreamingParams::default();

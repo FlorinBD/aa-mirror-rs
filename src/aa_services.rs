@@ -267,7 +267,7 @@ impl fmt::Display for ServiceType {
         // fmt::Debug::fmt(self, f)
     }
 }
-
+#[derive(Clone)]
 pub struct  AAService {
     sid: i8,
     pub srv_type: ServiceType,
@@ -275,7 +275,7 @@ pub struct  AAService {
 }
 
 impl AAService {
-    pub fn new(srv_type: ServiceType, sid:i8) -> Self {
+    pub fn new(srv_type: ServiceType, sid:i8, tx: Sender<Packet>) -> Self {
         Self {
             sid,
             srv_type,
@@ -314,9 +314,12 @@ impl AAService {
 pub struct SrvSensorSource {
     pub base: AAService,
     rx: Receiver<Packet>,
+    proxy_tx: Sender<Packet>,
+    sensors: Vec<SensorType>,
+    prev_nt_mode:bool,
 }
 impl SrvSensorSource {
-    pub fn new(sid:i8) -> Self {
+    pub fn new(sid:i8, proxy_tx: Sender<Packet>, sensors: Vec<SensorType>) -> Self {
         let (tx, rx) = mpsc::channel(5);
         Self {
             base: AAService {
@@ -325,28 +328,32 @@ impl SrvSensorSource {
                 tx,
             },
             rx,
+            proxy_tx,
+            sensors,
+            prev_nt_mode: false,
         }
     }
 
     pub fn start(self,cancel: CancellationToken,) -> (AAService, JoinHandle<Result<()>>) {
-        let SrvSensorSource { base, mut rx } = self;
+        let SrvSensorSource { base, mut rx,proxy_tx,sensors, prev_nt_mode } = self;
         let task =tokio::spawn(async move {
+            let mut service = self;
             loop {
                 tokio::select! {
                     _ = cancel.cancelled() => {
-                        info!("{:?}: Stopping...",self.base.srv_type);
+                        info!("{:?}: Stopping...",service.base.srv_type);
                         break;
                     }
 
                     msg = rx.recv() => {
                         match msg {
                             Some(msg) => {
-                                Self::handle_message(msg).await?;
+                                service.handle_message( msg).await?;
                             }
 
                             None => {
                                 // All Senders dropped
-                                info!("{:?}: Channel closed",self.base.srv_type);
+                                info!("{:?}: Channel closed",service.base.srv_type);
                                 break;
                             }
                         }
@@ -359,10 +366,129 @@ impl SrvSensorSource {
         (base, task)
     }
 
-    async fn handle_message(msg: Packet) -> Result<()> {
+    async fn handle_message(&mut self, pkt: Packet) -> Result<()> {
 
+        let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+        if message_id == MESSAGE_CHANNEL_OPEN_RESPONSE  as i32
+        {
+            info!("{:?} Received message id: {}", self.base.srv_type, message_id);
+            let data = &pkt.payload[2..]; // start of message data, without message_id
+            if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
+                if rsp.status() != STATUS_SUCCESS
+                {
+                    error!( "{:?}, channel {:?}: Wrong message status received", self.base.srv_type, pkt.channel);
+                }
+                else
+                {
+                    if self.sensors.contains(&SensorType::SENSOR_NIGHT_MODE) {
+                        info!("{:?} send SENSOR_MESSAGE_REQUEST",self.base.srv_type);
+                        let mut req = SensorRequest::new();
+                        req.set_type(protos::SensorType::SENSOR_NIGHT_MODE);
+                        req.set_min_update_period(1_000_000_000);
+                        let mut payload: Vec<u8>=Vec::new();
+                        payload.extend_from_slice(&(SensorMessageId::SENSOR_MESSAGE_REQUEST as u16).to_be_bytes());
+                        payload.extend_from_slice(&(req.write_to_bytes()?));
 
-        // Process message...
+                        let pkt_rsp = Packet {
+                            channel: self.base.sid() as u8,
+                            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                            final_length: None,
+                            payload: payload,
+                        };
+                        if let Err(_) = self.proxy_tx.send(pkt_rsp).await
+                        {
+                            error!( "{:?} mpsc send error", self.base.srv_type);
+                        };
+                    }
+
+                }
+            }
+            else {
+                error!( "{:?}, channel {:?}: Unable to parse received message", self.base.srv_type, pkt.channel);
+            }
+        }
+        else if message_id == SENSOR_MESSAGE_RESPONSE  as i32
+        {
+            info!("{:?} Received message SENSOR_MESSAGE_RESPONSE", self.base.srv_type);
+            let data = &pkt.payload[2..]; // start of message data, without message_id
+            if  let Ok(rsp) = SensorResponse::parse_from_bytes(&data) {
+                if rsp.status() != STATUS_SUCCESS
+                {
+                    error!( "{:?}, channel {:?}: Wrong message status received", self.base.srv_type, pkt.channel);
+                }
+            }
+        }
+        else if message_id == SENSOR_MESSAGE_BATCH  as i32
+        {
+            info!("{:?} Received message SENSOR_MESSAGE_BATCH", self.base.srv_type);
+            let data = &pkt.payload[2..]; // start of message data, without message_id
+            if  let Ok(rsp) = SensorBatch::parse_from_bytes(&data) {
+                if !rsp.night_mode_data.is_empty()
+                {
+                    if let Some(night) = rsp.night_mode_data.first() {
+                        let value = night.night_mode.unwrap_or(false);
+                        if value != self.prev_nt_mode
+                        {
+                            self.prev_nt_mode=value;
+                            info!("{:?} Switching theme for MD, night: {}", self.base.srv_type, value);
+                            let mut mode="yes";
+                            if !value{
+                                mode="no";
+                            }
+                            let mut cmd_shell:Vec<String> = vec![];
+                            cmd_shell.push("cmd".to_string());
+                            cmd_shell.push("uimode".to_string());
+                            cmd_shell.push("night".to_string());
+                            cmd_shell.push(format!("{}",mode.to_string() ));
+                            let (mut shell, mut sh_reader,line)=adb::shell_cmd(cmd_shell).await?;
+                            info!("{:?} ADB cmd shell response: {:?}",self.base.srv_type, line);
+                            if !line.contains("Night mode:") && shell.id().is_some()
+                            {
+                                error!( "{:?} error switching MD theme", self.base.srv_type);
+                            }
+                            shell.kill().await?;
+                        }
+                    }
+                }
+            }
+            else {
+                error!( "{:?} error deserializing SensorBatch", self.base.srv_type);
+            }
+        }
+        else if message_id == MESSAGE_CUSTOM_CMD  as i32
+        {
+            info!("{} Received {} message", self.base.sid.to_string(), message_id);
+            let cmd: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
+            if cmd == CustomCommand::CMD_OPEN_CH as i32
+            {
+                let mut open_req = ChannelOpenRequest::new();
+                open_req.set_priority(0);
+                open_req.set_service_id(self.base.sid);
+                let mut payload: Vec<u8> = open_req.write_to_bytes().expect("serialization failed");
+                payload.insert(0, ((MESSAGE_CHANNEL_OPEN_REQUEST as u16) >> 8) as u8);
+                payload.insert(1, ((MESSAGE_CHANNEL_OPEN_REQUEST as u16) & 0xff) as u8);
+
+                let pkt_rsp = Packet {
+                    channel: self.base.sid as u8,
+                    flags: ENCRYPTED | FRAME_TYPE_CONTROL | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                    final_length: None,
+                    payload: payload,
+                };
+                //tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
+                if let Err(_) = self.proxy_tx.send(pkt_rsp).await
+                {
+                    error!( "{:?} mpsc send error", self.base.srv_type);
+                };
+            }
+            else if cmd == CustomCommand::MD_DISCONNECTED as i32
+            {
+                info!( "{:?} MD_DISCONNECTED received", self.base.srv_type);
+            }
+        }
+        else
+        {
+            info!( "{:?} Unknown message ID: {} received", self.base.srv_type, message_id);
+        }
 
         Ok(())
     }
