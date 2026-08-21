@@ -314,7 +314,7 @@ impl AAService {
 pub struct SrvSensorSource {
     pub base: AAService,
     rx: Receiver<Packet>,
-    proxy_tx: Sender<Packet>,
+    hu_tx: Sender<Packet>,
     sensors: Vec<SensorType>,
     prev_nt_mode:bool,
 }
@@ -322,7 +322,7 @@ pub struct SrvSensorSource {
 pub struct SrvMediaSinkVideo {
     pub base: AAService,
     rx: Receiver<Packet>,
-    proxy_tx: Sender<Packet>,
+    hu_tx: Sender<Packet>,
     scrcpy_tx: Sender<Packet>,
     projection_state:ProjectionStatus,
     video_params:VideoStreamingParams,
@@ -335,39 +335,39 @@ pub struct SrvMediaSinkVideo {
 pub struct SrvMediaSinkAudioGuidance {
     pub base: AAService,
     rx: Receiver<Packet>,
-    proxy_tx: Sender<Packet>,
+    hu_tx: Sender<Packet>,
 }
 
 pub struct SrvMediaSinkAudioStreaming {
     pub base: AAService,
     rx: Receiver<Packet>,
-    proxy_tx: Sender<Packet>,
+    hu_tx: Sender<Packet>,
 }
 
 pub struct SrvMediaSource {
     pub base: AAService,
     rx: Receiver<Packet>,
-    proxy_tx: Sender<Packet>,
+    hu_tx: Sender<Packet>,
 }
 pub struct SrvInputSource {
     pub base: AAService,
     rx: Receiver<Packet>,
-    proxy_tx: Sender<Packet>,
+    hu_tx: Sender<Packet>,
 }
 
 pub struct SrvVendorExtension {
     pub base: AAService,
     rx: Receiver<Packet>,
-    proxy_tx: Sender<Packet>,
+    hu_tx: Sender<Packet>,
 }
 
 pub struct SrvBluetooth {
     pub base: AAService,
     rx: Receiver<Packet>,
-    proxy_tx: Sender<Packet>,
+    hu_tx: Sender<Packet>,
 }
 impl SrvSensorSource {
-    pub fn new(sid:i8, proxy_tx: Sender<Packet>, sensors: Vec<SensorType>) -> Self {
+    pub fn new(sid:i8, hu_tx: Sender<Packet>, sensors: Vec<SensorType>) -> Self {
         let (tx, rx) = mpsc::channel(5);
         Self {
             base: AAService {
@@ -376,7 +376,7 @@ impl SrvSensorSource {
                 tx,
             },
             rx,
-            proxy_tx,
+            hu_tx,
             sensors,
             prev_nt_mode: false,
         }
@@ -443,7 +443,7 @@ impl SrvSensorSource {
                             final_length: None,
                             payload: payload,
                         };
-                        if let Err(_) = self.proxy_tx.send(pkt_rsp).await
+                        if let Err(_) = self.hu_tx.send(pkt_rsp).await
                         {
                             error!( "{:?} mpsc send error", self.base.srv_type);
                         };
@@ -523,7 +523,7 @@ impl SrvSensorSource {
                     payload: payload,
                 };
                 //tx_srv.send(pkt_rsp).await.expect("TODO: panic message");
-                if let Err(_) = self.proxy_tx.send(pkt_rsp).await
+                if let Err(_) = self.hu_tx.send(pkt_rsp).await
                 {
                     error!( "{:?} mpsc send error", self.base.srv_type);
                 };
@@ -542,7 +542,7 @@ impl SrvSensorSource {
     }
 }
 impl SrvMediaSinkVideo {
-    pub fn new(sid:i8, proxy_tx: Sender<Packet>, scrcpy_tx:Sender<Packet>, video_params:VideoStreamingParams, enabled:bool) -> Self {
+    pub fn new(sid:i8, hu_tx: Sender<Packet>, scrcpy_tx:Sender<Packet>, video_params:VideoStreamingParams, enabled:bool) -> Self {
         let (tx, rx) = mpsc::channel(5);
         Self {
             base: AAService {
@@ -551,7 +551,7 @@ impl SrvMediaSinkVideo {
                 tx,
             },
             rx,
-            proxy_tx,
+            hu_tx,
             scrcpy_tx,
             video_params,
             enabled,
@@ -636,7 +636,7 @@ impl SrvMediaSinkVideo {
                     final_length: None,
                     payload: payload,
                 };
-                if let Err(_) = self.proxy_tx.send(pkt_rsp).await{
+                if let Err(_) = self.hu_tx.send(pkt_rsp).await{
                     error!( "{:?} response send error",self.base.srv_type);
                 };
             }
@@ -754,7 +754,7 @@ impl SrvMediaSinkVideo {
             final_length: None,
             payload: payload,
         };
-        if let Err(_) = self.proxy_tx.send(pkt_rsp).await{
+        if let Err(_) = self.hu_tx.send(pkt_rsp).await{
             error!( "{:?} send error",self.base.srv_type);
         };
         Ok(())
@@ -774,7 +774,7 @@ impl SrvMediaSinkVideo {
             final_length: None,
             payload: payload,
         };
-        if let Err(_) = self.proxy_tx.send(pkt_rsp).await{
+        if let Err(_) = self.hu_tx.send(pkt_rsp).await{
             error!( "{:?} response send error",self.base.srv_type);
         };
         Ok(())
@@ -791,7 +791,7 @@ impl SrvMediaSinkVideo {
             final_length: None,
             payload: payload,
         };
-        if let Err(_) = self.proxy_tx.send(pkt_rsp).await{
+        if let Err(_) = self.hu_tx.send(pkt_rsp).await{
             error!( "{:?} send error", self.base.srv_type);
         };
         Ok(())
@@ -989,7 +989,7 @@ pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, 
     }
 }
 pub async fn th_media_sink_video(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, scrcpy_cmd: flume::Sender<Packet>, mut video_params:VideoStreamingParams, dhu:bool) -> Result<()>{
-    
+
     let mut projection_state=ProjectionStatus::TransitionToProjected;
     let mut video_focus=false;
     let mut config_recived=false;
