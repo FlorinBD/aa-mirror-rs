@@ -335,7 +335,7 @@ impl SrvSensorSource {
     }
 
     pub fn start(self,cancel: CancellationToken,) -> (AAService, JoinHandle<Result<()>>) {
-        let SrvSensorSource { base, mut rx,proxy_tx,sensors, prev_nt_mode } = self;
+        let handle = self.base.clone();
         let task =tokio::spawn(async move {
             let mut service = self;
             loop {
@@ -345,7 +345,7 @@ impl SrvSensorSource {
                         break;
                     }
 
-                    msg = rx.recv() => {
+                    msg = service.rx.recv() => {
                         match msg {
                             Some(msg) => {
                                 service.handle_message( msg).await?;
@@ -363,7 +363,7 @@ impl SrvSensorSource {
 
             Ok(())
         });
-        (base, task)
+        (handle, task)
     }
 
     async fn handle_message(&mut self, pkt: Packet) -> Result<()> {
@@ -463,7 +463,7 @@ impl SrvSensorSource {
             {
                 let mut open_req = ChannelOpenRequest::new();
                 open_req.set_priority(0);
-                open_req.set_service_id(self.base.sid);
+                open_req.set_service_id(self.base.sid as i32);
                 let mut payload: Vec<u8> = open_req.write_to_bytes().expect("serialization failed");
                 payload.insert(0, ((MESSAGE_CHANNEL_OPEN_REQUEST as u16) >> 8) as u8);
                 payload.insert(1, ((MESSAGE_CHANNEL_OPEN_REQUEST as u16) & 0xff) as u8);

@@ -1516,7 +1516,7 @@ pub async fn ch_proxy(
 
                     }
                 }
-                let service = SrvSensorSource::new(ch_id as i8);
+                let service = SrvSensorSource::new(ch_id as i8, tx_srv.clone(), sensors);
                 let cancel = CancellationToken::new();
                 let (service_handle, task) = service.start(cancel.clone());
                 services = vec![service_handle];
