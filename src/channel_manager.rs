@@ -1597,7 +1597,7 @@ pub async fn ch_proxy(
                     {
                         error!( "{} Invalid channel {}",get_name(), pkt.channel);
                     }
-                    let idx=get_service_index(&channel_status, ch as i32);
+                    /*let idx=get_service_index(&channel_status, ch as i32);
                     if idx !=255
                     {
                         //srv_senders[idx].send(pkt).await.expect("Error sending message to service");
@@ -1607,7 +1607,7 @@ pub async fn ch_proxy(
                     }
                     else {
                         error!( "{} Invalid channel {}",get_name(), ch);
-                    }
+                    }*/
                 }
                 else { //Default channel messages
                     let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();

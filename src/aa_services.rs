@@ -666,7 +666,7 @@ impl SrvMediaSinkVideo {
         }
         else if message_id == MediaMessageId::MEDIA_MESSAGE_VIDEO_FOCUS_NOTIFICATION  as i32
         {
-            info!("{:?} Received {} message",self.base.srv_type  message_id);
+            info!("{:?} Received {} message",self.base.srv_type, message_id);
             let data = &pkt.payload[2..]; // start of message data, without message_id
             if  let Ok(rsp) = VideoFocusNotification::parse_from_bytes(&data)
             {
