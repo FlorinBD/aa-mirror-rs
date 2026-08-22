@@ -264,6 +264,17 @@ pub struct AudioConfig
     pub channels:u32,
     pub bitdepth:u32,
 }
+impl Default for AudioConfig {
+    fn default() -> Self {
+        Self {
+            codec: MediaCodec::AUDIO_PCM,
+            stream_type:AudioStream::MEDIA,
+            bitrate: 1_000_000,
+            channels:2,
+            bitdepth: 16,
+        }
+    }
+}
 impl fmt::Display for ServiceType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:?}", self)
@@ -1423,11 +1434,11 @@ impl SrvMediaSource {
             if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
                 if rsp.status() != STATUS_SUCCESS
                 {
-                    error!( "{}, channel {:?}: Wrong message status received", get_name(), pkt.channel);
+                    error!( "{:?}, channel {:?}: Wrong message status received", self.base.srv_type, pkt.channel);
                 }
             }
             else {
-                error!( "{}, channel {:?}: Unable to parse received message", get_name(), pkt.channel);
+                error!( "{:?}, channel {:?}: Unable to parse received message", self.base.srv_type, pkt.channel);
             }
         }
         else if message_id == MESSAGE_CUSTOM_CMD  as i32
@@ -1783,9 +1794,9 @@ impl SrvManager {
             sdr_services: Vec::new(),
             srv_tsk_handles:Vec::new(),
             sdr_sensors:Vec::new(),
-            sdr_keys,
-            sdr_audio_cfg_guidance,
-            sdr_audio_cfg_streaming,
+            sdr_keys:Vec::new(),
+            sdr_audio_cfg_guidance: AudioConfig::default(),
+            sdr_audio_cfg_streaming: AudioConfig::default(),
             sdr_video_codec_params : VideoStreamingParams::default(),
             sdr_audio_codec_params : AudioStreamingParams::default(),
         }
@@ -1858,7 +1869,7 @@ impl SrvManager {
                 info!( "{:?} MESSAGE_AUTH_COMPLETE received",self.srv_type);
                 let data = &pkt.payload[2..]; // start of message data, without message_id
                 if let Ok(msg) = AuthResponse::parse_from_bytes(&data) {
-                    if msg.status() != OK
+                    if msg.status() != AuthResponse::Status::OK
                     {
                         error!( "{:?} AuthResponse status is not OK, got {:?}",self.srv_type, msg.status);
                         return Err(Box::new("AuthResponse status is not OK")).expect("AuthResponse.OK");
@@ -1927,7 +1938,7 @@ impl SrvManager {
                                     MediaCodecType::MEDIA_CODEC_AUDIO_PCM=>AUDIO_PCM,
                                     _=>AUDIO_PCM,
                                 };
-                                if srv_type == AUDIO_STREAM_GUIDANCE
+                                if srv_type == AudioStreamType::AUDIO_STREAM_GUIDANCE
                                 {
                                     self.sdr_audio_cfg_guidance =AudioConfig
                                     {
@@ -1942,7 +1953,7 @@ impl SrvManager {
                                     self.add_service(service_handle);
                                     self.srv_tsk_handles.push(task);
                                 }
-                                else if srv_type == AUDIO_STREAM_MEDIA
+                                else if srv_type == AudioStreamType::AUDIO_STREAM_MEDIA
                                 {
                                     self.sdr_audio_cfg_streaming =AudioConfig
                                     {
@@ -1973,7 +1984,7 @@ impl SrvManager {
                                     VideoCodecResolutionType::VIDEO_800x480=>{ self.sdr_video_codec_params.bitrate =4_000_000; self.sdr_video_codec_params.res_w=800; self.sdr_video_codec_params.res_h=480; Video_800x480},
                                     VideoCodecResolutionType::VIDEO_720x1280=>{ self.sdr_video_codec_params.bitrate =8_000_000; self.sdr_video_codec_params.res_w=1280; self.sdr_video_codec_params.res_h=720; Video_720x1280},
                                     VideoCodecResolutionType::VIDEO_1080x1920=>{ self.sdr_video_codec_params.bitrate =16_000_000; self.sdr_video_codec_params.res_w=1920; self.sdr_video_codec_params.res_h=1080; Video_1080x1920},
-                                    _=>{ video_codec_params.bitrate =4_000_000; self.sdr_video_codec_params.res_w=800; self.sdr_video_codec_params.res_h=480; Video_800x480},
+                                    _=>{ self.sdr_video_codec_params.bitrate =4_000_000; self.sdr_video_codec_params.res_w=800; self.sdr_video_codec_params.res_h=480; Video_800x480},
                                 };
                                 let _=match proto_srv.media_sink_service.video_configs[0].video_codec_type() {
                                     MediaCodecType::MEDIA_CODEC_VIDEO_H264_BP=>VIDEO_H264_BP,
@@ -2132,7 +2143,7 @@ impl SrvManager {
                     if self.ch_opened
                     {
                         //proxy to Audio channel, we have to manage focus there not in control channel
-                        if let Some(Some(service)) = self.sdr_services.get(self.sdr_audio_codec_params.sid as i32) {
+                        if let Some(Some(service)) = self.sdr_services.get(self.sdr_audio_codec_params.sid as usize) {
                             pkt.channel=self.sdr_audio_codec_params.sid;//change its sid
                             service.enqueue_message(pkt)?;
                         }
