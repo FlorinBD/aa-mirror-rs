@@ -6,7 +6,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use std::time::Instant;
 use bytes::{BytesMut, Bytes, Buf};
-use flume::SendError;
 use libc::sigdelset;
 use log::debug;
 use openssl::pkey::Public;
@@ -26,6 +25,7 @@ use protos::ControlMessageType::{self, *};
 use protobuf::{Message};
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio::sync::mpsc::Sender;
+use tokio_util::sync::CancellationToken;
 use crate::config_types::HexdumpLevel;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -332,10 +332,11 @@ impl ScrcpyMediaReader {
 async fn tsk_scrcpy_video(
     stream: TcpStream,
     ack_notify:Sender<()>,
-    video_tx: flume::Sender<ChannelProxyHandle>,
+    video_tx: mpsc::Sender<Packet>,
     pause_mode: Arc<AtomicBool>,
     sid:u8,
     ignore_ack:bool,
+    cancel:CancellationToken,
 ) -> Result<()> {
     info!("Starting video server!");
     let mut reader=ScrcpyMediaReader::new(stream);
@@ -366,7 +367,8 @@ async fn tsk_scrcpy_video(
     //let mut reassembler = NalReassembler::new();
     let mut dbg_count=0;
 
-    loop {
+    while !cancel.is_cancelled()
+    {
         //Read video frames from SCRCPY server
         match reader.read_chunks().await {
             Ok(Some((media_header, chunks))) => {
@@ -447,7 +449,7 @@ async fn tsk_scrcpy_video(
                             final_length: total_len,
                             payload,
                         };
-                        match video_tx.send_async(ChannelProxyHandle{ ch_rx: None, data:Some(pkt_rsp)}).await
+                        match video_tx.send(pkt_rsp).await
                         {
                             Ok(_) => {
                                 //tokio::task::yield_now().await;
@@ -479,7 +481,7 @@ async fn tsk_scrcpy_video(
                         final_length: None,
                         payload,
                     };
-                    match video_tx.send_async(ChannelProxyHandle{ ch_rx: None, data:Some(pkt_rsp)}).await
+                    match video_tx.send(pkt_rsp).await
                     {
                         Ok(_) => {
                             //tokio::task::yield_now().await;
@@ -510,7 +512,7 @@ async fn tsk_scrcpy_video(
 async fn tsk_scrcpy_audio(
     stream: TcpStream,
     mut ack_notify:Sender<()>,
-    audio_tx: flume::Sender<ChannelProxyHandle>,
+    audio_tx: mpsc::Sender<Packet>,
     pause_mode: Arc<AtomicBool>,
     sid:u8,
 ) -> Result<()> {
@@ -600,13 +602,13 @@ async fn tsk_scrcpy_audio(
                             payload = chunk.to_vec();
                         }
 
-                        let mut pkt_rsp = Packet {
+                        let pkt_rsp = Packet {
                             channel: sid,
                             flags: flags,
                             final_length: total_len,
                             payload,
                         };
-                        match audio_tx.send_async(ChannelProxyHandle{ ch_rx: None, data:Some(pkt_rsp)}).await
+                        match audio_tx.send(pkt_rsp).await
                         {
                             Ok(_) => {
                                 //tokio::task::yield_now().await;
@@ -639,7 +641,7 @@ async fn tsk_scrcpy_audio(
                         final_length: None,
                         payload,
                     };
-                    match audio_tx.send_async(ChannelProxyHandle{ ch_rx: None, data:Some(pkt_rsp)}).await
+                    match audio_tx.send(pkt_rsp).await
                     {
                         Ok(_) => {
                             //tokio::task::yield_now().await;
@@ -667,7 +669,7 @@ async fn tsk_scrcpy_audio(
 
 async fn tsk_scrcpy_control(
     stream: TcpStream,
-    cmd_rx: flume::Receiver<Packet>,
+    cmd_rx: mpsc::Receiver<Packet>,
     screen_size:ScrcpySize,
     cfg_screen_off:bool,
 ) -> Result<()> {
@@ -856,7 +858,7 @@ async fn tsk_scrcpy_control(
                     error!("tsk_scrcpy_control unknown message received: {:?}", message_id);
                 }
             }
-            Err(flume::RecvError::Disconnected) => {
+            Err(_) => {
                 // Sender has been dropped, exit loop
                 println!("Sender closed, exiting scrcpy control loop");
                 break;
@@ -867,11 +869,12 @@ async fn tsk_scrcpy_control(
 }
 ///This task is not meant to be closed, it will always run
 pub(crate) async fn tsk_adb_scrcpy(
-    media_tx: flume::Sender<ChannelProxyHandle>,
-    srv_cmd_rx_scrcpy: flume::Receiver<Packet>,
-    srv_cmd_tx: flume::Sender<Packet>,
+    media_tx: mpsc::Sender<Packet>,
+    mut srv_cmd_rx_scrcpy: mpsc::Receiver<Packet>,
+    srv_cmd_tx: mpsc::Sender<Packet>,
     md_connected:Arc<Notify>,
     pconfig: SharedConfig,
+    cancel:CancellationToken,
 ) -> Result<()> {
     info!("{}: ADB task started",NAME);
     let cmd_adb = Command::new("adb")
@@ -894,7 +897,7 @@ pub(crate) async fn tsk_adb_scrcpy(
         }
     }
     let mut hu_conn_restart=false;
-    loop
+    while !cancel.is_cancelled()
     {
         // reload new config
         let config = pconfig.read().await.clone();
@@ -942,8 +945,8 @@ pub(crate) async fn tsk_adb_scrcpy(
             let mut start_audio_recived=false;
             let mut start_video_recived=false;
             //wait for custom CMD to start recording or CANCEL to restart
-            loop {
-                match srv_cmd_rx_scrcpy.recv_async().await {
+            while (!cancel.is_cancelled()) {
+                match srv_cmd_rx_scrcpy.recv().await {
                     Ok(pkt) => {
                         // Received a packet
                         info!("tsk_adb_scrcpy Received command packet {:02x?}", pkt);
@@ -1013,7 +1016,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                             error!("tsk_adb_scrcpy unknown message received: {:?}", message_id);
                         }
                     }
-                    Err(flume::RecvError::Disconnected) => {
+                    Err(_) => {
                         // Sender has been dropped, exit loop
                         debug!("Sender closed, exiting loop");
                         //FIXME break the loop an restart
@@ -1055,7 +1058,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                     final_length: None,
                     payload: std::mem::take(&mut payload),
                 };
-                srv_cmd_tx.send_async(pkt_rsp).await?;
+                srv_cmd_tx.send(pkt_rsp).await?;
                 continue;
             }
             //Configure SCRCPY for recording
@@ -1145,11 +1148,11 @@ pub(crate) async fn tsk_adb_scrcpy(
                 let (ack_video_tx, mut ack_video_rx) = mpsc::channel::<()>(video_max_unack_mpsc);
                 //send RX channels for ACK to PacketProxy
                 let ack_ch=channel_manager::AckChannels{audio_rx:ack_audio_rx, video_rx:ack_video_rx, audio_sid:audio_codec_params.sid, video_sid:video_codec_params.sid };
-                if let Err(_) = media_tx.send_async(ChannelProxyHandle{ch_rx:Some(ack_ch), data:None}).await{
+                if let Err(_) = media_tx.send(ChannelProxyHandle{ch_rx:Some(ack_ch), data:None}).await{
                     error!( "scrcpy setup send error");
                 };
                 tokio::time::sleep(Duration::from_millis(5)).await;//give time to PacketProxy to process it
-                let (tx_ctrl, rx_ctrl)=flume::bounded::<Packet>(5);
+                let (tx_ctrl, rx_ctrl)=mpsc::channel(5);
                 //Pause/Resume streaming control
                 let pause_mode_audio = Arc::new(AtomicBool::new(false));
                 let pause_mode_rd_audio = pause_mode_audio.clone();
@@ -1165,6 +1168,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                         pause_mode_rd_video,
                         video_codec_params.sid,
                         config.ignore_media_ack,
+                        cancel.clone(),
                     ).await;
                     let _ = done_th_tx_video.send(res);
 
@@ -1198,7 +1202,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                 loop {
                     tokio::select! {
                     biased;
-                        Ok(pkt)=srv_cmd_rx_scrcpy.recv_async() => {
+                        Ok(pkt)=srv_cmd_rx_scrcpy.recv() => {
                             //info!("tsk_scrcpy_video Received command packet {:02x?}", pkt);
                             let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
                             if message_id == MESSAGE_CUSTOM_CMD as i32
@@ -1344,7 +1348,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                         final_length: None,
                         payload: std::mem::take(&mut payload),
                     };
-                    if let Err(_) = srv_cmd_tx.send_async(pkt_rsp).await{
+                    if let Err(_) = srv_cmd_tx.send(pkt_rsp).await{
                         error!( "scrcpy MD_DISCONNECTED send error");
                     };
                 }
@@ -1362,7 +1366,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                     final_length: None,
                     payload: std::mem::take(&mut payload),
                 };
-                srv_cmd_tx.send_async(pkt_rsp).await?;
+                srv_cmd_tx.send(pkt_rsp).await?;
                 continue;
             }
         }

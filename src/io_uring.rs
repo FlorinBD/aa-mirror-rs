@@ -33,9 +33,10 @@ use tokio_uring::net::TcpListener;
 use tokio_uring::net::TcpStream;
 use tokio_uring::BufResult;
 use tokio_uring::UnsubmittedWrite;
+use tokio_util::sync::CancellationToken;
 use crate::{bluetooth, scrcpy};
 use crate::channel_manager::{ChannelProxyHandle, TlsPacketProxy, SslMemBuf, HEADER_LENGTH, KEYS_PATH};
-use crate::aa_services::{VideoStreamingParams, AudioStreamingParams};
+use crate::aa_services::{VideoStreamingParams, AudioStreamingParams, ServiceManager};
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use protos::*;
 
@@ -417,13 +418,13 @@ async fn enable_usb_if_present(usb: &mut Option<UsbGadgetState>) {
     }
 }
 ///
-/// IO Loop for Mirror mode only
+/// IO Loop for Mirror mode only, this NEVER finnish
 pub async fn io_loop_mirror(
     need_restart: BroadcastSender<Option<Action>>,
     config: SharedConfig,
 ) -> Result<()> {
     let shared_config = config.clone();
-    #[allow(unused_variables)]
+    //#[allow(unused_variables)]
     //check if RSA cert files are present, if not, stop, this is FATAL error
     loop {
         let path_cert = format!("{KEYS_PATH}/md_cert.pem");
@@ -437,7 +438,7 @@ pub async fn io_loop_mirror(
         break;
     }
 
-
+    let tk_cancel=CancellationToken::new();
     let cfg = shared_config.read().await.clone();
     let cfg_clone=cfg.clone();
     let hex_requested = cfg.hexdump_level;
@@ -448,21 +449,26 @@ pub async fn io_loop_mirror(
     dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
     info!("{} 🛰️ DHU TCP server bound to: <u>{}</u>", NAME, bind_addr);
 
-    //io channels for scrcpy
-    //media frames channel, scrcpy>HU, TODO implement Arc<Packet> to solve copy
-    let (tx_scrcpy, rx_scrcpy)=flume::bounded::<ChannelProxyHandle>(60);
+    //io channels for AA services
+    //MD>TLSProxy
+    let (tx_srv, rx_proxy):   (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
+    //TLSProxy>MD
+    let (tx_proxy, rx_srv):   (Sender<Packet>, Receiver<Packet>) = mpsc::channel(5);
+
     //cmd srv>scrcpy channel
-    let (tx_scrcpy_cmd, rx_scrcpy_cmd)=flume::bounded::<Packet>(5);
+    let (tx_srv_cmd, rx_scrcpy_cmd):(Sender<Packet>, Receiver<Packet>)=mpsc::channel(5);
     //cmd scrcpy>srv channel
-    let (tx_scrcpy_srv_cmd, rx_scrcpy_srv_cmd)=flume::bounded::<Packet>(5);
+    let (tx_scrcpy_cmd, rx_srv_cmd):(Sender<Packet>, Receiver<Packet>)=mpsc::channel(5);
+
     let md_connected = Arc::new(Notify::new());
     let mut tsk_adb;
     tsk_adb = tokio_uring::spawn(scrcpy::tsk_adb_scrcpy(
-        tx_scrcpy,
+        tx_srv.clone(),
         rx_scrcpy_cmd,
-        tx_scrcpy_srv_cmd,
+        tx_scrcpy_cmd,
         md_connected.clone(),
         shared_config.clone(),
+        tk_cancel.clone(),
     ));
     loop {
         //drain scrcpy commands?
@@ -470,7 +476,7 @@ pub async fn io_loop_mirror(
         //}
         // reload new config
         let config = config.read().await.clone();
-        let cfg2=cfg_clone.clone();
+        //let cfg2=cfg_clone.clone();
         // generate Durations from configured seconds
         let stats_interval = {
             if config.stats_interval == 0 {
@@ -548,9 +554,7 @@ pub async fn io_loop_mirror(
         let stats_r_bytes = Arc::new(AtomicUsize::new(0));
         // mpsc channels:
         let (txr_hu, rxr_hu):       (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
-        let (tx_srv, rx_srv):   (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
-        let (txr_srv, rxr_srv): (Sender<Packet>, Receiver<Packet>) = mpsc::channel(20);
-        //let tx_srv_cloned=tx_srv.clone();
+        
         let mut tsk_ch_manager;
         let mut tsk_hu_read;
         let mut tsk_packet_proxy;
@@ -582,16 +586,11 @@ pub async fn io_loop_mirror(
 
         //service packet proxy
         let pp= TlsPacketProxy::new(stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested, cfg.clone());
-        tsk_packet_proxy=pp.start(hu_w, rxr_hu, rxr_srv, None, Some(tx_srv))?;
-        
+        tsk_packet_proxy=pp.start(hu_w, rxr_hu, &rx_proxy, None, Some(&tx_proxy))?;
+
         // main processing threads:
-        tsk_ch_manager = tokio_uring::spawn(ch_proxy(
-            rx_srv,
-            txr_srv,
-            tx_scrcpy_cmd.clone(),
-            rx_scrcpy_srv_cmd.clone(),
-            cfg2,
-        ));
+        let svrmgr=ServiceManager::new(rx_srv,tx_srv.clone(), rx_srv_cmd, tx_srv_cmd.clone(), cfg.clone(), tk_cancel.clone());
+        (tsk_ch_manager, rx_srv, rx_srv_cmd) =svrmgr.start(tk_cancel.clone());
 
         // Thread for monitoring transfer
         let mut tsk_monitor = tokio_uring::spawn(transfer_monitor(
@@ -609,13 +608,13 @@ pub async fn io_loop_mirror(
             flatten(&mut tsk_monitor,"tsk_monitor".into()),
             flatten(&mut tsk_packet_proxy,"tsk_pkt_proxy".into()),
         );
-
+        tk_cancel.cancel();
         if let Err(e) = res {
             error!("{} 🔴 Connection error: {}", NAME, e);
         }
 
         //Stop SCRCPY task as well
-        let mut payload: Vec<u8>=Vec::new();
+        /*let mut payload: Vec<u8>=Vec::new();
         payload.extend_from_slice(&(ControlMessageType::MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
         payload.extend_from_slice(&(CustomCommand::CANCEL as u16).to_be_bytes());
         let pkt_rsp = Packet {
@@ -626,7 +625,7 @@ pub async fn io_loop_mirror(
         };
         if let Err(_) = tx_scrcpy_cmd.send_async(pkt_rsp).await{
             error!( "io_uring.io_loop() send error");
-        };
+        };*/
         //Stop HU connection as well
         /*let mut bye_req = ByeByeRequest::new();
         bye_req.set_reason(ByeByeReason::USER_SELECTION);
@@ -666,8 +665,9 @@ pub async fn io_loop_mirror(
         // stream(s) closed, notify main loop to restart
         let _ = need_restart.send(action);
     }
+
 }
-/// IO Loop for AA MITM/PassTrough mode only
+/// IO Loop for AA MITM/PassTrough mode only, this NEVER finnish
 pub async fn io_loop_aa(
     need_restart: BroadcastSender<Option<Action>>,
     config: SharedConfig,

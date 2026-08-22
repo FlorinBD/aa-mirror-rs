@@ -1804,7 +1804,7 @@ impl ServiceManager {
             sdr_audio_codec_params : AudioStreamingParams::default(),
         }
     }
-    pub fn start(self, cancel: CancellationToken, ) -> (JoinHandle<Result<()>>) {
+    pub fn start(self, cancel: CancellationToken, ) -> (JoinHandle<Result<()>>, Receiver<Packet>, Receiver<Packet>) {
         let task = tokio::spawn(async move {
             let mut service = self;
             info!( "{:?} Starting channel manager",service.srv_type);
@@ -1845,7 +1845,7 @@ impl ServiceManager {
 
             Ok(())
         });
-        (task)
+        (task, self.hu_rx, self.scrcpy_rx)//return all RX mpsc channels because we own them
     }
     async fn handle_hu_message(&mut self, mut pkt: Packet) -> Result<()> {
         if pkt.channel == 0
