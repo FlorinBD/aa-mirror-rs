@@ -256,6 +256,7 @@ pub struct AudioChConfiguration {
     number_of_bits:u32 ,
     number_of_channels:u32,
 }
+#[derive(Clone)]
 pub struct AudioConfig
 {
     pub codec: MediaCodec,
@@ -1954,7 +1955,7 @@ impl ServiceManager {
                                         channels:proto_srv.media_sink_service.audio_configs[0].number_of_channels(),
                                         bitdepth:proto_srv.media_sink_service.audio_configs[0].number_of_bits(),
                                     };
-                                    let service = SrvMediaSinkAudioGuidance::new(ch_id as i8, self.hu_tx.clone(), self.sdr_audio_cfg_guidance, false);
+                                    let service = SrvMediaSinkAudioGuidance::new(ch_id as i8, self.hu_tx.clone(), self.sdr_audio_cfg_guidance.clone(), false);
                                     let (service_handle, task) = service.start(self.cancel.clone());
                                     self.add_service(service_handle);
                                     self.srv_tsk_handles.push(task);
@@ -1973,7 +1974,7 @@ impl ServiceManager {
                                     self.sdr_audio_codec_params.sid=ch_id as u8;
                                     self.sdr_audio_codec_params.codec=acd;
 
-                                    let service = SrvMediaSinkAudioStreaming::new(ch_id as i8, self.hu_tx.clone(), self.scrcpy_tx.clone(), self.sdr_audio_cfg_streaming, self.sdr_audio_codec_params, false);
+                                    let service = SrvMediaSinkAudioStreaming::new(ch_id as i8, self.hu_tx.clone(), self.scrcpy_tx.clone(), self.sdr_audio_cfg_streaming.clone(), self.sdr_audio_codec_params.clone(), false);
                                     let (service_handle, task) = service.start(self.cancel.clone());
                                     self.add_service(service_handle);
                                     self.srv_tsk_handles.push(task);
@@ -2011,7 +2012,7 @@ impl ServiceManager {
                                 self.sdr_video_codec_params.dpi=proto_srv.media_sink_service.video_configs[0].density() as i32;
                                 self.sdr_video_codec_params.sid=ch_id as u8;
 
-                                let service = SrvMediaSinkVideoStreaming::new(ch_id as i8, self.hu_tx.clone(), self.scrcpy_tx.clone(), self.sdr_video_codec_params, true);
+                                let service = SrvMediaSinkVideoStreaming::new(ch_id as i8, self.hu_tx.clone(), self.scrcpy_tx.clone(), self.sdr_video_codec_params.clone(), true);
                                 let (service_handle, task) = service.start(self.cancel.clone());
                                 self.add_service(service_handle);
                                 self.srv_tsk_handles.push(task);
