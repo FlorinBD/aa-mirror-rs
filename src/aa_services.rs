@@ -275,7 +275,7 @@ impl fmt::Display for ServiceType {
 pub struct  AAService {
     sid: i8,
     pub srv_type: ServiceType,
-    tx: Sender<Packet>,
+    hu_tx: Sender<Packet>,
 }
 
 impl AAService {
@@ -283,7 +283,7 @@ impl AAService {
         Self {
             sid,
             srv_type,
-            tx,
+            hu_tx: tx,
         }
     }
 
@@ -292,7 +292,7 @@ impl AAService {
     }
 
     pub fn enqueue_message(&self, msg: Packet) -> Result<()> {
-        match self.tx.try_send(msg) {
+        match self.hu_tx.try_send(msg) {
             Ok(()) => Ok(()),
 
             Err(mpsc::error::TrySendError::Full(_)) => {
@@ -411,7 +411,7 @@ impl SrvSensorSource {
             base: AAService {
                 sid,
                 srv_type: ServiceType::SensorSource,
-                tx,
+                hu_tx: tx,
             },
             rx,
             hu_tx,
@@ -586,7 +586,7 @@ impl SrvMediaSinkVideoStreaming {
             base: AAService {
                 sid,
                 srv_type: ServiceType::MediaSink,
-                tx,
+                hu_tx: tx,
             },
             rx,
             hu_tx,
@@ -894,7 +894,7 @@ impl SrvMediaSinkAudioStreaming {
             base: AAService {
                 sid,
                 srv_type: ServiceType::MediaSink,
-                tx,
+                hu_tx: tx,
             },
             rx,
             hu_tx,
@@ -1199,7 +1199,7 @@ impl SrvMediaSinkAudioGuidance {
             base: AAService {
                 sid,
                 srv_type: ServiceType::SensorSource,
-                tx,
+                hu_tx: tx,
             },
             rx,
             hu_tx,
@@ -1374,7 +1374,7 @@ impl SrvMediaSource {
             base: AAService {
                 sid,
                 srv_type: ServiceType::MediaSource,
-                tx,
+                hu_tx: tx,
             },
             rx,
             hu_tx,
@@ -1467,7 +1467,7 @@ impl SrvInputSource {
             base: AAService {
                 sid,
                 srv_type: ServiceType::InputSource,
-                tx,
+                hu_tx: tx,
             },
             rx,
             hu_tx,
@@ -1595,7 +1595,7 @@ impl SrvVendorExtension {
             base: AAService {
                 sid,
                 srv_type: ServiceType::VendorExtension,
-                tx,
+                hu_tx: tx,
             },
             rx,
             hu_tx,
@@ -1687,7 +1687,7 @@ impl SrvBluetooth {
             base: AAService {
                 sid,
                 srv_type: ServiceType::Bluetooth,
-                tx,
+                hu_tx: tx,
             },
             rx,
             hu_tx,
@@ -1770,13 +1770,13 @@ impl SrvBluetooth {
 }
 
 impl SrvControl {
-    pub fn new(sid: i8, hu_tx: Sender<Packet>, scrcpy_tx: Sender<Packet>, config: AppConfig, cancel:CancellationToken) -> Self {
+    pub fn new(sid: i8, hu_rx: Receiver<Packet>, hu_tx: Sender<Packet>, scrcpy_tx: Sender<Packet>, config: AppConfig, cancel:CancellationToken) -> Self {
         let (tx, rx) = mpsc::channel(5);
         Self {
             base: AAService {
                 sid,
                 srv_type: ServiceType::Control,
-                tx,
+                hu_tx: tx,
             },
             rx,
             hu_tx,
@@ -1798,7 +1798,7 @@ impl SrvControl {
         let handle = self.base.clone();
         let task = tokio::spawn(async move {
             let mut service = self;
-            info!( "{:?} Starting channel manager",self.base.srv_type);
+            info!( "{:?} Starting channel manager",service.base.srv_type);
             loop {
                 tokio::select! {
                     _ = cancel.cancelled() => {
@@ -2054,7 +2054,8 @@ impl SrvControl {
                             self.add_service(service_handle);
                             self.srv_tsk_handles.push(task);
                         }
-                        else {
+                        else
+                        {
                             error!( "{:?} Service not implemented ATM for ch: {}",self.base.srv_type, ch_id);
                         }
                     }
@@ -2081,7 +2082,6 @@ impl SrvControl {
                     return Err(Box::new("ServiceDiscoveryResponse couldn't be parsed")).expect("ServiceDiscoveryResponse");
                 }
                 info!( "{:?} ServiceDiscovery done, starting AA Mirror loop",self.base.srv_type);
-
             }
             else if message_id == ControlMessageType::MESSAGE_PING_REQUEST as i32
             {
@@ -2141,23 +2141,24 @@ impl SrvControl {
                             pkt.channel=self.sdr_audio_codec_params.sid;//change its sid
                             service.enqueue_message(pkt)?;
                         }
-                        else 
+                        else
                         {
                             error!( "{:?} Invalid channel {}",self.base.srv_type, pkt.channel);
                         }
                     }
 
                 }
-                else {
+                else
+                {
                     error!( "{:?} AudioFocusNotification couldn't be parsed",self.base.srv_type);
                 }
-
             }
             else if message_id == ControlMessageType::MESSAGE_UNEXPECTED_MESSAGE as i32
             {
                 error!( "{:?} MESSAGE_UNEXPECTED_MESSAGE received from HU",self.base.srv_type);
             }
-            else {
+            else
+            {
                 error!( "{:?} Unmanaged message ID: {}",self.base.srv_type, message_id);
             }
         }
@@ -2172,6 +2173,7 @@ impl SrvControl {
                 error!( "{:?} Invalid channel {}",self.base.srv_type, pkt.channel);
             }
         }
+        Ok(())
     }
     fn add_service(&mut self, service: AAService) {
         let sid = service.sid() as usize;
