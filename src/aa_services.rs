@@ -1883,7 +1883,7 @@ impl ServiceManager {
                 info!( "{:?} MESSAGE_AUTH_COMPLETE received",self.srv_type);
                 let data = &pkt.payload[2..]; // start of message data, without message_id
                 if let Ok(msg) = AuthResponse::parse_from_bytes(&data) {
-                    if msg.status() != AuthResponse::Status::OK
+                    if msg.status() != <AuthResponse as Example>::Status::OK
                     {
                         error!( "{:?} AuthResponse status is not OK, got {:?}",self.srv_type, msg.status);
                         return Err(Box::new("AuthResponse status is not OK")).expect("AuthResponse.OK");
