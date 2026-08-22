@@ -60,7 +60,7 @@ pub const ENCRYPTED: u8 = 1 << 3;
 
 // location for hu_/md_ private keys and certificates:
 pub const KEYS_PATH: &str = "/etc/aa-mirror-rs";
-const RES_PATH: &str = "/etc/aa-mirror-rs/res";
+pub(crate) const RES_PATH: &str = "/etc/aa-mirror-rs/res";
 
 #[derive(PartialEq, Copy, Clone, Debug)]
 pub enum DeviceType {
@@ -229,7 +229,7 @@ pub struct ChannelProxyHandle {
 }
 
 ///Used for AA/Mirror mode as a SSL gateway
-pub struct PacketProxy {
+pub struct TlsPacketProxy {
     //params
     r_statistics: Arc<AtomicUsize>,
     w_statistics: Arc<AtomicUsize>,
@@ -242,7 +242,7 @@ pub struct PacketProxy {
     video_ack_rx: Option<Receiver<()>>,
 }
 
-impl PacketProxy
+impl TlsPacketProxy
 {
     pub fn new(
         r_statistics: Arc<AtomicUsize>,

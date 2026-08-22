@@ -34,7 +34,7 @@ use tokio_uring::net::TcpStream;
 use tokio_uring::BufResult;
 use tokio_uring::UnsubmittedWrite;
 use crate::{bluetooth, scrcpy};
-use crate::channel_manager::{ChannelProxyHandle, PacketProxy, SslMemBuf, HEADER_LENGTH, KEYS_PATH};
+use crate::channel_manager::{ChannelProxyHandle, TlsPacketProxy, SslMemBuf, HEADER_LENGTH, KEYS_PATH};
 use crate::aa_services::{VideoStreamingParams, AudioStreamingParams};
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use protos::*;
@@ -581,12 +581,9 @@ pub async fn io_loop_mirror(
         tsk_hu_read = tokio_uring::spawn(endpoint_reader(hu_r, txr_hu));
 
         //service packet proxy
-        let pp= PacketProxy::new(stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested, cfg.clone());
+        let pp= TlsPacketProxy::new(stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested, cfg.clone());
         tsk_packet_proxy=pp.start(hu_w, rxr_hu, rxr_srv, None, Some(tx_srv))?;
-        //let pp=PacketProxy::new( stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested, cfg.ignore_media_ack);
-        //tsk_packet_proxy=pp.start(hu_w, rxr_hu, rxr_srv, tx_srv, rx_scrcpy.clone());
-        //tsk_packet_proxy = tokio_uring::spawn(packet_tls_proxy(hu_w, rxr_hu, rxr_srv, tx_srv, rx_scrcpy.clone(), stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested));
-        //tsk_packet_proxy=pp.start(hu_w, rxr_hu, rxr_srv, tx_srv, rx_scrcpy.clone(),tx_scrcpy_cmd.clone());
+        
         // main processing threads:
         tsk_ch_manager = tokio_uring::spawn(ch_proxy(
             rx_srv,
@@ -881,7 +878,7 @@ pub async fn io_loop_aa(
         tsk_md_read = tokio_uring::spawn(endpoint_reader(md_r, tx_md));
 
         //packet proxy
-        let pp= PacketProxy::new(stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested, cfg.clone());
+        let pp= TlsPacketProxy::new(stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested, cfg.clone());
         let mut tsk_packet_proxy=pp.start(hu_w, rx_hu, rx_md, Some(md_w), None)?;
 
         // Thread for monitoring transfer

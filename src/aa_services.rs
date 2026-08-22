@@ -32,8 +32,11 @@ use tokio_uring::net::{TcpStream, TcpListener};
 use tokio_util::sync::CancellationToken;
 use protos::*;
 use protos::ControlMessageType::{self, *};
+use crate::aa_services::MediaCodec::{AUDIO_AAC_LC, AUDIO_AAC_LC_ADTS, AUDIO_PCM, VIDEO_H264_BP, VIDEO_H265};
+use crate::aa_services::VideoCodecResolution::{Video_1080x1920, Video_720x1280, Video_800x480};
+use crate::aa_services::VideoFPS::{FPS_30, FPS_60};
 use crate::adb;
-use crate::channel_manager::{Packet, PacketProxy, ENCRYPTED, FRAME_TYPE_CONTROL, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
+use crate::channel_manager::{pkt_debug, Packet, TlsPacketProxy, ENCRYPTED, FRAME_TYPE_CONTROL, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
 use crate::config::{AppConfig, HU_CONFIG_DELAY_MS, SCRCPY_PORT};
 use crate::config_types::HexdumpLevel;
 use crate::io_uring::{Endpoint, IoDevice};
@@ -45,6 +48,7 @@ type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>
 pub enum ServiceType
 {
     None,
+    Control,
     InputSource,
     MediaSink,
     MediaSource,
@@ -380,6 +384,25 @@ pub struct SrvBluetooth {
     pub base: AAService,
     rx: Receiver<Packet>,
     hu_tx: Sender<Packet>,
+}
+//Base service
+pub struct SrvControl {
+    pub base: AAService,
+    rx: Receiver<Packet>,
+    hu_tx: Sender<Packet>,
+    scrcpy_tx: Sender<Packet>,
+    config: AppConfig,
+    cancel:CancellationToken,
+    //private fields
+    ch_opened:bool,
+    sdr_services: Vec<Option<AAService>>,
+    srv_tsk_handles:Vec<JoinHandle<Result<()>>>,
+    sdr_sensors:Vec<SensorType>,
+    sdr_keys: Vec<i32>,
+    sdr_audio_cfg_guidance:AudioConfig,
+    sdr_audio_cfg_streaming:AudioConfig,
+    sdr_video_codec_params : VideoStreamingParams,
+    sdr_audio_codec_params : AudioStreamingParams,
 }
 impl SrvSensorSource {
     pub fn new(sid:i8, hu_tx: Sender<Packet>, sensors: Vec<SensorType>) -> Self {
@@ -1345,7 +1368,7 @@ impl SrvMediaSinkAudioGuidance {
     }
 }
 impl SrvMediaSource {
-    pub fn new(sid:i8, hu_tx: Sender<Packet>, sensors: Vec<SensorType>) -> Self {
+    pub fn new(sid:i8, hu_tx: Sender<Packet>) -> Self {
         let (tx, rx) = mpsc::channel(5);
         Self {
             base: AAService {
@@ -1743,6 +1766,420 @@ impl SrvBluetooth {
             info!( "{:?} Unknown message ID: {} received", self.base.srv_type, message_id);
         }
         Ok(())
+    }
+}
+
+impl SrvControl {
+    pub fn new(sid: i8, hu_tx: Sender<Packet>, scrcpy_tx: Sender<Packet>, config: AppConfig, cancel:CancellationToken) -> Self {
+        let (tx, rx) = mpsc::channel(5);
+        Self {
+            base: AAService {
+                sid,
+                srv_type: ServiceType::Control,
+                tx,
+            },
+            rx,
+            hu_tx,
+            scrcpy_tx,
+            config,
+            cancel,
+            ch_opened:false,
+            sdr_services: Vec::new(),
+            srv_tsk_handles:Vec::new(),
+            sdr_sensors:Vec::new(),
+            sdr_keys,
+            sdr_audio_cfg_guidance,
+            sdr_audio_cfg_streaming,
+            sdr_video_codec_params : VideoStreamingParams::default(),
+            sdr_audio_codec_params : AudioStreamingParams::default(),
+        }
+    }
+    pub fn start(self, cancel: CancellationToken, ) -> (AAService, JoinHandle<Result<()>>) {
+        let handle = self.base.clone();
+        let task = tokio::spawn(async move {
+            let mut service = self;
+            info!( "{:?} Starting channel manager",self.base.srv_type);
+            loop {
+                tokio::select! {
+                    _ = cancel.cancelled() => {
+                        info!("{:?}: Stopping...",service.base.srv_type);
+                        break;
+                    }
+
+                    msg = service.rx.recv() => {
+                        match msg {
+                            Some(msg) => {
+                                service.handle_message( msg).await?;
+                            }
+
+                            None => {
+                                // All Senders dropped
+                                info!("{:?}: Channel closed",service.base.srv_type);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            Ok(())
+        });
+        (handle, task)
+    }
+    async fn handle_message(&mut self, mut pkt: Packet) -> Result<()> {
+        if pkt.channel == 0
+        {
+            //Control channel
+            let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+            info!("{:?} Received message id {}", self.base.srv_type, message_id);
+            if message_id == ControlMessageType::MESSAGE_VERSION_REQUEST as i32
+            {
+                info!( "{:?} HU version request received, sending VersionResponse back...",self.base.srv_type);
+                // build version response for HU
+                //let mut response = VersionResponse::new();
+                //let mut payload: Vec<u8> = response.write_to_bytes()?;
+                let mut payload: Vec<u8>=Vec::new();
+                payload.push(((ControlMessageType::MESSAGE_VERSION_RESPONSE as u16) >> 8) as u8);
+                payload.push( ((ControlMessageType::MESSAGE_VERSION_RESPONSE as u16) & 0xff) as u8);
+                payload.push( pkt.payload[2]);//send back same version as requested
+                payload.push( pkt.payload[3]);
+                payload.push( pkt.payload[4]);
+                payload.push( pkt.payload[5]);
+                payload.push( ((MessageStatus::STATUS_SUCCESS  as u16) >> 8) as u8);
+                payload.push( ((MessageStatus::STATUS_SUCCESS  as u16) & 0xff) as u8);
+
+                let pkt_rsp = Packet {
+                    channel: 0,
+                    flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                    final_length: None,
+                    payload: payload,
+                };
+                if let Err(_) = self.hu_tx.send(pkt_rsp).await{
+                    error!( "{:?} tls proxy send error",self.base.srv_type);
+                };
+            }
+            else if message_id == ControlMessageType::MESSAGE_AUTH_COMPLETE as i32
+            {
+                info!( "{:?} MESSAGE_AUTH_COMPLETE received",self.base.srv_type);
+                let data = &pkt.payload[2..]; // start of message data, without message_id
+                if let Ok(msg) = AuthResponse::parse_from_bytes(&data) {
+                    if msg.status() != OK
+                    {
+                        error!( "{:?} AuthResponse status is not OK, got {:?}",self.base.srv_type, msg.status);
+                        return Err(Box::new("AuthResponse status is not OK")).expect("AuthResponse.OK");
+                    }
+                }
+                else {
+                    error!( "{:?} AuthResponse couldn't be parsed",self.base.srv_type);
+                    return Err(Box::new("AuthResponse couldn't be parsed")).expect("AuthResponse");
+                }
+
+                info!( "{:?} Sending ServiceDiscovery request...",self.base.srv_type);
+                let icon32 = std::fs::read(format!("{}{}", crate::channel_manager::RES_PATH, "/AndroidIcon32.png"));
+                let icon64 = std::fs::read(format!("{}{}", crate::channel_manager::RES_PATH, "/AndroidIcon64.png"));
+                let icon128 = std::fs::read(format!("{}{}", crate::channel_manager::RES_PATH, "/AndroidIcon128.png"));
+                let mut sdreq= ServiceDiscoveryRequest::new();
+                sdreq.set_small_icon(icon32.unwrap());
+                sdreq.set_medium_icon(icon64.unwrap());
+                sdreq.set_large_icon(icon128.unwrap());
+                sdreq.set_label_text("aa-mirror-rs".to_owned());
+                sdreq.set_device_name("aa-mirror-os".to_owned());
+                let mut payload: Vec<u8>=sdreq.write_to_bytes()?;
+                payload.insert(0,((ControlMessageType::MESSAGE_SERVICE_DISCOVERY_REQUEST as u16) >> 8) as u8);
+                payload.insert( 1,((ControlMessageType::MESSAGE_SERVICE_DISCOVERY_REQUEST as u16) & 0xff) as u8);
+
+                let pkt_rsp = Packet {
+                    channel: 0,
+                    flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                    final_length: None,
+                    payload: payload,
+                };
+                if let Err(_) = self.hu_tx.send(pkt_rsp).await{
+                    error!( "{} tls proxy send error",self.base.srv_type);
+                };
+            }
+            else if message_id == ControlMessageType::MESSAGE_SERVICE_DISCOVERY_RESPONSE as i32
+            {
+                let _ = pkt_debug(
+                    HexdumpLevel::Disabled,
+                    HexdumpLevel::DecryptedInput,
+                    &pkt,
+                    "HU".parse().unwrap()
+                ).await;
+                let mut srv_senders;
+
+
+                let mut channel_status;
+                let data = &pkt.payload[2..]; // start of message data, without message_id
+
+                if  let Ok(msg) = ServiceDiscoveryResponse::parse_from_bytes(&data){
+                    info!( "{:?} ServiceDiscoveryResponse parsed ok",self.base.srv_type);
+                    //let srv_count=msg.services.len();
+                    srv_senders=Vec::with_capacity(msg.services.len());
+                    //self.srv_tsk_handles=Vec::with_capacity(msg.services.len());
+                    channel_status =Vec::with_capacity(msg.services.len());
+                    //let mut tsk_srv_loop;
+                    for (_,proto_srv) in msg.services.iter().enumerate() {
+                        let ch_id=i32::from(proto_srv.id());
+                        if proto_srv.media_sink_service.is_some()
+                        {
+                            if proto_srv.media_sink_service.audio_configs.len()>0
+                            {
+                                let srv_type=proto_srv.media_sink_service.audio_type();
+                                let acd=match proto_srv.media_sink_service.available_type() {
+                                    MediaCodecType::MEDIA_CODEC_AUDIO_AAC_LC_ADTS=>AUDIO_AAC_LC_ADTS,
+                                    MediaCodecType::MEDIA_CODEC_AUDIO_AAC_LC=>AUDIO_AAC_LC,
+                                    MediaCodecType::MEDIA_CODEC_AUDIO_PCM=>AUDIO_PCM,
+                                    _=>AUDIO_PCM,
+                                };
+                                if srv_type == AUDIO_STREAM_GUIDANCE
+                                {
+                                    self.sdr_audio_cfg_guidance =AudioConfig
+                                    {
+                                        codec:acd,
+                                        stream_type: AudioStream::GUIDANCE,
+                                        bitrate:proto_srv.media_sink_service.audio_configs[0].sampling_rate(),
+                                        channels:proto_srv.media_sink_service.audio_configs[0].number_of_channels(),
+                                        bitdepth:proto_srv.media_sink_service.audio_configs[0].number_of_bits(),
+                                    };
+                                    let service = SrvMediaSinkAudioGuidance::new(ch_id as i8, self.hu_tx.clone(), self.sdr_audio_cfg_guidance, false);
+                                    let (service_handle, task) = service.start(self.cancel.clone());
+                                    self.add_service(service_handle);
+                                    self.srv_tsk_handles.push(task);
+                                }
+                                else if srv_type == AUDIO_STREAM_MEDIA
+                                {
+                                    self.sdr_audio_cfg_streaming =AudioConfig
+                                    {
+                                        codec:acd,
+                                        stream_type: AudioStream::MEDIA,
+                                        bitrate:proto_srv.media_sink_service.audio_configs[0].sampling_rate(),
+                                        channels:proto_srv.media_sink_service.audio_configs[0].number_of_channels(),
+                                        bitdepth:proto_srv.media_sink_service.audio_configs[0].number_of_bits(),
+                                    };
+                                    self.sdr_audio_codec_params.bitrate=self.sdr_audio_cfg_streaming.bitrate as i32;
+                                    self.sdr_audio_codec_params.sid=ch_id as u8;
+                                    self.sdr_audio_codec_params.codec=acd;
+
+                                    let service = SrvMediaSinkAudioStreaming::new(ch_id as i8, self.hu_tx.clone(), self.scrcpy_tx.clone(), self.sdr_audio_cfg_streaming, self.sdr_audio_codec_params, false);
+                                    let (service_handle, task) = service.start(self.cancel.clone());
+                                    self.add_service(service_handle);
+                                    self.srv_tsk_handles.push(task);
+                                }
+                                else
+                                {
+                                    error!( "{:?} Service not implemented ATM for ch: {}",self.base.srv_type, ch_id);
+                                }
+                            }
+                            else if proto_srv.media_sink_service.video_configs.len()>0
+                            {
+
+                                let _=match proto_srv.media_sink_service.video_configs[0].codec_resolution() {
+                                    VideoCodecResolutionType::VIDEO_800x480=>{ self.sdr_video_codec_params.bitrate =4_000_000; self.sdr_video_codec_params.res_w=800; self.sdr_video_codec_params.res_h=480; Video_800x480},
+                                    VideoCodecResolutionType::VIDEO_720x1280=>{ self.sdr_video_codec_params.bitrate =8_000_000; self.sdr_video_codec_params.res_w=1280; self.sdr_video_codec_params.res_h=720; Video_720x1280},
+                                    VideoCodecResolutionType::VIDEO_1080x1920=>{ self.sdr_video_codec_params.bitrate =16_000_000; self.sdr_video_codec_params.res_w=1920; self.sdr_video_codec_params.res_h=1080; Video_1080x1920},
+                                    _=>{ video_codec_params.bitrate =4_000_000; self.sdr_video_codec_params.res_w=800; self.sdr_video_codec_params.res_h=480; Video_800x480},
+                                };
+                                let _=match proto_srv.media_sink_service.video_configs[0].video_codec_type() {
+                                    MediaCodecType::MEDIA_CODEC_VIDEO_H264_BP=>VIDEO_H264_BP,
+                                    MediaCodecType::MEDIA_CODEC_VIDEO_H265=>VIDEO_H265,
+                                    MediaCodecType::MEDIA_CODEC_AUDIO_PCM=>AUDIO_PCM,
+                                    _=>VIDEO_H264_BP,
+                                };
+                                let _=match proto_srv.media_sink_service.video_configs[0].frame_rate() {
+                                    VideoFrameRateType::VIDEO_FPS_60=>{ self.sdr_video_codec_params.fps=60; FPS_60},
+                                    VideoFrameRateType::VIDEO_FPS_30=>{ self.sdr_video_codec_params.fps=30; FPS_30},
+                                    _=>{ self.sdr_video_codec_params.fps=30; FPS_30},
+                                };
+                                //ovveride from config file
+                                if self.config.video_bitrate > 0
+                                {
+                                    self.sdr_video_codec_params.bitrate=self.config.video_bitrate;
+                                }
+                                self.sdr_video_codec_params.dpi=proto_srv.media_sink_service.video_configs[0].density() as i32;
+                                self.sdr_video_codec_params.sid=ch_id as u8;
+
+                                let service = SrvMediaSinkVideoStreaming::new(ch_id as i8, self.hu_tx.clone(), self.scrcpy_tx.clone(), self.sdr_video_codec_params, true);
+                                let (service_handle, task) = service.start(self.cancel.clone());
+                                self.add_service(service_handle);
+                                self.srv_tsk_handles.push(task);
+                            }
+                            else {
+                                error!( "{:?} Service not implemented ATM for ch: {}",self.base.srv_type, ch_id);
+                            }
+                        }
+                        else if proto_srv.media_source_service.is_some()
+                        {
+                            let service = SrvMediaSource::new(ch_id as i8, self.hu_tx.clone());
+                            let (service_handle, task) = service.start(self.cancel.clone());
+                            self.add_service(service_handle);
+                            self.srv_tsk_handles.push(task);
+                        }
+                        else if proto_srv.sensor_source_service.is_some()
+                        {
+                            if proto_srv.sensor_source_service.sensors.len()>0
+                            {
+                                for s in proto_srv.sensor_source_service.sensors.clone() {
+                                    if let Ok(st) = SensorType::try_from(s.sensor_type() as i32)
+                                    {
+                                        self.sdr_sensors.push(st);
+                                    }
+                                }
+                            }
+                            let service = SrvSensorSource::new(ch_id as i8, self.hu_tx.clone(), self.sdr_sensors.clone());
+                            let (service_handle, task) = service.start(self.cancel.clone());
+                            self.add_service(service_handle);
+                            self.srv_tsk_handles.push(task);
+
+                        }
+                        else if proto_srv.input_source_service.is_some()
+                        {
+                            self.sdr_keys=proto_srv.input_source_service.keycodes_supported.iter().cloned().collect();
+                            let service = SrvInputSource::new(ch_id as i8, self.hu_tx.clone(),self.scrcpy_tx.clone(), self.sdr_keys.clone());
+                            let (service_handle, task) = service.start(self.cancel.clone());
+                            self.add_service(service_handle);
+                            self.srv_tsk_handles.push(task);
+                        }
+                        else if proto_srv.vendor_extension_service.is_some()
+                        {
+                            let service = SrvVendorExtension::new(ch_id as i8, self.hu_tx.clone());
+                            let (service_handle, task) = service.start(self.cancel.clone());
+                            self.add_service(service_handle);
+                            self.srv_tsk_handles.push(task);
+                        }
+                        else if proto_srv.bluetooth_service.is_some()
+                        {
+                            let service = SrvBluetooth::new(ch_id as i8, self.hu_tx.clone());
+                            let (service_handle, task) = service.start(self.cancel.clone());
+                            self.add_service(service_handle);
+                            self.srv_tsk_handles.push(task);
+                        }
+                        else {
+                            error!( "{:?} Service not implemented ATM for ch: {}",self.base.srv_type, ch_id);
+                        }
+                    }
+                    info!( "{:?} Sending AudioFocus request...",self.base.srv_type);
+                    let mut focus_req= AudioFocusRequestNotification::new();
+                    focus_req.set_request(AudioFocusRequestType::AUDIO_FOCUS_GAIN);
+
+                    let mut payload: Vec<u8>=focus_req.write_to_bytes()?;
+                    payload.insert(0,((ControlMessageType::MESSAGE_AUDIO_FOCUS_REQUEST as u16) >> 8) as u8);
+                    payload.insert( 1,((ControlMessageType::MESSAGE_AUDIO_FOCUS_REQUEST as u16) & 0xff) as u8);
+
+                    let pkt_rsp = Packet {
+                        channel: 0,
+                        flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                        final_length: None,
+                        payload: payload,
+                    };
+                    if let Err(_) = self.hu_tx.send(pkt_rsp).await{
+                        error!( "{:?} tls proxy send error",self.base.srv_type);
+                    };
+                }
+                else {
+                    error!( "{:?} ServiceDiscoveryResponse couldn't be parsed",self.base.srv_type);
+                    return Err(Box::new("ServiceDiscoveryResponse couldn't be parsed")).expect("ServiceDiscoveryResponse");
+                }
+                info!( "{:?} ServiceDiscovery done, starting AA Mirror loop",self.base.srv_type);
+
+            }
+            else if message_id == ControlMessageType::MESSAGE_PING_REQUEST as i32
+            {
+                let data = &pkt.payload[2..]; // start of message data, without message_id
+                if let Ok(msg) = PingRequest::parse_from_bytes(&data) {
+                    let mut pingrsp= PingResponse::new();
+                    pingrsp.set_timestamp(msg.timestamp());
+                    let mut payload: Vec<u8>=pingrsp.write_to_bytes()?;
+                    payload.insert(0,((ControlMessageType::MESSAGE_PING_RESPONSE as u16) >> 8) as u8);
+                    payload.insert( 1,((ControlMessageType::MESSAGE_PING_RESPONSE as u16) & 0xff) as u8);
+                    let pkt_rsp = Packet {
+                        channel: 0,
+                        flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                        final_length: None,
+                        payload: payload,
+                    };
+                    if let Err(_) = self.hu_tx.send(pkt_rsp).await{
+                        error!( "{:?} tls proxy send error",self.base.srv_type);
+                    };
+                }
+                else {
+                    error!( "{:?} PingRequest couldn't be parsed",self.base.srv_type);
+                }
+
+            }
+            else if message_id == ControlMessageType::MESSAGE_AUDIO_FOCUS_NOTIFICATION as i32
+            {
+                let data = &pkt.payload[2..]; // start of message data, without message_id
+                if let Ok(msg) = AudioFocusNotification::parse_from_bytes(&data) {
+                    info!( "{:?} AUDIO_FOCUS_STATE received is: {:?}", self.base.srv_type, msg.focus_state());
+                    if !self.ch_opened && ((msg.focus_state() == AudioFocusStateType::AUDIO_FOCUS_STATE_GAIN) || (msg.focus_state() == AudioFocusStateType::AUDIO_FOCUS_STATE_GAIN_TRANSIENT))
+                    {
+                        info!( "{} CMD OPEN_CHANNEL will be done next",self.base.srv_type);
+                        tokio::time::sleep(Duration::from_millis(HU_CONFIG_DELAY_MS)).await; //reconfiguration time for HU
+                        //Open CH for all
+                        for service in self.sdr_services.iter().flatten() {
+                            info!( "{:?} Send custom CMD_OPEN_CH for ch {}",self.base.srv_type, service.sid());
+                            let mut payload= Vec::new();
+                            payload.extend_from_slice(&(ControlMessageType::MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+                            payload.extend_from_slice(&(CustomCommand::CMD_OPEN_CH as u16).to_be_bytes());
+                            let msg = Packet {
+                                channel: service.sid() as u8,
+                                flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                                final_length: None,
+                                payload,
+                            };
+                            service.enqueue_message(msg)?;
+                        }
+                        self.ch_opened=true;
+                        Ok(());//return
+
+                    }
+                    if self.ch_opened
+                    {
+                        //proxy to Audio channel, we have to manage focus there not in control channel
+                        if let Some(Some(service)) = self.sdr_services.get(self.sdr_audio_codec_params.sid as i32) {
+                            pkt.channel=self.sdr_audio_codec_params.sid;//change its sid
+                            service.enqueue_message(pkt)?;
+                        }
+                        else 
+                        {
+                            error!( "{:?} Invalid channel {}",self.base.srv_type, pkt.channel);
+                        }
+                    }
+
+                }
+                else {
+                    error!( "{:?} AudioFocusNotification couldn't be parsed",self.base.srv_type);
+                }
+
+            }
+            else if message_id == ControlMessageType::MESSAGE_UNEXPECTED_MESSAGE as i32
+            {
+                error!( "{:?} MESSAGE_UNEXPECTED_MESSAGE received from HU",self.base.srv_type);
+            }
+            else {
+                error!( "{:?} Unmanaged message ID: {}",self.base.srv_type, message_id);
+            }
+        }
+        else
+        {
+            //Service channel
+            if let Some(service) = self.sdr_services.get(pkt.channel as usize).and_then(|s| s.as_ref()) {
+                service.enqueue_message(pkt)?;
+            }
+            else
+            {
+                error!( "{:?} Invalid channel {}",self.base.srv_type, pkt.channel);
+            }
+        }
+    }
+    fn add_service(&mut self, service: AAService) {
+        let sid = service.sid() as usize;
+        if self.sdr_services.len() <= sid
+        {
+            self.sdr_services.resize_with(sid + 1, || None);
+        }
+        self.sdr_services[sid] = Some(service);
     }
 }
 pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, mut rx_srv: Receiver<Packet>, sensors: Vec<SensorType>) -> Result<()> {
