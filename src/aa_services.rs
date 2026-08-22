@@ -397,10 +397,11 @@ pub struct SrvBluetooth {
     hu_tx: Sender<Packet>,
 }
 //Service manager/control
-pub struct SrvManager {
+pub struct ServiceManager {
     srv_type: ServiceType,
     hu_rx: Receiver<Packet>,
     hu_tx: Sender<Packet>,
+    scrcpy_rx: Receiver<Packet>,
     scrcpy_tx: Sender<Packet>,
     config: AppConfig,
     cancel:CancellationToken,
@@ -1780,13 +1781,14 @@ impl SrvBluetooth {
     }
 }
 
-impl SrvManager {
-    pub fn new(hu_rx: Receiver<Packet>, hu_tx: Sender<Packet>, scrcpy_tx: Sender<Packet>, config: AppConfig, cancel:CancellationToken) -> Self {
+impl ServiceManager {
+    pub fn new(hu_rx: Receiver<Packet>, hu_tx: Sender<Packet>, scrcpy_rx: Receiver<Packet>, scrcpy_tx: Sender<Packet>, config: AppConfig, cancel:CancellationToken) -> Self {
         //This service is different, we don't own mspc channels, we use those passed by parameters
         Self {
             srv_type: ServiceType::Control,
             hu_rx,
             hu_tx,
+            scrcpy_rx,
             scrcpy_tx,
             config,
             cancel,
@@ -1811,16 +1813,28 @@ impl SrvManager {
                         info!("{:?}: Stopping...",service.srv_type);
                         break;
                     }
-
-                    msg = service.hu_rx.recv() => {
+                    msg = service.scrcpy_rx.recv() => {
                         match msg {
                             Some(msg) => {
-                                service.handle_message( msg).await?;
+                                service.handle_scrcpy_message(msg).await?;
                             }
 
                             None => {
                                 // All Senders dropped
-                                info!("{:?}: Channel closed",service.srv_type);
+                                info!("{:?}: SCRCPY Channel closed",service.srv_type);
+                                break;
+                            }
+                        }
+                    }
+                    msg = service.hu_rx.recv() => {
+                        match msg {
+                            Some(msg) => {
+                                service.handle_hu_message( msg).await?;
+                            }
+
+                            None => {
+                                // All Senders dropped
+                                info!("{:?}: HU Channel closed",service.srv_type);
                                 break;
                             }
                         }
@@ -1832,7 +1846,7 @@ impl SrvManager {
         });
         (task)
     }
-    async fn handle_message(&mut self, mut pkt: Packet) -> Result<()> {
+    async fn handle_hu_message(&mut self, mut pkt: Packet) -> Result<()> {
         if pkt.channel == 0
         {
             //Control channel
@@ -2177,6 +2191,66 @@ impl SrvManager {
             else
             {
                 error!( "{:?} Invalid channel {}",self.srv_type, pkt.channel);
+            }
+        }
+        Ok(())
+    }
+    async fn handle_scrcpy_message(&mut self, mut pkt: Packet) -> Result<()> {
+        let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+        if message_id == ControlMessageType::MESSAGE_CUSTOM_CMD  as i32
+        {
+            let cmd_id: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
+            if cmd_id == CustomCommand::MD_CONNECTED as i32
+            {
+                //forward to services
+                if !self.sdr_services.is_empty()
+                {
+                    for service in self.sdr_services.iter().flatten() {
+                        info!( "{:?} Send custom MD_CONNECTED for ch {}",self.srv_type, service.sid());
+                        let mut payload= Vec::new();
+                        payload.extend_from_slice(&(ControlMessageType::MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+                        payload.extend_from_slice(&(CustomCommand::MD_CONNECTED as u16).to_be_bytes());
+                        let msg = Packet {
+                            channel: service.sid() as u8,
+                            flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                            final_length: None,
+                            payload,
+                        };
+                        service.enqueue_message(msg)?;
+                    }
+                }
+                else
+                {
+                    error!( "{:?} MD_CONNECTED received before SDR",self.srv_type);
+                }
+            }
+            else if cmd_id == CustomCommand::MD_DISCONNECTED as i32
+            {
+                //forward to services
+                if !self.sdr_services.is_empty()
+                {
+                    for service in self.sdr_services.iter().flatten() {
+                        info!( "{:?} Send custom MD_DISCONNECTED for ch {}",self.srv_type, service.sid());
+                        let mut payload= Vec::new();
+                        payload.extend_from_slice(&(ControlMessageType::MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+                        payload.extend_from_slice(&(CustomCommand::MD_DISCONNECTED as u16).to_be_bytes());
+                        let msg = Packet {
+                            channel: service.sid() as u8,
+                            flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                            final_length: None,
+                            payload,
+                        };
+                        service.enqueue_message(msg)?;
+                    }
+                }
+                else
+                {
+                    error!( "{:?} MD_CONNECTED received before SDR",self.srv_type);
+                }
+            }
+            else
+            {
+                error!( "{:?} Unmanaged SCRCPY Message ID: {}",self.srv_type, message_id);
             }
         }
         Ok(())
