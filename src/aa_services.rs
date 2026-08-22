@@ -366,6 +366,8 @@ pub struct SrvInputSource {
     pub base: AAService,
     rx: Receiver<Packet>,
     hu_tx: Sender<Packet>,
+    scrcpy_tx: Sender<Packet>,
+    keys:Vec<i32>,
 }
 
 pub struct SrvVendorExtension {
@@ -1038,7 +1040,7 @@ impl SrvMediaSinkAudioStreaming {
         else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK  as i32 //now this is done by PacketProxy, not needed
         {
             //error!("{:?}: Media ACK received by service, was not handled by PacketProxy", self.base.srv_type)
-            if audio_stream_started
+            if self.audio_stream_started
             {
                 //info!("{} Received {} message, proxy to SCRCPY", ch_id.to_string(), message_id);
                 self.scrcpy_tx.send(pkt).await?;
@@ -1136,7 +1138,7 @@ impl SrvMediaSinkAudioStreaming {
         payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_STOP as u16).to_be_bytes());
         payload.extend_from_slice(&(media_stop.write_to_bytes()?));
         let pkt_rsp = Packet {
-            channel: self.base.sid,
+            channel: self.base.sid as u8,
             flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
             final_length: None,
             payload: payload,
@@ -1156,7 +1158,7 @@ impl SrvMediaSinkAudioStreaming {
         payload.insert(1, ((MediaMessageId::MEDIA_MESSAGE_START as u16) & 0xff) as u8);
 
         let pkt_rsp = Packet {
-            channel: self.base.sid,
+            channel: self.base.sid as u8,
             flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
             final_length: None,
             payload: payload,
@@ -1288,7 +1290,7 @@ impl SrvMediaSinkAudioGuidance {
                     error!( "{:?} response send error",self.base.srv_type);
                 };
             }
-            else if (cmd == CustomCommand::CMD_SETUP_CH as i32) && enabled
+            else if (cmd == CustomCommand::CMD_SETUP_CH as i32) && self.enabled
             {
                 /*let mut cfg_req= Setup::new();
                 cfg_req.set_type(MediaCodecType::MEDIA_CODEC_AUDIO_PCM);
@@ -1339,6 +1341,407 @@ impl SrvMediaSinkAudioGuidance {
             info!( "{:?} Unknown message ID: {} received", self.base.srv_type, message_id);
         }
 
+        Ok(())
+    }
+}
+impl SrvMediaSource {
+    pub fn new(sid:i8, hu_tx: Sender<Packet>, sensors: Vec<SensorType>) -> Self {
+        let (tx, rx) = mpsc::channel(5);
+        Self {
+            base: AAService {
+                sid,
+                srv_type: ServiceType::MediaSource,
+                tx,
+            },
+            rx,
+            hu_tx,
+        }
+    }
+
+    pub fn start(self,cancel: CancellationToken,) -> (AAService, JoinHandle<Result<()>>) {
+        let handle = self.base.clone();
+        let task =tokio::spawn(async move {
+            let mut service = self;
+            loop {
+                tokio::select! {
+                    _ = cancel.cancelled() => {
+                        info!("{:?}: Stopping...",service.base.srv_type);
+                        break;
+                    }
+
+                    msg = service.rx.recv() => {
+                        match msg {
+                            Some(msg) => {
+                                service.handle_message( msg).await?;
+                            }
+
+                            None => {
+                                // All Senders dropped
+                                info!("{:?}: Channel closed",service.base.srv_type);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            Ok(())
+        });
+        (handle, task)
+    }
+
+    async fn handle_message(&mut self, pkt: Packet) -> Result<()> {
+
+        let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+        info!("{:?} Received message id {}", self.base.srv_type, message_id);
+        if message_id == MESSAGE_CHANNEL_OPEN_RESPONSE  as i32
+        {
+            let data = &pkt.payload[2..]; // start of message data, without message_id
+            if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
+                if rsp.status() != STATUS_SUCCESS
+                {
+                    error!( "{}, channel {:?}: Wrong message status received", get_name(), pkt.channel);
+                }
+            }
+            else {
+                error!( "{}, channel {:?}: Unable to parse received message", get_name(), pkt.channel);
+            }
+        }
+        else if message_id == MESSAGE_CUSTOM_CMD  as i32
+        {
+            let cmd: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
+            if cmd == CustomCommand::CMD_OPEN_CH as i32
+            {
+                let mut open_req = ChannelOpenRequest::new();
+                open_req.set_priority(0);
+                open_req.set_service_id(self.base.sid as i32);
+                let mut payload: Vec<u8> = open_req.write_to_bytes().expect("serialization failed");
+                payload.insert(0, ((MESSAGE_CHANNEL_OPEN_REQUEST as u16) >> 8) as u8);
+                payload.insert(1, ((MESSAGE_CHANNEL_OPEN_REQUEST as u16) & 0xff) as u8);
+
+                let pkt_rsp = Packet {
+                    channel: self.base.sid as u8,
+                    flags: ENCRYPTED | FRAME_TYPE_CONTROL | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                    final_length: None,
+                    payload: payload,
+                };
+                if let Err(_) = self.hu_tx.send(pkt_rsp).await{
+                    error!( "{:?} response send error",self.base.srv_type);
+                };
+            }
+        }
+        else {
+            info!( "{:?} Unknown message ID: {} received", self.base.srv_type, message_id);
+        }
+
+        Ok(())
+    }
+}
+impl SrvInputSource {
+    pub fn new(sid:i8, hu_tx: Sender<Packet>, scrcpy_tx: Sender<Packet>,keys:Vec<i32>) -> Self {
+        let (tx, rx) = mpsc::channel(5);
+        Self {
+            base: AAService {
+                sid,
+                srv_type: ServiceType::InputSource,
+                tx,
+            },
+            rx,
+            hu_tx,
+            scrcpy_tx,
+            keys
+        }
+    }
+
+    pub fn start(self,cancel: CancellationToken,) -> (AAService, JoinHandle<Result<()>>) {
+        let handle = self.base.clone();
+        let task =tokio::spawn(async move {
+            let mut service = self;
+            loop {
+                tokio::select! {
+                    _ = cancel.cancelled() => {
+                        info!("{:?}: Stopping...",service.base.srv_type);
+                        break;
+                    }
+
+                    msg = service.rx.recv() => {
+                        match msg {
+                            Some(msg) => {
+                                service.handle_message( msg).await?;
+                            }
+
+                            None => {
+                                // All Senders dropped
+                                info!("{:?}: Channel closed",service.base.srv_type);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            Ok(())
+        });
+        (handle, task)
+    }
+
+    async fn handle_message(&mut self, pkt: Packet) -> Result<()> {
+
+        let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+        info!("{:?} Received message id {}", self.base.srv_type, message_id);
+        if message_id == MESSAGE_CHANNEL_OPEN_RESPONSE  as i32
+        {
+            let data = &pkt.payload[2..]; // start of message data, without message_id
+            if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
+                if rsp.status() != STATUS_SUCCESS
+                {
+                    error!( "{:?}, channel {:?}: Wrong message status received", self.base.srv_type, pkt.channel);
+                }
+                else {
+                    //FIXME send BindingRequest
+                    let mut binding_req = KeyBindingRequest::new();
+                    binding_req.keycodes.extend_from_slice(&self.keys);
+
+                    let mut payload: Vec<u8>=Vec::new();
+                    payload.extend_from_slice(&(InputMessageId::INPUT_MESSAGE_KEY_BINDING_REQUEST as u16).to_be_bytes());
+                    payload.extend_from_slice(&binding_req.write_to_bytes().expect("serialization failed"));
+
+                    let pkt_rsp = Packet {
+                        channel: self.base.sid as u8,
+                        flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                        final_length: None,
+                        payload: payload,
+                    };
+                    if let Err(_) = self.hu_tx.send(pkt_rsp).await{
+                        error!( "{:?} response send error",self.base.srv_type);
+                    };
+                }
+            }
+            else {
+                error!( "{:?}, channel {:?}: Unable to parse received message", self.base.srv_type, pkt.channel);
+            }
+        }
+        else if message_id == MESSAGE_CUSTOM_CMD  as i32
+        {
+            let cmd: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
+            if cmd == CustomCommand::CMD_OPEN_CH as i32
+            {
+                let mut open_req = ChannelOpenRequest::new();
+                open_req.set_priority(0);
+                open_req.set_service_id(self.base.sid as i32);
+                let mut payload: Vec<u8> = open_req.write_to_bytes().expect("serialization failed");
+                payload.insert(0, ((MESSAGE_CHANNEL_OPEN_REQUEST as u16) >> 8) as u8);
+                payload.insert(1, ((MESSAGE_CHANNEL_OPEN_REQUEST as u16) & 0xff) as u8);
+
+                let pkt_rsp = Packet {
+                    channel: self.base.sid as u8,
+                    flags: ENCRYPTED | FRAME_TYPE_CONTROL | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                    final_length: None,
+                    payload: payload,
+                };
+                if let Err(_) = self.hu_tx.send(pkt_rsp).await{
+                    error!( "{:?} response send error",self.base.srv_type);
+                };
+            }
+        }
+        else if message_id == InputMessageId::INPUT_MESSAGE_INPUT_REPORT  as i32
+        {
+            if let Err(_) = self.scrcpy_tx.send(pkt).await{
+                error!( "{:?} scrcpy_cmd send error",self.base.srv_type);
+            };
+            //tokio::task::yield_now().await;
+        }
+        else if message_id == InputMessageId::INPUT_MESSAGE_KEY_BINDING_RESPONSE  as i32
+        {
+            let data = &pkt.payload[2..]; // start of message data, without message_id
+            if  let Ok(rsp) = KeyBindingResponse::parse_from_bytes(&data) {
+                debug!("{:?} Decoded KeyBindingResponse status: {:?}",self.base.srv_type, rsp.status())
+            }
+        }
+        else {
+            error!( "{:?} Unmanaged message ID: {} received", self.base.srv_type, message_id);
+        }
+
+        Ok(())
+    }
+}
+impl SrvVendorExtension {
+    pub fn new(sid:i8, hu_tx: Sender<Packet>) -> Self {
+        let (tx, rx) = mpsc::channel(5);
+        Self {
+            base: AAService {
+                sid,
+                srv_type: ServiceType::VendorExtension,
+                tx,
+            },
+            rx,
+            hu_tx,
+        }
+    }
+
+    pub fn start(self,cancel: CancellationToken,) -> (AAService, JoinHandle<Result<()>>) {
+        let handle = self.base.clone();
+        let task =tokio::spawn(async move {
+            let mut service = self;
+            loop {
+                tokio::select! {
+                    _ = cancel.cancelled() => {
+                        info!("{:?}: Stopping...",service.base.srv_type);
+                        break;
+                    }
+
+                    msg = service.rx.recv() => {
+                        match msg {
+                            Some(msg) => {
+                                service.handle_message( msg).await?;
+                            }
+
+                            None => {
+                                // All Senders dropped
+                                info!("{:?}: Channel closed",service.base.srv_type);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            Ok(())
+        });
+        (handle, task)
+    }
+
+    async fn handle_message(&mut self, pkt: Packet) -> Result<()> {
+
+        let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+        info!("{:?} Received message id {}", self.base.srv_type, message_id);
+        if message_id == MESSAGE_CHANNEL_OPEN_RESPONSE  as i32
+        {
+            let data = &pkt.payload[2..]; // start of message data, without message_id
+            if  let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
+                if rsp.status() != STATUS_SUCCESS
+                {
+                    error!( "{:?}, channel {:?}: Wrong message status received", self.base.srv_type, pkt.channel);
+                }
+            }
+            else {
+                error!( "{:?}, channel {:?}: Unable to parse received message", self.base.srv_type, pkt.channel);
+            }
+        }
+        else if message_id == MESSAGE_CUSTOM_CMD  as i32
+        {
+            let cmd: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
+            if cmd == CustomCommand::CMD_OPEN_CH as i32
+            {
+                let mut open_req = ChannelOpenRequest::new();
+                open_req.set_priority(0);
+                open_req.set_service_id(self.base.sid as i32);
+                let mut payload: Vec<u8> = open_req.write_to_bytes().expect("serialization failed");
+                payload.insert(0, ((MESSAGE_CHANNEL_OPEN_REQUEST as u16) >> 8) as u8);
+                payload.insert(1, ((MESSAGE_CHANNEL_OPEN_REQUEST as u16) & 0xff) as u8);
+
+                let pkt_rsp = Packet {
+                    channel: self.base.sid as u8,
+                    flags: ENCRYPTED | FRAME_TYPE_CONTROL | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                    final_length: None,
+                    payload: payload,
+                };
+                if let Err(_) = self.hu_tx.send(pkt_rsp).await{
+                    error!( "{:?} response send error",self.base.srv_type);
+                };
+            }
+        }
+        else {
+            info!( "{:?} Unknown message ID: {} received", self.base.srv_type, message_id);
+        }
+        Ok(())
+    }
+}
+impl SrvBluetooth {
+    pub fn new(sid: i8, hu_tx: Sender<Packet>) -> Self {
+        let (tx, rx) = mpsc::channel(5);
+        Self {
+            base: AAService {
+                sid,
+                srv_type: ServiceType::Bluetooth,
+                tx,
+            },
+            rx,
+            hu_tx,
+        }
+    }
+
+    pub fn start(self, cancel: CancellationToken, ) -> (AAService, JoinHandle<Result<()>>) {
+        let handle = self.base.clone();
+        let task = tokio::spawn(async move {
+            let mut service = self;
+            loop {
+                tokio::select! {
+                    _ = cancel.cancelled() => {
+                        info!("{:?}: Stopping...",service.base.srv_type);
+                        break;
+                    }
+
+                    msg = service.rx.recv() => {
+                        match msg {
+                            Some(msg) => {
+                                service.handle_message( msg).await?;
+                            }
+
+                            None => {
+                                // All Senders dropped
+                                info!("{:?}: Channel closed",service.base.srv_type);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            Ok(())
+        });
+        (handle, task)
+    }
+
+    async fn handle_message(&mut self, pkt: Packet) -> Result<()> {
+        let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+        info!("{:?} Received message id {}", self.base.srv_type, message_id);
+        if message_id == MESSAGE_CHANNEL_OPEN_RESPONSE as i32
+        {
+            let data = &pkt.payload[2..]; // start of message data, without message_id
+            if let Ok(rsp) = ChannelOpenResponse::parse_from_bytes(&data) {
+                if rsp.status() != STATUS_SUCCESS
+                {
+                    error!( "{:?}, channel {:?}: Wrong message status received", self.base.srv_type, pkt.channel);
+                }
+            } else {
+                error!( "{:?}, channel {:?}: Unable to parse received message", self.base.srv_type, pkt.channel);
+            }
+        } else if message_id == MESSAGE_CUSTOM_CMD as i32
+        {
+            let cmd: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
+            if cmd == CustomCommand::CMD_OPEN_CH as i32
+            {
+                let mut open_req = ChannelOpenRequest::new();
+                open_req.set_priority(0);
+                open_req.set_service_id(self.base.sid as i32);
+                let mut payload: Vec<u8> = open_req.write_to_bytes().expect("serialization failed");
+                payload.insert(0, ((MESSAGE_CHANNEL_OPEN_REQUEST as u16) >> 8) as u8);
+                payload.insert(1, ((MESSAGE_CHANNEL_OPEN_REQUEST as u16) & 0xff) as u8);
+
+                let pkt_rsp = Packet {
+                    channel: self.base.sid as u8,
+                    flags: ENCRYPTED | FRAME_TYPE_CONTROL | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                    final_length: None,
+                    payload: payload,
+                };
+                if let Err(_) = self.hu_tx.send(pkt_rsp).await {
+                    error!( "{:?} response send error",self.base.srv_type);
+                };
+            }
+        } else {
+            info!( "{:?} Unknown message ID: {} received", self.base.srv_type, message_id);
+        }
         Ok(())
     }
 }
