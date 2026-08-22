@@ -1926,19 +1926,11 @@ impl ServiceManager {
                     &pkt,
                     "HU".parse().unwrap()
                 ).await;
-                let mut srv_senders;
 
-
-                let mut channel_status;
                 let data = &pkt.payload[2..]; // start of message data, without message_id
 
                 if  let Ok(msg) = ServiceDiscoveryResponse::parse_from_bytes(&data){
                     info!( "{:?} ServiceDiscoveryResponse parsed ok",self.srv_type);
-                    //let srv_count=msg.services.len();
-                    srv_senders=Vec::with_capacity(msg.services.len());
-                    //self.srv_tsk_handles=Vec::with_capacity(msg.services.len());
-                    channel_status =Vec::with_capacity(msg.services.len());
-                    //let mut tsk_srv_loop;
                     for (_,proto_srv) in msg.services.iter().enumerate() {
                         let ch_id=i32::from(proto_srv.id());
                         if proto_srv.media_sink_service.is_some()
