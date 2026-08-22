@@ -2143,10 +2143,8 @@ impl ServiceManager {
                             service.enqueue_message(msg)?;
                         }
                         self.ch_opened=true;
-                        Ok(());//return
-
                     }
-                    if self.ch_opened
+                    else if self.ch_opened
                     {
                         //proxy to Audio channel, we have to manage focus there not in control channel
                         if let Some(Some(service)) = self.sdr_services.get(self.sdr_audio_codec_params.sid as usize) {
