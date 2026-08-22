@@ -669,7 +669,7 @@ async fn tsk_scrcpy_audio(
 
 async fn tsk_scrcpy_control(
     stream: TcpStream,
-    cmd_rx: mpsc::Receiver<Packet>,
+    mut cmd_rx: mpsc::Receiver<Packet>,
     screen_size:ScrcpySize,
     cfg_screen_off:bool,
 ) -> Result<()> {
@@ -687,7 +687,7 @@ async fn tsk_scrcpy_control(
     }
     let mut last_touched_point=ScrcpyPoint{x:0,y:0};
     loop {
-        match cmd_rx.recv_async().await {
+        match cmd_rx.recv().await {
             Ok(pkt) => {
                 // Received a packet
                 let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
@@ -1235,7 +1235,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                                     cancel_cmd_recived=true;
                                     //drop(tx_ack_audio);
                                     //drop(tx_ack_video);
-                                    if let Err(_) = tx_ctrl.send_async(pkt).await
+                                    if let Err(_) = tx_ctrl.send(pkt).await
                                     {
                                         error!( "tsk_scrcpy control proxy send error, buffer full?");
                                     };
@@ -1272,7 +1272,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                             }
                             else if message_id == InputMessageId::INPUT_MESSAGE_INPUT_REPORT  as i32
                             {
-                                if let Err(_) = tx_ctrl.send_async(pkt).await
+                                if let Err(_) = tx_ctrl.send(pkt).await
                                 {
                                     error!( "tsk_scrcpy control proxy send error, buffer full?");
                                 };
@@ -1330,7 +1330,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                     final_length: None,
                     payload: payload,
                 };
-                if let Err(_) = tx_ctrl.send_async(pkt_rsp).await{
+                if let Err(_) = tx_ctrl.send(pkt_rsp).await{
                     error!( "scrcpy CANCEL send error");
                 };
                 // When done, stop the shell
