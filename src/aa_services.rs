@@ -385,10 +385,10 @@ pub struct SrvBluetooth {
     rx: Receiver<Packet>,
     hu_tx: Sender<Packet>,
 }
-//Base service
-pub struct SrvControl {
-    pub base: AAService,
-    rx: Receiver<Packet>,
+//Service manager/control
+pub struct SrvManager {
+    srv_type: ServiceType,
+    hu_rx: Receiver<Packet>,
     hu_tx: Sender<Packet>,
     scrcpy_tx: Sender<Packet>,
     config: AppConfig,
@@ -1769,16 +1769,12 @@ impl SrvBluetooth {
     }
 }
 
-impl SrvControl {
-    pub fn new(sid: i8, hu_rx: Receiver<Packet>, hu_tx: Sender<Packet>, scrcpy_tx: Sender<Packet>, config: AppConfig, cancel:CancellationToken) -> Self {
-        let (tx, rx) = mpsc::channel(5);
+impl SrvManager {
+    pub fn new(hu_rx: Receiver<Packet>, hu_tx: Sender<Packet>, scrcpy_tx: Sender<Packet>, config: AppConfig, cancel:CancellationToken) -> Self {
+        //This service is different, we don't own mspc channels, we use those passed by parameters
         Self {
-            base: AAService {
-                sid,
-                srv_type: ServiceType::Control,
-                hu_tx: tx,
-            },
-            rx,
+            srv_type: ServiceType::Control,
+            hu_rx,
             hu_tx,
             scrcpy_tx,
             config,
@@ -1794,19 +1790,18 @@ impl SrvControl {
             sdr_audio_codec_params : AudioStreamingParams::default(),
         }
     }
-    pub fn start(self, cancel: CancellationToken, ) -> (AAService, JoinHandle<Result<()>>) {
-        let handle = self.base.clone();
+    pub fn start(self, cancel: CancellationToken, ) -> (JoinHandle<Result<()>>) {
         let task = tokio::spawn(async move {
             let mut service = self;
-            info!( "{:?} Starting channel manager",service.base.srv_type);
+            info!( "{:?} Starting channel manager",service.srv_type);
             loop {
                 tokio::select! {
                     _ = cancel.cancelled() => {
-                        info!("{:?}: Stopping...",service.base.srv_type);
+                        info!("{:?}: Stopping...",service.srv_type);
                         break;
                     }
 
-                    msg = service.rx.recv() => {
+                    msg = service.hu_rx.recv() => {
                         match msg {
                             Some(msg) => {
                                 service.handle_message( msg).await?;
@@ -1814,7 +1809,7 @@ impl SrvControl {
 
                             None => {
                                 // All Senders dropped
-                                info!("{:?}: Channel closed",service.base.srv_type);
+                                info!("{:?}: Channel closed",service.srv_type);
                                 break;
                             }
                         }
@@ -1824,17 +1819,17 @@ impl SrvControl {
 
             Ok(())
         });
-        (handle, task)
+        (task)
     }
     async fn handle_message(&mut self, mut pkt: Packet) -> Result<()> {
         if pkt.channel == 0
         {
             //Control channel
             let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-            info!("{:?} Received message id {}", self.base.srv_type, message_id);
+            info!("{:?} Received message id {}", self.srv_type, message_id);
             if message_id == ControlMessageType::MESSAGE_VERSION_REQUEST as i32
             {
-                info!( "{:?} HU version request received, sending VersionResponse back...",self.base.srv_type);
+                info!( "{:?} HU version request received, sending VersionResponse back...",self.srv_type);
                 // build version response for HU
                 //let mut response = VersionResponse::new();
                 //let mut payload: Vec<u8> = response.write_to_bytes()?;
@@ -1855,26 +1850,26 @@ impl SrvControl {
                     payload: payload,
                 };
                 if let Err(_) = self.hu_tx.send(pkt_rsp).await{
-                    error!( "{:?} tls proxy send error",self.base.srv_type);
+                    error!( "{:?} tls proxy send error",self.srv_type);
                 };
             }
             else if message_id == ControlMessageType::MESSAGE_AUTH_COMPLETE as i32
             {
-                info!( "{:?} MESSAGE_AUTH_COMPLETE received",self.base.srv_type);
+                info!( "{:?} MESSAGE_AUTH_COMPLETE received",self.srv_type);
                 let data = &pkt.payload[2..]; // start of message data, without message_id
                 if let Ok(msg) = AuthResponse::parse_from_bytes(&data) {
                     if msg.status() != OK
                     {
-                        error!( "{:?} AuthResponse status is not OK, got {:?}",self.base.srv_type, msg.status);
+                        error!( "{:?} AuthResponse status is not OK, got {:?}",self.srv_type, msg.status);
                         return Err(Box::new("AuthResponse status is not OK")).expect("AuthResponse.OK");
                     }
                 }
                 else {
-                    error!( "{:?} AuthResponse couldn't be parsed",self.base.srv_type);
+                    error!( "{:?} AuthResponse couldn't be parsed",self.srv_type);
                     return Err(Box::new("AuthResponse couldn't be parsed")).expect("AuthResponse");
                 }
 
-                info!( "{:?} Sending ServiceDiscovery request...",self.base.srv_type);
+                info!( "{:?} Sending ServiceDiscovery request...",self.srv_type);
                 let icon32 = std::fs::read(format!("{}{}", crate::channel_manager::RES_PATH, "/AndroidIcon32.png"));
                 let icon64 = std::fs::read(format!("{}{}", crate::channel_manager::RES_PATH, "/AndroidIcon64.png"));
                 let icon128 = std::fs::read(format!("{}{}", crate::channel_manager::RES_PATH, "/AndroidIcon128.png"));
@@ -1895,7 +1890,7 @@ impl SrvControl {
                     payload: payload,
                 };
                 if let Err(_) = self.hu_tx.send(pkt_rsp).await{
-                    error!( "{} tls proxy send error",self.base.srv_type);
+                    error!( "{} tls proxy send error",self.srv_type);
                 };
             }
             else if message_id == ControlMessageType::MESSAGE_SERVICE_DISCOVERY_RESPONSE as i32
@@ -1913,7 +1908,7 @@ impl SrvControl {
                 let data = &pkt.payload[2..]; // start of message data, without message_id
 
                 if  let Ok(msg) = ServiceDiscoveryResponse::parse_from_bytes(&data){
-                    info!( "{:?} ServiceDiscoveryResponse parsed ok",self.base.srv_type);
+                    info!( "{:?} ServiceDiscoveryResponse parsed ok",self.srv_type);
                     //let srv_count=msg.services.len();
                     srv_senders=Vec::with_capacity(msg.services.len());
                     //self.srv_tsk_handles=Vec::with_capacity(msg.services.len());
@@ -1968,7 +1963,7 @@ impl SrvControl {
                                 }
                                 else
                                 {
-                                    error!( "{:?} Service not implemented ATM for ch: {}",self.base.srv_type, ch_id);
+                                    error!( "{:?} Service not implemented ATM for ch: {}",self.srv_type, ch_id);
                                 }
                             }
                             else if proto_srv.media_sink_service.video_configs.len()>0
@@ -2005,7 +2000,7 @@ impl SrvControl {
                                 self.srv_tsk_handles.push(task);
                             }
                             else {
-                                error!( "{:?} Service not implemented ATM for ch: {}",self.base.srv_type, ch_id);
+                                error!( "{:?} Service not implemented ATM for ch: {}",self.srv_type, ch_id);
                             }
                         }
                         else if proto_srv.media_source_service.is_some()
@@ -2056,10 +2051,10 @@ impl SrvControl {
                         }
                         else
                         {
-                            error!( "{:?} Service not implemented ATM for ch: {}",self.base.srv_type, ch_id);
+                            error!( "{:?} Service not implemented ATM for ch: {}",self.srv_type, ch_id);
                         }
                     }
-                    info!( "{:?} Sending AudioFocus request...",self.base.srv_type);
+                    info!( "{:?} Sending AudioFocus request...",self.srv_type);
                     let mut focus_req= AudioFocusRequestNotification::new();
                     focus_req.set_request(AudioFocusRequestType::AUDIO_FOCUS_GAIN);
 
@@ -2074,14 +2069,14 @@ impl SrvControl {
                         payload: payload,
                     };
                     if let Err(_) = self.hu_tx.send(pkt_rsp).await{
-                        error!( "{:?} tls proxy send error",self.base.srv_type);
+                        error!( "{:?} tls proxy send error",self.srv_type);
                     };
                 }
                 else {
-                    error!( "{:?} ServiceDiscoveryResponse couldn't be parsed",self.base.srv_type);
+                    error!( "{:?} ServiceDiscoveryResponse couldn't be parsed",self.srv_type);
                     return Err(Box::new("ServiceDiscoveryResponse couldn't be parsed")).expect("ServiceDiscoveryResponse");
                 }
-                info!( "{:?} ServiceDiscovery done, starting AA Mirror loop",self.base.srv_type);
+                info!( "{:?} ServiceDiscovery done, starting AA Mirror loop",self.srv_type);
             }
             else if message_id == ControlMessageType::MESSAGE_PING_REQUEST as i32
             {
@@ -2099,11 +2094,11 @@ impl SrvControl {
                         payload: payload,
                     };
                     if let Err(_) = self.hu_tx.send(pkt_rsp).await{
-                        error!( "{:?} tls proxy send error",self.base.srv_type);
+                        error!( "{:?} tls proxy send error",self.srv_type);
                     };
                 }
                 else {
-                    error!( "{:?} PingRequest couldn't be parsed",self.base.srv_type);
+                    error!( "{:?} PingRequest couldn't be parsed",self.srv_type);
                 }
 
             }
@@ -2111,14 +2106,14 @@ impl SrvControl {
             {
                 let data = &pkt.payload[2..]; // start of message data, without message_id
                 if let Ok(msg) = AudioFocusNotification::parse_from_bytes(&data) {
-                    info!( "{:?} AUDIO_FOCUS_STATE received is: {:?}", self.base.srv_type, msg.focus_state());
+                    info!( "{:?} AUDIO_FOCUS_STATE received is: {:?}", self.srv_type, msg.focus_state());
                     if !self.ch_opened && ((msg.focus_state() == AudioFocusStateType::AUDIO_FOCUS_STATE_GAIN) || (msg.focus_state() == AudioFocusStateType::AUDIO_FOCUS_STATE_GAIN_TRANSIENT))
                     {
-                        info!( "{} CMD OPEN_CHANNEL will be done next",self.base.srv_type);
+                        info!( "{} CMD OPEN_CHANNEL will be done next",self.srv_type);
                         tokio::time::sleep(Duration::from_millis(HU_CONFIG_DELAY_MS)).await; //reconfiguration time for HU
                         //Open CH for all
                         for service in self.sdr_services.iter().flatten() {
-                            info!( "{:?} Send custom CMD_OPEN_CH for ch {}",self.base.srv_type, service.sid());
+                            info!( "{:?} Send custom CMD_OPEN_CH for ch {}",self.srv_type, service.sid());
                             let mut payload= Vec::new();
                             payload.extend_from_slice(&(ControlMessageType::MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
                             payload.extend_from_slice(&(CustomCommand::CMD_OPEN_CH as u16).to_be_bytes());
@@ -2143,23 +2138,23 @@ impl SrvControl {
                         }
                         else
                         {
-                            error!( "{:?} Invalid channel {}",self.base.srv_type, pkt.channel);
+                            error!( "{:?} Invalid channel {}",self.srv_type, pkt.channel);
                         }
                     }
 
                 }
                 else
                 {
-                    error!( "{:?} AudioFocusNotification couldn't be parsed",self.base.srv_type);
+                    error!( "{:?} AudioFocusNotification couldn't be parsed",self.srv_type);
                 }
             }
             else if message_id == ControlMessageType::MESSAGE_UNEXPECTED_MESSAGE as i32
             {
-                error!( "{:?} MESSAGE_UNEXPECTED_MESSAGE received from HU",self.base.srv_type);
+                error!( "{:?} MESSAGE_UNEXPECTED_MESSAGE received from HU",self.srv_type);
             }
             else
             {
-                error!( "{:?} Unmanaged message ID: {}",self.base.srv_type, message_id);
+                error!( "{:?} Unmanaged message ID: {}",self.srv_type, message_id);
             }
         }
         else
@@ -2170,7 +2165,7 @@ impl SrvControl {
             }
             else
             {
-                error!( "{:?} Invalid channel {}",self.base.srv_type, pkt.channel);
+                error!( "{:?} Invalid channel {}",self.srv_type, pkt.channel);
             }
         }
         Ok(())
