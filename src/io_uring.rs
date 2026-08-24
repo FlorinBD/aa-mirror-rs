@@ -449,7 +449,7 @@ pub async fn io_loop_mirror(
     dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
     info!("{} 🛰️ DHU TCP server bound to: <u>{}</u>", NAME, bind_addr);
 
-    
+
 
     //cmd srv>scrcpy channel
     //let (tx_srv_cmd, rx_scrcpy_cmd):(Sender<Packet>, Receiver<Packet>)=mpsc::channel(5);
@@ -459,7 +459,7 @@ pub async fn io_loop_mirror(
     let md_connected = Arc::new(Notify::new());
     let start_audio_server = Arc::new(Notify::new());
     let start_video_server = Arc::new(Notify::new());
-    
+
     let mut tsk_adb;
     tsk_adb = tokio_uring::spawn(scrcpy::tsk_adb_scrcpy(
         start_audio_server.clone(),
@@ -552,7 +552,7 @@ pub async fn io_loop_mirror(
         let stats_r_bytes = Arc::new(AtomicUsize::new(0));
         // mpsc channels:
         let (txr_hu, rxr_hu):       (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
-        
+
         let mut tsk_ch_manager;
         let mut tsk_hu_read;
         let mut tsk_packet_proxy;
@@ -588,7 +588,7 @@ pub async fn io_loop_mirror(
 
         //service packet proxy
         let pp= TlsPacketProxy::new(stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested, cfg.clone());
-        tsk_packet_proxy=pp.start(hu_w, rxr_hu, rx_proxy, None, Some(&tx_proxy))?;
+        tsk_packet_proxy=pp.start(hu_w, rxr_hu, rx_proxy, None, Some(tx_proxy))?;
 
         // main processing threads:
         let svrmgr=ServiceManager::new(rx_srv,tx_srv.clone(), start_audio_server.clone(),start_video_server.clone(), cfg.clone(), tk_cancel.clone());

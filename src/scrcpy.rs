@@ -359,7 +359,7 @@ impl VideoServer {
     }
     pub fn start(mut self,) -> () {
         let task = tokio::spawn(async move {
-            let addr = format!("127.0.0.1:{}", SCRCPY_PORT).parse().unwrap();
+            let addr = format!("127.0.0.1:{}", SCRCPY_PORT);
             let stream = match timeout(
                 Duration::from_secs(5),
                 TcpStream::connect(addr),

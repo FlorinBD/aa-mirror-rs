@@ -863,7 +863,7 @@ impl SrvMediaSinkVideoStreaming {
         if let Err(_) = self.scrcpy_tx.send(pkt_rsp).await{
             error!( "{:?} mpsc send error",self.base.srv_type);
         };*/
-        self.start_scrcpy_server.notify_waiters().await?;
+        self.start_scrcpy_server.notify_waiters();
         self.scrcpy_server.start();
         Ok(())
     }
