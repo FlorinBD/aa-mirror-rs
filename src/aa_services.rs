@@ -607,14 +607,14 @@ impl SrvMediaSinkVideoStreaming {
             hu_tx:hu_tx.clone(),
             start_scrcpy_server: start_server,
             video_params:video_params.clone(),
-            cancel,
+            cancel: cancel.clone(),
             enabled,
             projection_state:ProjectionStatus::TransitionToProjected,
             video_focus:false,
             config_recived:false,
             session_id:0,
             video_streaming_started:false,
-            scrcpy_server:crate::scrcpy::VideoServer::new(sid as u8,hu_tx.clone(), video_params.clone(), ignore_ack),
+            scrcpy_server:crate::scrcpy::VideoServer::new(sid as u8,hu_tx.clone(), video_params.clone(),cancel.clone(), ignore_ack),
         }
     }
 
@@ -863,7 +863,7 @@ impl SrvMediaSinkVideoStreaming {
         if let Err(_) = self.scrcpy_tx.send(pkt_rsp).await{
             error!( "{:?} mpsc send error",self.base.srv_type);
         };*/
-        self.start_scrcpy_server.notify_waiters().await;
+        self.start_scrcpy_server.notify_waiters().await?;
         self.scrcpy_server.start();
         Ok(())
     }

@@ -569,7 +569,7 @@ impl TlsPacketProxy
     async fn run_mirror<A: Endpoint<A>>(mut self, mut hu_wr: IoDevice<A>,
                                         mut hu_rx: Receiver<Packet>,
                                         mut srv_rx: Receiver<Packet>,
-                                        srv_tx: &Sender<Packet>,
+                                        srv_tx: Sender<Packet>,
     ) -> Result<()> {
         let ssl = self.ssl_builder_md().await?;
         let mut mem_buf = SslMemBuf {
@@ -760,7 +760,7 @@ impl TlsPacketProxy
                                            hu_rx: Receiver<Packet>,
                                            md_rx: Receiver<Packet>,
                                            md_tx: Option<IoDevice<TcpStream>>,
-                                           srv_tx: Option<&Sender<Packet>>,
+                                           srv_tx: Option<Sender<Packet>>,
     ) -> Result<JoinHandle<Result<()>>> {
         if self.cfg.aa_mode == AAMode::PassThrough
         {
