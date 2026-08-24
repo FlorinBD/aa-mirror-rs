@@ -15,16 +15,18 @@ use tokio::process::Command;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::{mpsc, oneshot, Mutex, Notify};
 use tokio_uring::net::TcpStream;
-use crate::aa_services::{AudioStreamingParams, MediaCodec, VideoStreamingParams};
+use crate::aa_services::{AAService, AudioConfig, AudioStreamingParams, MediaCodec, SensorType, ServiceType, SrvSensorSource, VideoStreamingParams};
 use crate::{adb, channel_manager};
-use crate::channel_manager::{ChannelProxyHandle, Packet, TlsPacketProxy, ENCRYPTED, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
+use crate::channel_manager::{ChannelProxyHandle, Packet, TlsPacketProxy, ENCRYPTED, FRAME_TYPE_CONTROL, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
 use crate::config::{AppConfig, SharedConfig, MAX_DATA_LEN, SCRCPY_METADATA_HEADER_LEN, SCRCPY_PORT, SCRCPY_VERSION};
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use protos::*;
 use protos::ControlMessageType::{self, *};
 use protobuf::{Message};
-use tokio::io::{AsyncRead, AsyncReadExt};
+use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncReadExt};
 use tokio::sync::mpsc::Sender;
+use tokio::task::JoinHandle;
+use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 use crate::config_types::HexdumpLevel;
 
@@ -329,6 +331,231 @@ impl ScrcpyMediaReader {
         Ok(codec_id)
     }
 }
+
+pub struct VideoServer {
+    sid:u8,
+    hu_tx: Sender<Packet>,
+    video_codec_params :VideoStreamingParams,
+    cancel: CancellationToken,
+    ignore_ack:bool,
+    //private members
+    ack_tx: Sender<()>,
+    ack_rx: Receiver<()>,
+    paused: AtomicBool,
+}
+impl VideoServer {
+    pub fn new(sid:u8, hu_tx: Sender<Packet>, video_codec_params :VideoStreamingParams,cancel: CancellationToken, ignore_ack:bool,) -> Self {
+        let (ack_tx, mut ack_rx) = mpsc::channel::<()>(video_codec_params.max_unack as usize);
+        Self {
+            sid,
+            hu_tx,
+            video_codec_params,
+            cancel,
+            ignore_ack,
+            ack_tx,
+            ack_rx,
+            paused: AtomicBool::new(false),
+        }
+    }
+    pub fn start(mut self,) -> () {
+        let task = tokio::spawn(async move {
+            let addr = format!("127.0.0.1:{}", SCRCPY_PORT).parse().unwrap();
+            let stream = match timeout(
+                Duration::from_secs(5),
+                TcpStream::connect(addr),
+            ).await {
+                Ok(Ok(stream)) =>
+                    {
+                        info!("Starting video server!");
+                        stream.set_nodelay(true).expect("TODO: panic message");//Do we really need this?
+                        let mut reader=ScrcpyMediaReader::new(stream);
+                        //codec metadata
+                        match reader.read_video_codec_info().await {
+                            Ok(info) => {
+                                info!("SCRCPY Video metadata decoded: id={}", info.codec_id);
+                                if info.codec_id != "h264".to_string() {
+                                    error!("SCRCPY Invalid Video codec configuration");
+                                    return ;
+                                }
+                            }
+                            Err(e) => {
+                                error!("SCRCPY Video reading error: {:?}",e);
+                                return ;
+                            }
+                        }
+                        match reader.read_video_session_info().await {
+                            Ok(info) => {
+                                info!("SCRCPY Video Session metadata decoded: flags={}, res_w={}, res_h={}", info.flags, info.width, info.height);
+                            }
+                            Err(e) => {
+                                error!("SCRCPY Video Session metadata reading error: {:?}",e);
+                                return ;
+                            }
+                        }
+                        debug!("SCRCPY Video entering main loop");
+                        let mut dbg_count=0;
+                        while !self.cancel.is_cancelled()
+                        {
+                            //Read video frames from SCRCPY server
+                            match reader.read_chunks().await {
+                                Ok(Some((media_header, chunks))) => {
+                                    //let rd_len = header.size ;
+                                    //let dbg_len = min(media_header.size, 16);
+                                    let raw_bytes = chunks.first().map(|chunk| &chunk[..chunk.len().min(media_header.size).min(16)]).unwrap_or(&[]);
+                                    if dbg_count <  10
+                                    {
+                                        debug!("Video task got frame config={:?}, ts={}, act size: {}, raw bytes: {:02x?}",media_header.config, media_header.timestamp, media_header.size, raw_bytes);
+                                        dbg_count += 1;
+                                    }
+                                    if self.paused.load(Ordering::Relaxed) || media_header.size <=0
+                                    {
+                                        continue;
+                                    }
+                                    if !media_header.config
+                                    {
+                                        //wait for ACK
+                                        if !self.ignore_ack
+                                        {
+                                            match self.ack_tx.send(()).await {
+                                                Ok(()) => {}
+                                                Err(e) => {
+                                                    error!("scrcpy video ack send failed: {:?}", e);
+                                                    return Err(Box::from(e));
+                                                }
+                                            }
+                                        }
+
+                                    }
+                                    let pk_header_size = if media_header.config {
+                                        2
+                                    } else {
+                                        2 + 8
+                                    };
+                                    //send all chunks
+                                    if chunks.len() > 1
+                                    {
+                                        //fragmented packet
+                                        for (i,chunk) in chunks.iter().enumerate()
+                                        {
+
+                                            let mut flags:u8;
+                                            let mut total_len = None;
+                                            let mut payload;
+                                            if i==0
+                                            {
+                                                flags = ENCRYPTED | FRAME_TYPE_FIRST;
+                                                total_len=Some((media_header.size + pk_header_size) as u32);
+                                                payload = Vec::with_capacity(pk_header_size + chunk.len());
+                                                if media_header.config
+                                                {
+                                                    payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
+                                                    payload.extend_from_slice(&chunk);
+                                                }
+                                                else
+                                                {
+                                                    payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
+                                                    payload.extend_from_slice(&media_header.timestamp.to_be_bytes());
+                                                    payload.extend_from_slice(&chunk);
+                                                }
+                                            }
+                                            else if i== (chunks.len() - 1)
+                                            {
+                                                flags = ENCRYPTED | FRAME_TYPE_LAST;
+                                                payload = chunk.to_vec();
+                                            }
+                                            else
+                                            {
+                                                flags = ENCRYPTED;
+                                                payload = chunk.to_vec();
+                                            }
+
+
+                                            let pkt_rsp = Packet {
+                                                channel: self.sid,
+                                                flags: flags,
+                                                final_length: total_len,
+                                                payload,
+                                            };
+                                            match self.hu_tx.send(pkt_rsp).await
+                                            {
+                                                Ok(_) => {
+                                                    //tokio::task::yield_now().await;
+                                                }
+                                                Err(e) => {
+                                                    error!("Error sending video chunk: {:?}",e);
+                                                    return Err(Box::new(io::Error::new(io::ErrorKind::Other, "Error sending video chunk")));
+                                                }
+                                            }
+                                        }
+                                    }
+                                    else {
+                                        //single packet
+                                        let mut payload = Vec::with_capacity(pk_header_size + chunks[0].len());
+                                        if media_header.config
+                                        {
+                                            payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
+                                            payload.extend_from_slice(&chunks[0]);
+                                        }
+                                        else
+                                        {
+                                            payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
+                                            payload.extend_from_slice(&media_header.timestamp.to_be_bytes());
+                                            payload.extend_from_slice(&chunks[0]);
+                                        }
+                                        let pkt_rsp = Packet {
+                                            channel: self.sid,
+                                            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                                            final_length: None,
+                                            payload,
+                                        };
+                                        match self.hu_tx.send(pkt_rsp).await
+                                        {
+                                            Ok(_) => {
+                                                //tokio::task::yield_now().await;
+                                            }
+                                            Err(e) => {
+                                                error!("Error sending video chunk: {:?}",e);
+                                                return Err(Box::new(io::Error::new(io::ErrorKind::Other, "Error sending video chunk")));
+                                            }
+                                        }
+                                    }
+
+                                }
+                                Ok(None) => {
+                                    error!("scrcpy video read failed");
+                                    return Err(Box::from("scrcpy video read failed"));
+                                }
+                                Err(e) => {
+                                    error!("scrcpy video read failed: {}", e);
+                                    break;
+                                }
+                            }
+
+                        }
+                    }
+
+                Ok(Err(e)) => {
+                    error!("VideoServer TCP connect failed: {}", e);
+                    return;
+                }
+
+                Err(_) => {
+                    error!("VideoServer TCP connect timeout");
+                    return;
+                }
+            };
+            Ok(())
+        });
+    }
+    pub fn ack(mut self) ->()
+    {
+        self.ack_rx.try_recv().expect("ACK channel dropped");
+    }
+    pub fn set_paused(&self, paused: bool) {
+        self.paused.store(paused, Ordering::Relaxed);
+    }
+}
+
 async fn tsk_scrcpy_video(
     stream: TcpStream,
     ack_notify:Sender<()>,
@@ -867,8 +1094,213 @@ async fn tsk_scrcpy_control(
     }
     Err(Box::new(flume::RecvError::Disconnected))
 }
+
 ///This task is not meant to be closed, it will always run
 pub(crate) async fn tsk_adb_scrcpy(
+    start_audio_server:Arc<Notify>,
+    start_video_server:Arc<Notify>,
+    md_connected:Arc<Notify>,
+    cancel:CancellationToken,
+    pconfig: SharedConfig,
+
+) -> Result<()> {
+    info!("{}: ADB task started",NAME);
+    let cmd_adb = Command::new("adb").arg("start-server").output().await.unwrap();
+    if !cmd_adb.status.success() {
+        error!("ADB server can't start");
+    }
+
+    let mut audio_codec_params = AudioStreamingParams::default();
+    let mut video_codec_params = VideoStreamingParams::default();
+
+    let cmd_disconnect = Command::new("adb").arg("disconnect").output().await?;
+    let lines=adb::parse_response_lines(cmd_disconnect.stdout).expect("TODO: panic message");
+    if lines.len() > 0 {
+        for line in lines {
+            info!("ADB disconnect response: {:?}", line);
+        }
+    }
+    let mut hu_conn_restart=false;
+    'outer:loop
+    {
+        // reload new config
+        let config = pconfig.read().await.clone();
+        hu_conn_restart=false;
+        if let Some(device)=adb::get_first_adb_device(config.clone()).await {
+            info!("{}: ADB device found: {:?}, trying to get video/audio from it now",NAME, device);
+
+            let mut cmd_portfw = vec![];
+            cmd_portfw.push(format!("tcp:{}", SCRCPY_PORT));
+            cmd_portfw.push("localabstract:scrcpy".to_string());
+            let lines=adb::forward_cmd(cmd_portfw).await?;
+            let mut port_fw_ok=true;
+            if lines.len() > 0 {
+                for line in lines {
+                    info!("ADB port fw. response: {:?}", line);
+                    if line.contains("error")
+                    {
+                        port_fw_ok=false;
+                    }
+                }
+            }
+            if !port_fw_ok {
+                info!("ADB invalid port forward response received");
+                continue;
+            }
+            else {
+                info!("ADB port forwarding done to {}", SCRCPY_PORT);
+            }
+
+            info!("ADB config done, sending MD_CONNECTED and wait for start recording");
+            let mut start_audio_recived=false;
+            let mut start_video_recived=false;
+            md_connected.notify_one();
+            loop {
+                tokio::select! {
+                    _ = start_audio_server.notified() => {
+                        // Notification received
+                        start_audio_recived=true;
+                    }
+                    _ = start_video_server.notified() => {
+                        // Notification received
+                        start_video_recived=true;
+                    }
+                    _ = cancel.cancelled() => {
+                        // Cancellation requested
+                        continue 'outer;
+                    }
+                }
+                if start_audio_recived && start_video_recived
+                {
+                    break;
+                }
+
+            }
+
+
+
+            let video_sid=video_codec_params.sid.clone();
+            let audio_sid=audio_codec_params.sid.clone();
+            let mut cmd_push = vec![];
+            cmd_push.push(String::from("/etc/aa-mirror-rs/scrcpy-server"));
+            cmd_push.push(String::from("/data/local/tmp/scrcpy-server-manual.jar"));
+            let lines=adb::push_cmd(cmd_push).await?;
+            let mut push_ok=false;
+            if lines.len() > 0 {
+                for line in lines {
+                    if line.contains("/s (")
+                    {
+                        push_ok=true;
+                    }
+                    info!("ADB push response: {:?}", line);
+                }
+            }
+            if !push_ok {
+                error!("ADB invalid push response received for control task");
+                info!("tsk_adb_scrcpy Sending MD_DISCONNECT");
+                let mut payload: Vec<u8>=Vec::new();
+                payload.extend_from_slice(&(ControlMessageType::MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+                payload.extend_from_slice(&(CustomCommand::MD_DISCONNECTED as u16).to_be_bytes());
+                let pkt_rsp = Packet {
+                    channel: 0,
+                    flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                    final_length: None,
+                    payload: std::mem::take(&mut payload),
+                };
+                srv_cmd_tx.send(pkt_rsp).await?;
+                continue;
+            }
+            //Configure SCRCPY for recording
+            //AVC base profile, no B frames, only I and P frames, low-latency is MANDATORY
+            let video_codec_options=format!("profile:int=1,level:int=512,i-frame-interval:int={},low-latency:int=1,max-bframes:int=0",video_codec_params.fps);
+            let mut cmd_shell:Vec<String> = vec![];
+            let mut audio_codec="raw";
+            let mut res_multiplier =1.0;
+            if config.res_multiplier > 0.0f64
+            {
+                res_multiplier =config.res_multiplier;
+            }
+
+            if audio_codec_params.codec == MediaCodec::AUDIO_AAC_LC
+            {
+                audio_codec="aac";
+            }
+            cmd_shell.push("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar".to_string());
+            cmd_shell.push("app_process".to_string());
+            cmd_shell.push("/".to_string());
+            cmd_shell.push("com.genymobile.scrcpy.Server".to_string());
+            cmd_shell.push(SCRCPY_VERSION.to_string());
+            cmd_shell.push("log_level=info".to_string());
+            cmd_shell.push("raw_stream=false".to_string());//enable metadata
+            cmd_shell.push("send_frame_meta=true".to_string());
+            cmd_shell.push("send_stream_meta=true".to_string());
+            cmd_shell.push("send_dummy_byte=false".to_string());
+            cmd_shell.push("send_device_meta=false".to_string());//disable device name on video socket
+            cmd_shell.push("tunnel_forward=true".to_string());
+            cmd_shell.push("audio=true".to_string());
+            cmd_shell.push("video=true".to_string());
+            cmd_shell.push("control=true".to_string());
+            cmd_shell.push("cleanup=true".to_string());
+            cmd_shell.push("display_ime_policy=local".to_string());
+            cmd_shell.push("stay_awake=true".to_string());
+            cmd_shell.push("keep_active=true".to_string());
+            cmd_shell.push(format!("audio_codec={}",audio_codec.to_string() ));
+            if audio_codec_params.codec == MediaCodec::AUDIO_AAC_LC
+            {
+                cmd_shell.push("audio_codec_options=aac-profile:int=2".to_string());
+            }
+            cmd_shell.push(format!("audio_bit_rate={}", audio_codec_params.bitrate));
+            cmd_shell.push(format!("max_size={}", video_codec_params.res_w));
+            cmd_shell.push("video_codec=h264".to_string());
+            cmd_shell.push(format!("video_codec_options={}", video_codec_options.to_string()));
+            cmd_shell.push(format!("video_bit_rate={}", video_codec_params.bitrate));
+            cmd_shell.push(format!("new_display={}x{}/{}", (video_codec_params.res_w as f64 * res_multiplier) as i32, (video_codec_params.res_h as f64 * res_multiplier) as i32, video_codec_params.dpi));
+            cmd_shell.push(format!("max_fps={}", video_codec_params.fps));
+            let (mut shell, mut sh_reader,line)=adb::shell_cmd(cmd_shell).await?;
+            info!("ADB shell response: {:?}", line);
+            if line.contains("[server] INFO: Device:") && shell.id().is_some()
+            {
+                //this waiting time is MANDATORY, otherwise we get error on video socket, why???
+                tokio::time::sleep(Duration::from_millis(500)).await;//give some time to start sockets
+                //wait here until something goes wrong
+                loop {
+                    let mut line = String::new();
+                    tokio::select! {
+                        result = sh_reader.read_line(&mut line) => {
+                            let n = result?;
+
+                            if n == 0 {
+                                break;
+                            }
+                            // Process shell output
+                            info!("ADB: {}", line.trim_end());
+                        }
+
+                        _ = cancel.cancelled() => {
+                            info!("ADB shell Cancel received, Stopping ADB shell");
+
+                            let _ = shell.kill().await;
+                            break;
+                        }
+                    }
+                }
+
+            }
+            else {
+                error!("Invalid response for ADB shell");
+                shell.kill().await?;
+                continue;
+            }
+        }
+        else {
+            error!("{}: No device with ADB connection found, trying again...", NAME)
+        }
+        tokio::time::sleep(Duration::from_secs(5)).await;
+    }
+    //Err(Box::new(stderr()))
+}
+///This task is not meant to be closed, it will always run
+pub(crate) async fn tsk_adb_scrcpy_old(
     media_tx: mpsc::Sender<Packet>,
     mut srv_cmd_rx_scrcpy: mpsc::Receiver<Packet>,
     srv_cmd_tx: mpsc::Sender<Packet>,
@@ -877,9 +1309,7 @@ pub(crate) async fn tsk_adb_scrcpy(
     cancel:CancellationToken,
 ) -> Result<()> {
     info!("{}: ADB task started",NAME);
-    let cmd_adb = Command::new("adb")
-        .arg("start-server")
-        .output().await.unwrap();
+    let cmd_adb = Command::new("adb").arg("start-server").output().await.unwrap();
     if !cmd_adb.status.success() {
         error!("ADB server can't start");
     }
@@ -887,9 +1317,7 @@ pub(crate) async fn tsk_adb_scrcpy(
     let mut audio_codec_params = AudioStreamingParams::default();
     let mut video_codec_params = VideoStreamingParams::default();
 
-    let cmd_disconnect = Command::new("adb")
-        .arg("disconnect")
-        .output().await?;
+    let cmd_disconnect = Command::new("adb").arg("disconnect").output().await?;
     let lines=adb::parse_response_lines(cmd_disconnect.stdout).expect("TODO: panic message");
     if lines.len() > 0 {
         for line in lines {
@@ -897,7 +1325,7 @@ pub(crate) async fn tsk_adb_scrcpy(
         }
     }
     let mut hu_conn_restart=false;
-    while !cancel.is_cancelled()
+    loop
     {
         // reload new config
         let config = pconfig.read().await.clone();
@@ -942,6 +1370,7 @@ pub(crate) async fn tsk_adb_scrcpy(
             };
             srv_cmd_tx.send_async(pkt_rsp).await?;*/
             md_connected.notify_one();
+
             let mut start_audio_recived=false;
             let mut start_video_recived=false;
             //wait for custom CMD to start recording or CANCEL to restart

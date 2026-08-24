@@ -449,26 +449,24 @@ pub async fn io_loop_mirror(
     dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
     info!("{} 🛰️ DHU TCP server bound to: <u>{}</u>", NAME, bind_addr);
 
-    //io channels for AA services
-    //MD>TLSProxy
-    let (tx_srv, rx_proxy):   (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
-    //TLSProxy>MD
-    let (tx_proxy, rx_srv):   (Sender<Packet>, Receiver<Packet>) = mpsc::channel(5);
+    
 
     //cmd srv>scrcpy channel
-    let (tx_srv_cmd, rx_scrcpy_cmd):(Sender<Packet>, Receiver<Packet>)=mpsc::channel(5);
+    //let (tx_srv_cmd, rx_scrcpy_cmd):(Sender<Packet>, Receiver<Packet>)=mpsc::channel(5);
     //cmd scrcpy>srv channel
-    let (tx_scrcpy_cmd, rx_srv_cmd):(Sender<Packet>, Receiver<Packet>)=mpsc::channel(5);
+    //let (tx_scrcpy_cmd, rx_srv_cmd):(Sender<Packet>, Receiver<Packet>)=mpsc::channel(5);
 
     let md_connected = Arc::new(Notify::new());
+    let start_audio_server = Arc::new(Notify::new());
+    let start_video_server = Arc::new(Notify::new());
+    
     let mut tsk_adb;
     tsk_adb = tokio_uring::spawn(scrcpy::tsk_adb_scrcpy(
-        tx_srv.clone(),
-        rx_scrcpy_cmd,
-        tx_scrcpy_cmd,
+        start_audio_server.clone(),
+        start_video_server.clone(),
         md_connected.clone(),
-        shared_config.clone(),
         tk_cancel.clone(),
+        shared_config.clone(),
     ));
     loop {
         //drain scrcpy commands?
@@ -580,17 +578,21 @@ pub async fn io_loop_mirror(
             hu_w = IoDevice::TcpStreamIo(hu.clone());
             //hu_tcp_stream = Some(hu.clone());
         }
-
+        //io channels for AA services
+        //MD>TLSProxy
+        let (tx_srv, rx_proxy):   (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
+        //TLSProxy>MD
+        let (tx_proxy, rx_srv):   (Sender<Packet>, Receiver<Packet>) = mpsc::channel(5);
         // dedicated reading threads:
         tsk_hu_read = tokio_uring::spawn(endpoint_reader(hu_r, txr_hu));
 
         //service packet proxy
         let pp= TlsPacketProxy::new(stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested, cfg.clone());
-        tsk_packet_proxy=pp.start(hu_w, rxr_hu, &rx_proxy, None, Some(&tx_proxy))?;
+        tsk_packet_proxy=pp.start(hu_w, rxr_hu, rx_proxy, None, Some(&tx_proxy))?;
 
         // main processing threads:
-        let svrmgr=ServiceManager::new(rx_srv,tx_srv.clone(), rx_srv_cmd, tx_srv_cmd.clone(), cfg.clone(), tk_cancel.clone());
-        (tsk_ch_manager, rx_srv, rx_srv_cmd) =svrmgr.start(tk_cancel.clone());
+        let svrmgr=ServiceManager::new(rx_srv,tx_srv.clone(), start_audio_server.clone(),start_video_server.clone(), cfg.clone(), tk_cancel.clone());
+        tsk_ch_manager =svrmgr.start(tk_cancel.clone());
 
         // Thread for monitoring transfer
         let mut tsk_monitor = tokio_uring::spawn(transfer_monitor(

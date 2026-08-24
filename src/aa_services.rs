@@ -25,7 +25,7 @@ use crate::aa_services::SensorMessageId::*;
 //use crate::aa_services::SensorType::*;
 use crate::aa_services::MediaCodecType::*;
 use protobuf::{Message};
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, Notify};
 use tokio::task::JoinHandle;
 //use tokio::sync::broadcast;
 use tokio_uring::net::{TcpStream, TcpListener};
@@ -339,14 +339,16 @@ pub struct SrvMediaSinkVideoStreaming {
     pub base: AAService,
     rx: Receiver<Packet>,
     hu_tx: Sender<Packet>,
-    scrcpy_tx: Sender<Packet>,
+    start_scrcpy_server:Arc<Notify>,
     projection_state:ProjectionStatus,
     video_params:VideoStreamingParams,
+    cancel:CancellationToken,
     enabled:bool,
     video_focus:bool,
     config_recived:bool,
     session_id:i32,
     video_streaming_started:bool,
+    scrcpy_server:crate::scrcpy::VideoServer,
 }
 
 pub struct SrvMediaSinkAudioGuidance {
@@ -402,8 +404,8 @@ pub struct ServiceManager {
     srv_type: ServiceType,
     hu_rx: Receiver<Packet>,
     hu_tx: Sender<Packet>,
-    scrcpy_rx: Receiver<Packet>,
-    scrcpy_tx: Sender<Packet>,
+    start_audio_server:Arc<Notify>,
+    start_video_server:Arc<Notify>,
     config: AppConfig,
     cancel:CancellationToken,
     //private fields
@@ -593,7 +595,7 @@ impl SrvSensorSource {
     }
 }
 impl SrvMediaSinkVideoStreaming {
-    pub fn new(sid:i8, hu_tx: Sender<Packet>, scrcpy_tx:Sender<Packet>, video_params:VideoStreamingParams, enabled:bool) -> Self {
+    pub fn new(sid:i8, hu_tx: Sender<Packet>, start_server:Arc<Notify>, video_params:VideoStreamingParams, cancel:CancellationToken, enabled:bool, ignore_ack:bool) -> Self {
         let (tx, rx) = mpsc::channel(5);
         Self {
             base: AAService {
@@ -602,15 +604,17 @@ impl SrvMediaSinkVideoStreaming {
                 hu_tx: tx,
             },
             rx,
-            hu_tx,
-            scrcpy_tx,
-            video_params,
+            hu_tx:hu_tx.clone(),
+            start_scrcpy_server: start_server,
+            video_params:video_params.clone(),
+            cancel,
             enabled,
             projection_state:ProjectionStatus::TransitionToProjected,
             video_focus:false,
             config_recived:false,
             session_id:0,
             video_streaming_started:false,
+            scrcpy_server:crate::scrcpy::VideoServer::new(sid as u8,hu_tx.clone(), video_params.clone(), ignore_ack),
         }
     }
 
@@ -770,16 +774,12 @@ impl SrvMediaSinkVideoStreaming {
             error!( "{:?}, channel {:?}: MEDIA_MESSAGE_STOP received but not managed", self.base.srv_type, pkt.channel);
 
         }
-        else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK  as i32//now this is done by PacketProxy, not needed
+        else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK  as i32
         {
             //error!("{:?}: Media ACK received by service, was not handled by PacketProxy", self.base.srv_type)
             if self.video_streaming_started
             {
-
-                if let Err(_) = self.scrcpy_tx.send(pkt).await{
-                    error!( "{} mpsc send error",self.base.srv_type);
-                };
-
+                self.scrcpy_server.ack();
             }
         }
         else
@@ -848,7 +848,7 @@ impl SrvMediaSinkVideoStreaming {
     }
     async fn start_scrcpy_media(&self)->Result<()> {
         debug!( "{:?}, Starting video streaming", self.base.srv_type);
-        let bytes: Vec<u8> = postcard::to_stdvec(&self.video_params)?;
+        /*let bytes: Vec<u8> = postcard::to_stdvec(&self.video_params)?;
         let mut payload = Vec::new();
         payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
         payload.extend_from_slice(&(CustomCommand::CMD_START_VIDEO_RECORDING as u16).to_be_bytes());
@@ -862,12 +862,14 @@ impl SrvMediaSinkVideoStreaming {
         };
         if let Err(_) = self.scrcpy_tx.send(pkt_rsp).await{
             error!( "{:?} mpsc send error",self.base.srv_type);
-        };
+        };*/
+        self.start_scrcpy_server.notify_waiters().await;
+        self.scrcpy_server.start();
         Ok(())
     }
     async fn pause_scrcpy_media(&self)->Result<()> {
         debug!( "{:?}, Pausing video streaming", self.base.srv_type);
-        let mut payload = Vec::new();
+        /*let mut payload = Vec::new();
         payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
         payload.extend_from_slice(&(CustomCommand::CMD_PAUSE_VIDEO_RECORDING as u16).to_be_bytes());
 
@@ -879,12 +881,13 @@ impl SrvMediaSinkVideoStreaming {
         };
         if let Err(_) = self.scrcpy_tx.send(pkt_rsp).await{
             error!( "{:?} mpsc send error",self.base.srv_type);
-        };
+        };*/
+        self.scrcpy_server.set_paused(true);
         Ok(())
     }
     async fn resume_scrcpy_media(&self)->Result<()> {
         debug!( "{:?}, Resuming video streaming", self.base.srv_type);
-        let mut payload = Vec::new();
+        /*let mut payload = Vec::new();
         payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
         payload.extend_from_slice(&(CustomCommand::CMD_RESUME_VIDEO_RECORDING as u16).to_be_bytes());
 
@@ -896,7 +899,8 @@ impl SrvMediaSinkVideoStreaming {
         };
         if let Err(_) = self.scrcpy_tx.send(pkt_rsp).await{
             error!( "{:?} mpsc send error",self.base.srv_type);
-        };
+        };*/
+        self.scrcpy_server.set_paused(false);
         Ok(())
     }
 }
@@ -1783,14 +1787,14 @@ impl SrvBluetooth {
 }
 
 impl ServiceManager {
-    pub fn new(hu_rx: Receiver<Packet>, hu_tx: Sender<Packet>, scrcpy_rx: Receiver<Packet>, scrcpy_tx: Sender<Packet>, config: AppConfig, cancel:CancellationToken) -> Self {
+    pub fn new(hu_rx: Receiver<Packet>, hu_tx: Sender<Packet>, start_audio_server: Arc<Notify>, start_video_server: Arc<Notify>, config: AppConfig, cancel:CancellationToken) -> Self {
         //This service is different, we don't own mspc channels, we use those passed by parameters
         Self {
             srv_type: ServiceType::Control,
             hu_rx,
             hu_tx,
-            scrcpy_rx,
-            scrcpy_tx,
+            start_audio_server,
+            start_video_server,
             config,
             cancel,
             ch_opened:false,
@@ -1804,7 +1808,7 @@ impl ServiceManager {
             sdr_audio_codec_params : AudioStreamingParams::default(),
         }
     }
-    pub fn start(self, cancel: CancellationToken, ) -> (JoinHandle<Result<()>>, Receiver<Packet>, Receiver<Packet>) {
+    pub fn start(self, cancel: CancellationToken, ) -> (JoinHandle<Result<()>>) {
         let task = tokio::spawn(async move {
             let mut service = self;
             info!( "{:?} Starting channel manager",service.srv_type);
@@ -1813,19 +1817,6 @@ impl ServiceManager {
                     _ = cancel.cancelled() => {
                         info!("{:?}: Stopping...",service.srv_type);
                         break;
-                    }
-                    msg = service.scrcpy_rx.recv() => {
-                        match msg {
-                            Some(msg) => {
-                                service.handle_scrcpy_message(msg).await?;
-                            }
-
-                            None => {
-                                // All Senders dropped
-                                info!("{:?}: SCRCPY Channel closed",service.srv_type);
-                                break;
-                            }
-                        }
                     }
                     msg = service.hu_rx.recv() => {
                         match msg {
@@ -1845,7 +1836,7 @@ impl ServiceManager {
 
             Ok(())
         });
-        (task, self.hu_rx, self.scrcpy_rx)//return all RX mpsc channels because we own them
+        (task)
     }
     async fn handle_hu_message(&mut self, mut pkt: Packet) -> Result<()> {
         if pkt.channel == 0
@@ -2012,7 +2003,7 @@ impl ServiceManager {
                                 self.sdr_video_codec_params.dpi=proto_srv.media_sink_service.video_configs[0].density() as i32;
                                 self.sdr_video_codec_params.sid=ch_id as u8;
 
-                                let service = SrvMediaSinkVideoStreaming::new(ch_id as i8, self.hu_tx.clone(), self.scrcpy_tx.clone(), self.sdr_video_codec_params.clone(), true);
+                                let service = SrvMediaSinkVideoStreaming::new(ch_id as i8, self.hu_tx.clone(), self.start_video_server, self.sdr_video_codec_params.clone(), self.cancel,true, self.config.ignore_media_ack);
                                 let (service_handle, task) = service.start(self.cancel.clone());
                                 self.add_service(service_handle);
                                 self.srv_tsk_handles.push(task);
