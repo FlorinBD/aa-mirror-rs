@@ -367,7 +367,7 @@ impl VideoServer {
                 Ok(Ok(stream)) =>
                     {
                         info!("Starting video server!");
-                        stream.set_nodelay(true).expect("TODO: panic message");//Do we really need this?
+                        //stream.set_nodelay(true)?;//we recieve only, we don't need it
                         let mut reader=ScrcpyMediaReader::new(stream);
                         //codec metadata
                         match reader.read_video_codec_info().await {
