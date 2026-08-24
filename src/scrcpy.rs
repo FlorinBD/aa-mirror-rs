@@ -14,7 +14,7 @@ use simplelog::{error, info};
 use tokio::process::Command;
 use tokio::sync::mpsc::Receiver;
 use tokio::sync::{mpsc, oneshot, Mutex, Notify};
-use tokio_uring::net::TcpStream;
+use tokio::net::TcpStream;
 use crate::aa_services::{AAService, AudioConfig, AudioStreamingParams, MediaCodec, SensorType, ServiceType, SrvSensorSource, VideoStreamingParams};
 use crate::{adb, channel_manager};
 use crate::channel_manager::{ChannelProxyHandle, Packet, TlsPacketProxy, ENCRYPTED, FRAME_TYPE_CONTROL, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
@@ -213,21 +213,21 @@ impl ScrcpyMediaReader {
         self.buf.reserve(size);
 
         let mut read_total = 0;
+        let mut tmp = [0u8; 64 * 1024];
 
         while read_total < size {
-            let to_read = size - read_total;
+            let to_read = (size - read_total).min(tmp.len());
 
-            // allocate temporary buffer for read
-            let tmp = vec![0u8; to_read];
-
-            let (res, data) = self.stream.read(tmp).await;
-            let n = res?;
+            let n = self.stream.read(&mut tmp[..to_read]).await?;
 
             if n == 0 {
-                return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "EOF"));
+                return Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "EOF",
+                ));
             }
 
-            self.buf.extend_from_slice(&data[..n]);
+            self.buf.extend_from_slice(&tmp[..n]);
             read_total += n;
         }
 
