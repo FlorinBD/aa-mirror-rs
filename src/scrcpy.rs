@@ -416,13 +416,10 @@ impl VideoServer {
                                         //wait for ACK
                                         if !self.ignore_ack
                                         {
-                                            match self.ack_tx.send(()).await {
-                                                Ok(()) => {}
-                                                Err(e) => {
-                                                    error!("scrcpy video ack send failed: {:?}", e);
-                                                    return;
-                                                }
-                                            }
+                                            if let Err(e) = self.ack_tx.send(()).await {
+												error!("scrcpy video ack send failed: {:?}", e);
+												return;
+											}
                                         }
 
                                     }
@@ -476,16 +473,10 @@ impl VideoServer {
                                                 final_length: total_len,
                                                 payload,
                                             };
-                                            match self.hu_tx.send(pkt_rsp).await
-                                            {
-                                                Ok(_) => {
-                                                    //tokio::task::yield_now().await;
-                                                }
-                                                Err(e) => {
-                                                    error!("Error sending video chunk: {:?}",e);
-                                                    return;
-                                                }
-                                            }
+                                            if let Err(e) = self.hu_tx.send(pkt_rsp).await {
+												error!("Error sending video chunk: {:?}", e);
+												return;
+											}
                                         }
                                     }
                                     else {
@@ -508,16 +499,10 @@ impl VideoServer {
                                             final_length: None,
                                             payload,
                                         };
-                                        match self.hu_tx.send(pkt_rsp).await
-                                        {
-                                            Ok(_) => {
-                                                //tokio::task::yield_now().await;
-                                            }
-                                            Err(e) => {
-                                                error!("Error sending video chunk: {:?}",e);
-                                                return;
-                                            }
-                                        }
+                                        if let Err(e) = self.hu_tx.send(pkt_rsp).await {
+											error!("Error sending video chunk: {:?}", e);
+											return;
+										}
                                     }
 
                                 }
@@ -556,543 +541,453 @@ impl VideoServer {
     }
 }
 
-async fn tsk_scrcpy_video(
-    stream: TcpStream,
-    ack_notify:Sender<()>,
-    video_tx: mpsc::Sender<Packet>,
-    pause_mode: Arc<AtomicBool>,
+pub struct AudioServer {
     sid:u8,
+    hu_tx: Sender<Packet>,
+    video_codec_params :VideoStreamingParams,
+    cancel: CancellationToken,
     ignore_ack:bool,
-    cancel:CancellationToken,
-) -> Result<()> {
-    info!("Starting video server!");
-    let mut reader=ScrcpyMediaReader::new(stream);
-    //codec metadata
-    match reader.read_video_codec_info().await {
-        Ok(info) => {
-            info!("SCRCPY Video metadata decoded: id={}", info.codec_id);
-            if info.codec_id != "h264".to_string() {
-                error!("SCRCPY Invalid Video codec configuration");
-                return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY Invalid Video codec configuration")));
-            }
-        }
-        Err(e) => {
-            error!("SCRCPY Video reading error: {:?}",e);
-            return Err(Box::new(io::Error::new(io::ErrorKind::Other, e)));
-        }
-    }
-    match reader.read_video_session_info().await {
-        Ok(info) => {
-            info!("SCRCPY Video Session metadata decoded: flags={}, res_w={}, res_h={}", info.flags, info.width, info.height);
-        }
-        Err(e) => {
-            error!("SCRCPY Video Session metadata reading error: {:?}",e);
-            return Err(Box::new(io::Error::new(io::ErrorKind::Other, e)));
-        }
-    }
-    debug!("SCRCPY Video entering main loop");
-    //let mut reassembler = NalReassembler::new();
-    let mut dbg_count=0;
+    //private members
+    ack_tx: Sender<()>,
+    ack_rx: Receiver<()>,
+    paused: AtomicBool,
+}
 
-    while !cancel.is_cancelled()
+impl AudioServer {
+    pub fn new(sid:u8, hu_tx: Sender<Packet>, audio_codec_params :AudioStreamingParams,cancel: CancellationToken, ignore_ack:bool,) -> Self {
+        let (ack_tx, mut ack_rx) = mpsc::channel::<()>(audio_codec_params.max_unack as usize);
+        Self {
+            sid,
+            hu_tx,
+            audio_codec_params,
+            cancel,
+            ignore_ack,
+            ack_tx,
+            ack_rx,
+            paused: AtomicBool::new(false),
+        }
+    }
+    pub fn start(mut self,) -> () {
+        let task = tokio::spawn(async move {
+            let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), SCRCPY_PORT);
+            let stream = match timeout(
+                Duration::from_secs(5),
+                TcpStream::connect(addr),
+            ).await {
+                Ok(Ok(stream)) =>
+                    {
+                        info!("Starting audio server!");
+                        let mut reader=ScrcpyMediaReader::new(stream);
+                        //codec metadata
+                        match reader.read_audio_codec_info().await {
+                            Ok(codec_id) => {
+                                info!("SCRCPY Audio metadata decoded: id={}", codec_id);
+                                if codec_id != "raw" && codec_id != "aac" {
+                                    error!("SCRCPY Invalid Audio codec configuration");
+                                    return ;
+                                }
+                            }
+                            Err(e) => {
+                                error!("SCRCPY Audio reading error: {:?}",e);
+                                return ;
+                            }
+                        }
+                        debug!("SCRCPY Audio entering main loop");
+                        let mut dbg_count=0;
+                        while !self.cancel.is_cancelled()
+                        {
+                            //Read audio frames from SCRCPY server
+                            match reader.read_chunks().await {
+                                Ok(Some((media_header, chunks))) => {
+                                    //let rd_len = header.size ;
+                                    //let dbg_len = min(media_header.size, 16);
+                                    let raw_bytes = chunks.first().map(|chunk| &chunk[..chunk.len().min(media_header.size).min(16)]).unwrap_or(&[]);
+                                    if dbg_count <  10
+                                    {
+                                        debug!("Video task got frame config={:?}, ts={}, act size: {}, raw bytes: {:02x?}",media_header.config, media_header.timestamp, media_header.size, raw_bytes);
+                                        dbg_count += 1;
+                                    }
+                                    if self.paused.load(Ordering::Relaxed) || media_header.size <=0
+                                    {
+                                        continue;
+                                    }
+                                    if !media_header.config
+                                    {
+                                        //wait for ACK
+                                        if !self.ignore_ack
+                                        {
+                                            if let Err(e) = self.ack_tx.send(()).await {
+												error!("scrcpy audio ack send failed: {:?}", e);
+												return;
+											}
+                                        }
+
+                                    }
+                                    let pk_header_size = if media_header.config {
+                                        2
+                                    } else {
+                                        2 + 8
+                                    };
+                                    //send all chunks
+                                    if chunks.len() > 1
+                                    {
+                                        //fragmented packet
+                                        for (i,chunk) in chunks.iter().enumerate()
+                                        {
+
+                                            let mut flags:u8;
+                                            let mut total_len = None;
+                                            let mut payload;
+                                            if i==0
+                                            {
+                                                flags = ENCRYPTED | FRAME_TYPE_FIRST;
+                                                total_len=Some((media_header.size + pk_header_size) as u32);
+                                                payload = Vec::with_capacity(pk_header_size + chunk.len());
+                                                if media_header.config
+                                                {
+                                                    payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
+                                                    payload.extend_from_slice(&chunk);
+                                                }
+                                                else
+                                                {
+                                                    payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
+                                                    payload.extend_from_slice(&media_header.timestamp.to_be_bytes());
+                                                    payload.extend_from_slice(&chunk);
+                                                }
+                                            }
+                                            else if i== (chunks.len() - 1)
+                                            {
+                                                flags = ENCRYPTED | FRAME_TYPE_LAST;
+                                                payload = chunk.to_vec();
+                                            }
+                                            else
+                                            {
+                                                flags = ENCRYPTED;
+                                                payload = chunk.to_vec();
+                                            }
+
+
+                                            let pkt_rsp = Packet {
+                                                channel: self.sid,
+                                                flags: flags,
+                                                final_length: total_len,
+                                                payload,
+                                            };
+                                            if let Err(e) = self.hu_tx.send(pkt_rsp).await {
+												error!("Error sending audio chunk: {:?}", e);
+												return;
+											}
+                                        }
+                                    }
+                                    else {
+                                        //single packet
+                                        let mut payload = Vec::with_capacity(pk_header_size + chunks[0].len());
+                                        if media_header.config
+                                        {
+                                            payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
+                                            payload.extend_from_slice(&chunks[0]);
+                                        }
+                                        else
+                                        {
+                                            payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
+                                            payload.extend_from_slice(&media_header.timestamp.to_be_bytes());
+                                            payload.extend_from_slice(&chunks[0]);
+                                        }
+                                        let pkt_rsp = Packet {
+                                            channel: self.sid,
+                                            flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                                            final_length: None,
+                                            payload,
+                                        };
+                                        if let Err(e) = self.hu_tx.send(pkt_rsp).await {
+											error!("Error sending audio chunk: {:?}", e);
+											return;
+										}
+                                    }
+
+                                }
+                                Ok(None) => {
+                                    error!("scrcpy audio read failed");
+                                    return ;
+                                }
+                                Err(e) => {
+                                    error!("scrcpy audio read failed: {}", e);
+                                    break;
+                                }
+                            }
+
+                        }
+                    }
+
+                Ok(Err(e)) => {
+                    error!("AudioServer TCP connect failed: {}", e);
+                    return;
+                }
+
+                Err(_) => {
+                    error!("AudioServer TCP connect timeout");
+                    return;
+                }
+            };
+            return;
+        });
+    }
+    pub fn ack(&mut self) ->()
     {
-        //Read video frames from SCRCPY server
-        match reader.read_chunks().await {
-            Ok(Some((media_header, chunks))) => {
-                //let rd_len = header.size ;
-                //let dbg_len = min(media_header.size, 16);
-                let raw_bytes = chunks.first().map(|chunk| &chunk[..chunk.len().min(media_header.size).min(16)]).unwrap_or(&[]);
-                if dbg_count <  10
-                {
-                    debug!("Video task got frame config={:?}, ts={}, act size: {}, raw bytes: {:02x?}",media_header.config, media_header.timestamp, media_header.size, raw_bytes);
-                    dbg_count += 1;
-                }
-                if pause_mode.load(Ordering::Relaxed) || media_header.size <=0
-                {
-                    continue;
-                }
-                if !media_header.config
-                {
-                    //wait for ACK
-                    if !ignore_ack
-                    {
-                        match ack_notify.send(()).await {
-                            Ok(()) => {}
-                            Err(e) => {
-                                error!("scrcpy video ack send failed: {:?}", e);
-                                return Err(Box::from(e));
-                            }
-                        }
-                    }
-
-                }
-                let pk_header_size = if media_header.config {
-                    2
-                } else {
-                    2 + 8
-                };
-                //send all chunks
-                if chunks.len() > 1
-                {
-                    //fragmented packet
-                    for (i,chunk) in chunks.iter().enumerate()
-                    {
-
-                        let mut flags:u8;
-                        let mut total_len = None;
-                        let mut payload;
-                        if i==0
-                        {
-                            flags = ENCRYPTED | FRAME_TYPE_FIRST;
-                            total_len=Some((media_header.size + pk_header_size) as u32);
-                            payload = Vec::with_capacity(pk_header_size + chunk.len());
-                            if media_header.config
-                            {
-                                payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
-                                payload.extend_from_slice(&chunk);
-                            }
-                            else
-                            {
-                                payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
-                                payload.extend_from_slice(&media_header.timestamp.to_be_bytes());
-                                payload.extend_from_slice(&chunk);
-                            }
-                        }
-                        else if i== (chunks.len() - 1)
-                        {
-                            flags = ENCRYPTED | FRAME_TYPE_LAST;
-                            payload = chunk.to_vec();
-                        }
-                        else
-                        {
-                            flags = ENCRYPTED;
-                            payload = chunk.to_vec();
-                        }
-
-
-                        let pkt_rsp = Packet {
-                            channel: sid,
-                            flags: flags,
-                            final_length: total_len,
-                            payload,
-                        };
-                        match video_tx.send(pkt_rsp).await
-                        {
-                            Ok(_) => {
-                                //tokio::task::yield_now().await;
-                            }
-                            Err(e) => {
-                                error!("Error sending video chunk: {:?}",e);
-                                return Err(Box::new(io::Error::new(io::ErrorKind::Other, "Error sending video chunk")));
-                            }
-                        }
-                    }
-                }
-                else {
-                    //single packet
-                    let mut payload = Vec::with_capacity(pk_header_size + chunks[0].len());
-                    if media_header.config
-                    {
-                        payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
-                        payload.extend_from_slice(&chunks[0]);
-                    }
-                    else
-                    {
-                        payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
-                        payload.extend_from_slice(&media_header.timestamp.to_be_bytes());
-                        payload.extend_from_slice(&chunks[0]);
-                    }
-                    let pkt_rsp = Packet {
-                        channel: sid,
-                        flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                        final_length: None,
-                        payload,
-                    };
-                    match video_tx.send(pkt_rsp).await
-                    {
-                        Ok(_) => {
-                            //tokio::task::yield_now().await;
-                        }
-                        Err(e) => {
-                            error!("Error sending video chunk: {:?}",e);
-                            return Err(Box::new(io::Error::new(io::ErrorKind::Other, "Error sending video chunk")));
-                        }
-                    }
-                }
-
-            }
-            Ok(None) => {
-                error!("scrcpy video read failed");
-                return Err(Box::from("scrcpy video read failed"));
-            }
-            Err(e) => {
-                error!("scrcpy video read failed: {}", e);
-                break;
-            }
-        }
-
+        self.ack_rx.try_recv().expect("ACK channel dropped");
     }
-    //reassembler.flush();
-    return Ok(());
+    pub fn set_paused(&self, paused: bool) {
+        self.paused.store(paused, Ordering::Relaxed);
+    }
 }
 
-async fn tsk_scrcpy_audio(
-    stream: TcpStream,
-    mut ack_notify:Sender<()>,
-    audio_tx: mpsc::Sender<Packet>,
-    pause_mode: Arc<AtomicBool>,
+pub struct ControlServer {
     sid:u8,
-) -> Result<()> {
-    info!("Starting audio server!");
-    let mut reader=ScrcpyMediaReader::new(stream);
-    //codec metadata
-    match reader.read_audio_codec_info().await {
-        Ok(codec_id) => {
-            info!("SCRCPY Audio metadata decoded: id={}", codec_id);
-            if codec_id != "raw" && codec_id != "aac" {
-                error!("SCRCPY Unsupported audio codec configuration detected");
-                return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SCRCPY Invalid audio codec configuration")));
-            }
-        }
-        Err(e) => {
-            return Err(Box::new(io::Error::new(io::ErrorKind::Other, e)));
-        }
-    }
-    debug!("SCRCPY Audio entering main loop");
-    let mut act_unack =0;
-    let mut dbg_count=0;
-    let mut frame_counter=0;
-    loop {
-        //Read video frames from SCRCPY server
-        match reader.read_chunks().await {
-            Ok(Some((media_header, chunks))) => {
-                let rd_len = media_header.size ;
-                let dbg_len = min(rd_len, 16);
-                if dbg_count <  10
-                {
-                    debug!("Audio task got frame config={:?}, ts={}, act size: {}, raw bytes: {:02x?}",media_header.config, media_header.timestamp, rd_len, &chunks[0][..dbg_len]);
-                    dbg_count += 1;
-                }
-                if pause_mode.load(Ordering::Relaxed) || media_header.size <=0
-                {
-                    continue;
-                }
-                if !media_header.config
-                {
-                    //wait for ACK
-                    match ack_notify.send(()).await {
-                        Ok(()) => {}
-                        Err(e) => {
-                            error!("scrcpy audio ack send failed: {:?}", e);
-                            return Err(Box::from(e));
-                        }
-                    }
-                }
-                let pk_header_size = if media_header.config {
-                    2
-                } else {
-                    2 + 8
-                };
-                //send all chunks
-                if chunks.len()>1
-                {
-                    for (i,chunk) in chunks.iter().enumerate()
-                    {
-                        let mut flags:u8;
-                        let mut total_len =None;
-                        let mut payload;
-                        if i==0
-                        {
-                            flags = ENCRYPTED | FRAME_TYPE_FIRST;
-                            total_len=Some((media_header.size + pk_header_size) as u32);
-                            payload = Vec::with_capacity(pk_header_size + chunk.len());
-                            if media_header.config
-                            {
-                                payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
-                                payload.extend_from_slice(&chunk);
-                            }
-                            else
-                            {
-                                payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
-                                payload.extend_from_slice(&media_header.timestamp.to_be_bytes());
-                                payload.extend_from_slice(&chunk);
-                            }
-                        }
-                        else if i== (chunks.len() - 1)
-                        {
-                            flags = ENCRYPTED | FRAME_TYPE_LAST;
-                            payload = chunk.to_vec();
-                        }
-                        else
-                        {
-                            flags = ENCRYPTED;
-                            payload = chunk.to_vec();
-                        }
-
-                        let pkt_rsp = Packet {
-                            channel: sid,
-                            flags: flags,
-                            final_length: total_len,
-                            payload,
-                        };
-                        match audio_tx.send(pkt_rsp).await
-                        {
-                            Ok(_) => {
-                                //tokio::task::yield_now().await;
-                            }
-                            Err(e) => {
-                                error!("Error sending audio chunk: {:?}",e);
-                                return Err(Box::new(io::Error::new(io::ErrorKind::Other, "Error sending audio chunk")));
-                            }
-                        }
-                    }
-                }
-                else
-                {
-                    //single packet
-                    let mut payload = Vec::with_capacity(pk_header_size + chunks[0].len());
-                    if media_header.config
-                    {
-                        payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_CODEC_CONFIG as u16).to_be_bytes());
-                        payload.extend_from_slice(&chunks[0]);
-                    }
-                    else
-                    {
-                        payload.extend_from_slice(&(MediaMessageId::MEDIA_MESSAGE_DATA as u16).to_be_bytes());
-                        payload.extend_from_slice(&media_header.timestamp.to_be_bytes());
-                        payload.extend_from_slice(&chunks[0]);
-                    }
-                    let pkt_rsp = Packet {
-                        channel: sid,
-                        flags: ENCRYPTED | FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                        final_length: None,
-                        payload,
-                    };
-                    match audio_tx.send(pkt_rsp).await
-                    {
-                        Ok(_) => {
-                            //tokio::task::yield_now().await;
-                        }
-                        Err(e) => {
-                            error!("Error sending audio chunk: {:?}",e);
-                            return Err(Box::new(io::Error::new(io::ErrorKind::Other, "Error sending audio chunk")));
-                        }
-                    }
-                }
-
-            }
-            Ok(None) => {
-                error!("scrcpy audio read failed");
-                return Err(Box::from("scrcpy video read failed"));
-            }
-            Err(e) => {
-                error!("scrcpy audio read failed: {}", e);
-                break;
-            }
-        }
-    }
-    return Ok(());
-}
-
-async fn tsk_scrcpy_control(
-    stream: TcpStream,
-    mut cmd_rx: mpsc::Receiver<Packet>,
+    hu_tx: Sender<Packet>,
     screen_size:ScrcpySize,
     cfg_screen_off:bool,
-) -> Result<()> {
+    cancel: CancellationToken,
+    //private members
+	last_touched_point:ScrcpyPoint,
+	pkt_tx: Sender<()>,
+    pkt_rx: Receiver<()>,
+}
 
-    info!("Starting control server!");
-    if cfg_screen_off {
-        let mut payload: Vec<u8> = Vec::new();
-        payload.push(ScrcpyControlMessageType::SetDisplayPower as u8);
-        payload.push(0);
-        //stream.write_all(payload).await;
-        let (res, _) = stream.write_all(payload).await;
-        if let Err(e) = res {
-            error!("tsk_scrcpy_control send error: {}", e);
+impl ControlServer {
+    pub fn new(sid:u8, hu_tx: Sender<Packet>, screen_size:ScrcpySize, cfg_screen_off:bool, cancel: CancellationToken,) -> Self {
+        let (pkt_tx, mut pkt_rx) = mpsc::channel::<()>(5);
+        Self {
+            sid,
+            hu_tx,
+			screen_size,
+			cfg_screen_off,
+            cancel,
+			last_touched_point:ScrcpyPoint{x:0,y:0},
+			pkt_rx,
+			pkt_tx,
         }
     }
-    let mut last_touched_point=ScrcpyPoint{x:0,y:0};
-    loop {
-        match cmd_rx.recv().await {
-            Ok(pkt) => {
-                // Received a packet
-                let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-                info!("tsk_scrcpy_control Received command id {:?}", message_id);
-                if message_id == InputMessageId::INPUT_MESSAGE_INPUT_REPORT  as i32
-                {
-                    let data = &pkt.payload[2..]; // start of message data, without message_id
-                    if  let Ok(rsp) = InputReport::parse_from_bytes(&data) {
-                        //info!( "tsk_scrcpy_control InputReport received: {:?}", rsp);
-                        if rsp.touch_event.is_some()
-                        {
-                            let touch_action = rsp.touch_event.action();
-                            for (_,touch_ev) in rsp.touch_event.pointer_data.iter().enumerate() {
-                                let touch_x = touch_ev.x();
-                                let touch_y = touch_ev.y();
-                                let pointer_id = touch_ev.pointer_id();
-
-
-                                let mut _action: u8;
-                                if touch_action == PointerAction::ACTION_DOWN
-                                {
-                                    _action = AndroidTouchEvent::Down as u8;
-                                } else if touch_action == PointerAction::ACTION_UP
-                                {
-                                    _action = AndroidTouchEvent::Up as u8;
-                                    last_touched_point = ScrcpyPoint { x: touch_x as i32, y: touch_y as i32 };
-                                } else if touch_action == PointerAction::ACTION_MOVED
-                                {
-                                    _action = AndroidTouchEvent::Move as u8;
-                                } else {
-                                    error!( "tsk_scrcpy_control Received invalid touchscreen action");
-                                    continue;
-                                }
-                                let pt = ScrcpyPoint { x: touch_x as i32, y: touch_y as i32 };
-                                //let sz = ScrcpySize { width: video_params.res_w as u16, height: video_params.res_h as u16 };
-                                let pos = ScrcpyPosition { point: pt, screen_size: screen_size.clone() };
-                                let ev = ScrcpyTouchEvent { action: _action, pointer_id: pointer_id as u64, position: pos, pressure: 0xffff, action_button: 1, buttons: 1 };//AMOTION_EVENT_BUTTON_PRIMARY
-                                //info!("SCRCPY Control inject event: {:?}",ev);
-                                let ev_bytes=ev.to_be_bytes();
-                                let mut payload: Vec<u8> = Vec::new();
-                                payload.push(ScrcpyControlMessageType::InjectTouchEvent as u8);
-                                payload.extend_from_slice(&ev_bytes);
-                                //stream.write_all(payload).await;
-                                let (res, _) = stream.write_all(payload).await;
-                                if let Err(e) = res {
-                                    error!("tsk_scrcpy_control send error: {}", e);
-                                }
-                            }
-                        }
-                        else if rsp.touchpad_event.is_some()
-                        {
-                            let touch_action = rsp.touchpad_event.action();
-                            for (_,touch_ev) in rsp.touchpad_event.pointer_data.iter().enumerate() {
-                                let touch_x = touch_ev.x();
-                                let touch_y = touch_ev.y();
-                                let pointer_id = touch_ev.pointer_id();
-                                let mut _action: u8;
-                                if touch_action == PointerAction::ACTION_DOWN
-                                {
-                                    _action = AndroidTouchEvent::Down as u8;
-                                } else if touch_action == PointerAction::ACTION_UP
-                                {
-                                    last_touched_point = ScrcpyPoint { x: touch_x as i32, y: touch_y as i32 };
-                                    _action = AndroidTouchEvent::Up as u8;
-                                } else if touch_action == PointerAction::ACTION_MOVED
-                                {
-                                    _action = AndroidTouchEvent::Move as u8;
-                                } else {
-                                    error!( "tsk_scrcpy_control Received invalid touchpad action");
-                                    continue;
-                                }
-                                let pt = ScrcpyPoint { x: touch_x as i32, y: touch_y as i32 };
-                                //let sz = ScrcpySize { width: video_params.res_w as u16, height: video_params.res_h as u16 };
-                                let pos = ScrcpyPosition { point: pt, screen_size: screen_size.clone() };
-                                let ev = ScrcpyTouchEvent { action: _action, pointer_id: pointer_id as u64, position: pos, pressure: 0xffff, action_button: 1, buttons: 1 };//AMOTION_EVENT_BUTTON_PRIMARY
-                                //info!("SCRCPY Control inject event: {:?}",ev);
-                                let ev_bytes=ev.to_be_bytes();
-                                let mut payload: Vec<u8> = Vec::new();
-                                payload.push(ScrcpyControlMessageType::InjectTouchEvent as u8);
-                                payload.extend_from_slice(&ev_bytes);
-                                //stream.write_all(payload).await;
-                                let (res, _) = stream.write_all(payload).await;
-                                if let Err(e) = res {
-                                    error!("tsk_scrcpy_control send error: {}", e);
-                                }
-                            }
-                        }
-                        else if rsp.key_event.is_some()
-                        {
-                            let mut key_code=0i32;
-                            for (_,key_ev) in rsp.key_event.keys.iter().enumerate() {
-                                debug!("scrcpy_control received key_event: keycode={:?}, down={:?}",key_ev.keycode(), key_ev.down());
-                                let key_down = key_ev.down();
-                                key_code=key_ev.keycode() as i32;
-                                let mut _action: u8;
-                                if key_down
-                                {
-                                    _action = AndroidKeyEvent::Down as u8;
-                                } else {
-                                    _action = AndroidKeyEvent::Up as u8;
-                                }
-
-                                let ev = ScrcpyKeyEvent { action: _action, key_code: key_code , repeat: 0, metastate: 0 };
-                                //info!("SCRCPY Control inject event: {:?}",ev);
-                                let ev_bytes=ev.to_be_bytes();
-                                let mut payload: Vec<u8> = Vec::new();
-                                payload.push(ScrcpyControlMessageType::InjectKeycode as u8);
-                                payload.extend_from_slice(&ev_bytes);
-                                //stream.write_all(payload).await;
-                                let (res, _) = stream.write_all(payload).await;
-                                if let Err(e) = res {
-                                    error!("tsk_scrcpy_control send error: {}", e);
-                                }
-                            }
-                        }
-                        else if let Some(abs_event) = rsp.absolute_event.as_ref()
-                        {
-                            for (key_ev) in &abs_event.data{
-                                debug!("scrcpy_control received ABS event: keycode={:?}, value={:?}",key_ev.keycode(),key_ev.value())
-                            }
-                        }
-                        else if let Some(rel_event) = rsp.relative_event.as_ref()
-                        {
-                            for (key_ev) in &rel_event.data {
-                                debug!("scrcpy_control received REL event: keycode={:?}, delta={:?}",key_ev.keycode(),key_ev.delta());
-                                if key_ev.keycode() == KeyCode::KEYCODE_ROTARY_CONTROLLER as u32
-                                {
-                                    let ev = ScrcpyScrollEvent { position: last_touched_point, screen_size:screen_size, vscroll:key_ev.delta() as i16, hscroll:0, buttons:1 };
-                                    //info!("SCRCPY Control inject event: {:?}",ev);
-                                    let ev_bytes=ev.to_be_bytes();
-                                    let mut payload: Vec<u8> = Vec::new();
-                                    payload.push(ScrcpyControlMessageType::InjectScrollEvent as u8);
-                                    payload.extend_from_slice(&ev_bytes);
-                                    let (res, _) = stream.write_all(payload).await;
-                                    if let Err(e) = res {
-                                        error!("tsk_scrcpy_control send error: {}", e);
-                                    }
-                                }
-
-                            }
-                        }
-                        else
-                        {
-                            error!( "tsk_scrcpy_control unmanaged key action");
-                        }
-                    }
-                    else
+    pub fn start(mut self,) -> () {
+        let task = tokio::spawn(async move {
+            let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), SCRCPY_PORT);
+            let stream = match timeout(Duration::from_secs(5), TcpStream::connect(addr),
+            ).await {
+                Ok(Ok(stream)) =>
                     {
-                        error!( "tsk_scrcpy_control: Unable to parse received message");
-                    }
-                }
-                else if message_id == ControlMessageType::MESSAGE_CUSTOM_CMD  as i32
-                {
-                    let cmd_id: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
-                    if cmd_id == CustomCommand::CANCEL as i32
-                    {
+                        info!("Starting control server!");
+						stream.set_nodelay(true);
+						if self.cfg_screen_off {
+							let mut payload: Vec<u8> = Vec::new();
+							payload.push(ScrcpyControlMessageType::SetDisplayPower as u8);
+							payload.push(0);
+							let (res, _) = stream.write(payload).await;
+							if let Err(e) = res {
+								error!("tsk_scrcpy_control send error: {}", e);
+							}
+						}
+                        debug!("SCRCPY Control entering main loop");
+                        while !self.cancel.is_cancelled()
+                        {
+                            match self.pkt_rx.recv().await {
+								Ok(pkt) => {
+									// Received a packet
+									let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+									info!("tsk_scrcpy_control Received command id {:?}", message_id);
+									if message_id == InputMessageId::INPUT_MESSAGE_INPUT_REPORT  as i32
+									{
+										let data = &pkt.payload[2..]; // start of message data, without message_id
+										if  let Ok(rsp) = InputReport::parse_from_bytes(&data) {
+											//info!( "tsk_scrcpy_control InputReport received: {:?}", rsp);
+											if rsp.touch_event.is_some()
+											{
+												let touch_action = rsp.touch_event.action();
+												for (_,touch_ev) in rsp.touch_event.pointer_data.iter().enumerate() {
+													let touch_x = touch_ev.x();
+													let touch_y = touch_ev.y();
+													let pointer_id = touch_ev.pointer_id();
 
-                        info!("CustomCommand::CANCEL cmd received, tsk_scrcpy_control task stopped");
-                        break;
+
+													let mut _action: u8;
+													if touch_action == PointerAction::ACTION_DOWN
+													{
+														_action = AndroidTouchEvent::Down as u8;
+													} else if touch_action == PointerAction::ACTION_UP
+													{
+														_action = AndroidTouchEvent::Up as u8;
+														self.last_touched_point = ScrcpyPoint { x: touch_x as i32, y: touch_y as i32 };
+													} else if touch_action == PointerAction::ACTION_MOVED
+													{
+														_action = AndroidTouchEvent::Move as u8;
+													} else {
+														error!( "tsk_scrcpy_control Received invalid touchscreen action");
+														continue;
+													}
+													let pt = ScrcpyPoint { x: touch_x as i32, y: touch_y as i32 };
+													//let sz = ScrcpySize { width: video_params.res_w as u16, height: video_params.res_h as u16 };
+													let pos = ScrcpyPosition { point: pt, screen_size: self.screen_size.clone() };
+													let ev = ScrcpyTouchEvent { action: _action, pointer_id: pointer_id as u64, position: pos, pressure: 0xffff, action_button: 1, buttons: 1 };//AMOTION_EVENT_BUTTON_PRIMARY
+													//info!("SCRCPY Control inject event: {:?}",ev);
+													let ev_bytes=ev.to_be_bytes();
+													let mut payload: Vec<u8> = Vec::new();
+													payload.push(ScrcpyControlMessageType::InjectTouchEvent as u8);
+													payload.extend_from_slice(&ev_bytes);
+													//stream.write_all(payload).await;
+													let (res, _) = stream.write_all(payload).await;
+													if let Err(e) = res {
+														error!("tsk_scrcpy_control send error: {}", e);
+													}
+												}
+											}
+											else if rsp.touchpad_event.is_some()
+											{
+												let touch_action = rsp.touchpad_event.action();
+												for (_,touch_ev) in rsp.touchpad_event.pointer_data.iter().enumerate() {
+													let touch_x = touch_ev.x();
+													let touch_y = touch_ev.y();
+													let pointer_id = touch_ev.pointer_id();
+													let mut _action: u8;
+													if touch_action == PointerAction::ACTION_DOWN
+													{
+														_action = AndroidTouchEvent::Down as u8;
+													} else if touch_action == PointerAction::ACTION_UP
+													{
+														self.last_touched_point = ScrcpyPoint { x: touch_x as i32, y: touch_y as i32 };
+														_action = AndroidTouchEvent::Up as u8;
+													} else if touch_action == PointerAction::ACTION_MOVED
+													{
+														_action = AndroidTouchEvent::Move as u8;
+													} else {
+														error!( "tsk_scrcpy_control Received invalid touchpad action");
+														continue;
+													}
+													let pt = ScrcpyPoint { x: touch_x as i32, y: touch_y as i32 };
+													//let sz = ScrcpySize { width: video_params.res_w as u16, height: video_params.res_h as u16 };
+													let pos = ScrcpyPosition { point: pt, screen_size: self.screen_size.clone() };
+													let ev = ScrcpyTouchEvent { action: _action, pointer_id: pointer_id as u64, position: pos, pressure: 0xffff, action_button: 1, buttons: 1 };//AMOTION_EVENT_BUTTON_PRIMARY
+													//info!("SCRCPY Control inject event: {:?}",ev);
+													let ev_bytes=ev.to_be_bytes();
+													let mut payload: Vec<u8> = Vec::new();
+													payload.push(ScrcpyControlMessageType::InjectTouchEvent as u8);
+													payload.extend_from_slice(&ev_bytes);
+													//stream.write_all(payload).await;
+													let (res, _) = stream.write_all(payload).await;
+													if let Err(e) = res {
+														error!("tsk_scrcpy_control send error: {}", e);
+													}
+												}
+											}
+											else if rsp.key_event.is_some()
+											{
+												let mut key_code=0i32;
+												for (_,key_ev) in rsp.key_event.keys.iter().enumerate() {
+													debug!("scrcpy_control received key_event: keycode={:?}, down={:?}",key_ev.keycode(), key_ev.down());
+													let key_down = key_ev.down();
+													key_code=key_ev.keycode() as i32;
+													let mut _action: u8;
+													if key_down
+													{
+														_action = AndroidKeyEvent::Down as u8;
+													} else {
+														_action = AndroidKeyEvent::Up as u8;
+													}
+
+													let ev = ScrcpyKeyEvent { action: _action, key_code: key_code , repeat: 0, metastate: 0 };
+													//info!("SCRCPY Control inject event: {:?}",ev);
+													let ev_bytes=ev.to_be_bytes();
+													let mut payload: Vec<u8> = Vec::new();
+													payload.push(ScrcpyControlMessageType::InjectKeycode as u8);
+													payload.extend_from_slice(&ev_bytes);
+													//stream.write_all(payload).await;
+													let (res, _) = stream.write_all(payload).await;
+													if let Err(e) = res {
+														error!("tsk_scrcpy_control send error: {}", e);
+													}
+												}
+											}
+											else if let Some(abs_event) = rsp.absolute_event.as_ref()
+											{
+												for (key_ev) in &abs_event.data{
+													debug!("scrcpy_control received ABS event: keycode={:?}, value={:?}",key_ev.keycode(),key_ev.value())
+												}
+											}
+											else if let Some(rel_event) = rsp.relative_event.as_ref()
+											{
+												for (key_ev) in &rel_event.data {
+													debug!("scrcpy_control received REL event: keycode={:?}, delta={:?}",key_ev.keycode(),key_ev.delta());
+													if key_ev.keycode() == KeyCode::KEYCODE_ROTARY_CONTROLLER as u32
+													{
+														let ev = ScrcpyScrollEvent { position: self.last_touched_point, screen_size:self.screen_size, vscroll:key_ev.delta() as i16, hscroll:0, buttons:1 };
+														//info!("SCRCPY Control inject event: {:?}",ev);
+														let ev_bytes=ev.to_be_bytes();
+														let mut payload: Vec<u8> = Vec::new();
+														payload.push(ScrcpyControlMessageType::InjectScrollEvent as u8);
+														payload.extend_from_slice(&ev_bytes);
+														let (res, _) = stream.write_all(payload).await;
+														if let Err(e) = res {
+															error!("tsk_scrcpy_control send error: {}", e);
+														}
+													}
+
+												}
+											}
+											else
+											{
+												error!( "tsk_scrcpy_control unmanaged key action");
+											}
+										}
+										else
+										{
+											error!( "tsk_scrcpy_control: Unable to parse received message");
+										}
+									}
+									else if message_id == ControlMessageType::MESSAGE_CUSTOM_CMD  as i32
+									{
+										let cmd_id: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
+										if cmd_id == CustomCommand::CANCEL as i32
+										{
+
+											info!("CustomCommand::CANCEL cmd received, tsk_scrcpy_control task stopped");
+											break;
+										}
+										else
+										{
+											error!("tsk_scrcpy_control unknown custom command received: {:?}", cmd_id);
+										}
+									}
+									else
+									{
+										error!("tsk_scrcpy_control unknown message received: {:?}", message_id);
+									}
+								}	
+								Err(_) => {
+									// Sender has been dropped, exit loop
+									println!("Sender closed, exiting scrcpy control loop");
+									break;
+								}
+							}
+                        }
                     }
-                    else
-                    {
-                        error!("tsk_scrcpy_control unknown custom command received: {:?}", cmd_id);
-                    }
+
+                Ok(Err(e)) => {
+                    error!("ControlServer TCP connect failed: {}", e);
+                    return;
                 }
-                else
-                {
-                    error!("tsk_scrcpy_control unknown message received: {:?}", message_id);
+
+                Err(_) => {
+                    error!("ControlServer TCP connect timeout");
+                    return;
                 }
-            }
-            Err(_) => {
-                // Sender has been dropped, exit loop
-                println!("Sender closed, exiting scrcpy control loop");
-                break;
-            }
-        }
+            };
+            return;
+        });
     }
-    Err(Box::new(flume::RecvError::Disconnected))
+	
+	pub fn enque_msg(&self, msg: Packet) {
+        if let Err(e) = self.pkt_tx.send(msg).await {
+			error!("scrcpy control send failed: {:?}", e);
+			return;
+		}
+    }
 }
 
 ///This task is not meant to be closed, it will always run
