@@ -791,7 +791,7 @@ impl ControlServer {
                             match self.pkt_rx.recv().await {
 								Some(pkt) => {
 									// Received a packet
-									let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
+									let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into().unwrap()).into();
 									info!("tsk_scrcpy_control Received command id {:?}", message_id);
 									if message_id == InputMessageId::INPUT_MESSAGE_INPUT_REPORT  as i32
 									{
@@ -938,7 +938,7 @@ impl ControlServer {
 									}
 									else if message_id == ControlMessageType::MESSAGE_CUSTOM_CMD  as i32
 									{
-										let cmd_id: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
+										let cmd_id: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into().unwrap()).into();
 										if cmd_id == CustomCommand::CANCEL as i32
 										{
 
