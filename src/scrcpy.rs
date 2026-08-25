@@ -359,7 +359,7 @@ impl VideoServer {
     }
     pub fn start(mut self,) -> () {
         let task = tokio::spawn(async move {
-            let addr = format!("127.0.0.1:{}", SCRCPY_PORT);
+            let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), SCRCPY_PORT);
             let stream = match timeout(
                 Duration::from_secs(5),
                 TcpStream::connect(addr),
@@ -1151,7 +1151,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                 info!("ADB port forwarding done to {}", SCRCPY_PORT);
             }
 
-            info!("ADB config done, sending MD_CONNECTED and wait for start recording");
+            info!("ADB config done, sending  and wait for start recording");
             let mut start_audio_recived=false;
             let mut start_video_recived=false;
             md_connected.notify_one();
@@ -1198,7 +1198,7 @@ pub(crate) async fn tsk_adb_scrcpy(
             if !push_ok {
                 error!("ADB invalid push response received for control task");
                 info!("tsk_adb_scrcpy Sending MD_DISCONNECT");
-                let mut payload: Vec<u8>=Vec::new();
+                /*let mut payload: Vec<u8>=Vec::new();
                 payload.extend_from_slice(&(ControlMessageType::MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
                 payload.extend_from_slice(&(CustomCommand::MD_DISCONNECTED as u16).to_be_bytes());
                 let pkt_rsp = Packet {
@@ -1207,7 +1207,8 @@ pub(crate) async fn tsk_adb_scrcpy(
                     final_length: None,
                     payload: std::mem::take(&mut payload),
                 };
-                srv_cmd_tx.send(pkt_rsp).await?;
+                srv_cmd_tx.send(pkt_rsp).await?;*/
+                cancel.cancel();
                 continue;
             }
             //Configure SCRCPY for recording
