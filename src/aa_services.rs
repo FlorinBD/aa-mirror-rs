@@ -339,7 +339,7 @@ pub struct SrvMediaSinkVideoStreaming {
     pub base: AAService,
     rx: Receiver<Packet>,
     hu_tx: Sender<Packet>,
-    start_scrcpy_server:Arc<Notify>,
+    adb_start_server:Arc<Notify>,
     projection_state:ProjectionStatus,
     video_params:VideoStreamingParams,
     cancel:CancellationToken,
@@ -364,7 +364,7 @@ pub struct SrvMediaSinkAudioStreaming {
     pub base: AAService,
     rx: Receiver<Packet>,
     hu_tx: Sender<Packet>,
-    scrcpy_tx: Sender<Packet>,
+    adb_start_server:Arc<Notify>,
     acfg:AudioConfig,
     audio_params:AudioStreamingParams,
     enabled:bool,
@@ -373,6 +373,8 @@ pub struct SrvMediaSinkAudioStreaming {
     audio_focus:bool,
     config_recived:bool,
     session_id:i32,
+	audio_streaming_started:bool,
+    scrcpy_server:crate::scrcpy::AudioServer,
 }
 
 pub struct SrvMediaSource {
@@ -595,7 +597,7 @@ impl SrvSensorSource {
     }
 }
 impl SrvMediaSinkVideoStreaming {
-    pub fn new(sid:i8, hu_tx: Sender<Packet>, start_server:Arc<Notify>, video_params:VideoStreamingParams, cancel:CancellationToken, enabled:bool, ignore_ack:bool) -> Self {
+    pub fn new(sid:i8, hu_tx: Sender<Packet>, start_adb_server:Arc<Notify>, video_params:VideoStreamingParams, cancel:CancellationToken, enabled:bool, ignore_ack:bool) -> Self {
         let (tx, rx) = mpsc::channel(5);
         Self {
             base: AAService {
@@ -605,7 +607,7 @@ impl SrvMediaSinkVideoStreaming {
             },
             rx,
             hu_tx:hu_tx.clone(),
-            start_scrcpy_server: start_server,
+            adb_start_server: start_adb_server,
             video_params:video_params.clone(),
             cancel: cancel.clone(),
             enabled,
@@ -618,7 +620,7 @@ impl SrvMediaSinkVideoStreaming {
         }
     }
 
-    pub fn start(self,cancel: CancellationToken,) -> (AAService, JoinHandle<Result<()>>) {
+    pub fn start(&mut self,cancel: CancellationToken,) -> (AAService, JoinHandle<Result<()>>) {
         let handle = self.base.clone();
         let task =tokio::spawn(async move {
             let mut service = self;
@@ -848,64 +850,23 @@ impl SrvMediaSinkVideoStreaming {
     }
     async fn start_scrcpy_media(&self)->Result<()> {
         debug!( "{:?}, Starting video streaming", self.base.srv_type);
-        /*let bytes: Vec<u8> = postcard::to_stdvec(&self.video_params)?;
-        let mut payload = Vec::new();
-        payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
-        payload.extend_from_slice(&(CustomCommand::CMD_START_VIDEO_RECORDING as u16).to_be_bytes());
-        payload.extend_from_slice(&bytes);
-
-        let pkt_rsp = Packet {
-            channel: self.base.sid as u8,
-            flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-            final_length: None,
-            payload: payload.clone(),
-        };
-        if let Err(_) = self.scrcpy_tx.send(pkt_rsp).await{
-            error!( "{:?} mpsc send error",self.base.srv_type);
-        };*/
-        self.start_scrcpy_server.notify_waiters();
+        self.adb_start_server.notify_waiters();
         self.scrcpy_server.start();
         Ok(())
     }
     async fn pause_scrcpy_media(&self)->Result<()> {
         debug!( "{:?}, Pausing video streaming", self.base.srv_type);
-        /*let mut payload = Vec::new();
-        payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
-        payload.extend_from_slice(&(CustomCommand::CMD_PAUSE_VIDEO_RECORDING as u16).to_be_bytes());
-
-        let pkt_rsp = Packet {
-            channel: self.base.sid as u8,
-            flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-            final_length: None,
-            payload: payload.clone(),
-        };
-        if let Err(_) = self.scrcpy_tx.send(pkt_rsp).await{
-            error!( "{:?} mpsc send error",self.base.srv_type);
-        };*/
         self.scrcpy_server.set_paused(true);
         Ok(())
     }
     async fn resume_scrcpy_media(&self)->Result<()> {
         debug!( "{:?}, Resuming video streaming", self.base.srv_type);
-        /*let mut payload = Vec::new();
-        payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
-        payload.extend_from_slice(&(CustomCommand::CMD_RESUME_VIDEO_RECORDING as u16).to_be_bytes());
-
-        let pkt_rsp = Packet {
-            channel: self.base.sid as u8,
-            flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-            final_length: None,
-            payload: payload.clone(),
-        };
-        if let Err(_) = self.scrcpy_tx.send(pkt_rsp).await{
-            error!( "{:?} mpsc send error",self.base.srv_type);
-        };*/
         self.scrcpy_server.set_paused(false);
         Ok(())
     }
 }
 impl SrvMediaSinkAudioStreaming {
-    pub fn new(sid:i8, hu_tx: Sender<Packet>, scrcpy_tx: Sender<Packet>,acfg:AudioConfig,audio_params:AudioStreamingParams, enabled:bool) -> Self {
+    pub fn new(sid:i8, hu_tx: Sender<Packet>, start_adb_server:Arc<Notify> ,acfg:AudioConfig,audio_params:AudioStreamingParams, enabled:bool) -> Self {
         let (tx, rx) = mpsc::channel(5);
         Self {
             base: AAService {
@@ -915,7 +876,7 @@ impl SrvMediaSinkAudioStreaming {
             },
             rx,
             hu_tx,
-            scrcpy_tx,
+            adb_start_server:start_adb_server,
             acfg,
             audio_params,
             enabled,
@@ -924,6 +885,7 @@ impl SrvMediaSinkAudioStreaming {
             audio_focus:false,
             config_recived:false,
             session_id:1,
+			scrcpy_server:crate::scrcpy::AudioServer::new(sid as u8,hu_tx.clone(), audio_params.clone(),cancel.clone(), ignore_ack),
         }
     }
 
@@ -1051,20 +1013,9 @@ impl SrvMediaSinkAudioStreaming {
                         self.session_id +=1;
                         self.start_media().await?;
                         self.audio_stream_started =true;
-                        info!( "{:?} Send custom CMD_START_AUDIO_RECORDING for ch {}",self.base.srv_type, self.base.sid);
-                        let bytes: Vec<u8> = postcard::to_stdvec(&self.audio_params)?;
-                        let mut payload = Vec::new();
-                        payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
-                        payload.extend_from_slice(&(CustomCommand::CMD_START_AUDIO_RECORDING as u16).to_be_bytes());
-                        payload.extend_from_slice(&bytes);
-
-                        let pkt_rsp = Packet {
-                            channel: self.base.sid as u8,
-                            flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                            final_length: None,
-                            payload: payload.clone(),
-                        };
-                        self.scrcpy_tx.send(pkt_rsp).await?;
+                        info!( "{:?} Start scrcpy audio server for ch {}",self.base.srv_type, self.base.sid);
+						self.adb_start_server.notify_waiters();
+						self.scrcpy_server.start();
                     }
                     else
                     {
@@ -1082,8 +1033,7 @@ impl SrvMediaSinkAudioStreaming {
             //error!("{:?}: Media ACK received by service, was not handled by PacketProxy", self.base.srv_type)
             if self.audio_stream_started
             {
-                //info!("{} Received {} message, proxy to SCRCPY", ch_id.to_string(), message_id);
-                self.scrcpy_tx.send(pkt).await?;
+                self.scrcpy_server.ack();
             }
         }
         else if message_id == MediaMessageId::MEDIA_MESSAGE_AUDIO_UNDERFLOW_NOTIFICATION  as i32
@@ -1113,19 +1063,7 @@ impl SrvMediaSinkAudioStreaming {
                             debug!("{:?}: Resuming audio stream", self.base.srv_type);
                             self.audio_stream_paused=false;
                             self.start_media().await?;
-                            let mut payload = Vec::new();
-                            payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
-                            payload.extend_from_slice(&(CustomCommand::CMD_RESUME_AUDIO_RECORDING as u16).to_be_bytes());
-
-                            let pkt_rsp = Packet {
-                                channel: self.base.sid as u8,
-                                flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                                final_length: None,
-                                payload: payload.clone(),
-                            };
-                            if let Err(_) = self.scrcpy_tx.send(pkt_rsp).await{
-                                error!( "{:?} mpsc send error",self.base.srv_type);
-                            };
+                            self.scrcpy_server.set_paused(false);
                         }
                     }
                     else {
@@ -1142,19 +1080,7 @@ impl SrvMediaSinkAudioStreaming {
                             debug!("{:?}: Pausing audio stream", self.base.srv_type);
                             self.audio_stream_paused=true;
                             self.stop_media().await?;
-                            let mut payload = Vec::new();
-                            payload.extend_from_slice(&(MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
-                            payload.extend_from_slice(&(CustomCommand::CMD_PAUSE_AUDIO_RECORDING as u16).to_be_bytes());
-
-                            let pkt_rsp = Packet {
-                                channel: self.base.sid as u8,
-                                flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                                final_length: None,
-                                payload: payload.clone(),
-                            };
-                            if let Err(_) = self.scrcpy_tx.send(pkt_rsp).await{
-                                error!( "{:?} mpsc send error",self.base.srv_type);
-                            };
+                            self.scrcpy_server.set_paused(true);
                         }
                     }
                 }
