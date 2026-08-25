@@ -349,7 +349,7 @@ pub struct SrvMediaSinkVideoStreaming {
     config_recived:bool,
     session_id:i32,
     video_streaming_started:bool,
-    scrcpy_server:crate::scrcpy::VideoServer,
+    scrcpy_server:Option<crate::scrcpy::VideoServer>,
 }
 
 pub struct SrvMediaSinkAudioGuidance {
@@ -376,7 +376,7 @@ pub struct SrvMediaSinkAudioStreaming {
     config_recived:bool,
     session_id:i32,
 	audio_streaming_started:bool,
-    scrcpy_server:crate::scrcpy::AudioServer,
+    scrcpy_server:Option<crate::scrcpy::AudioServer>,
 }
 
 pub struct SrvMediaSource {
@@ -618,7 +618,7 @@ impl SrvMediaSinkVideoStreaming {
             config_recived:false,
             session_id:0,
             video_streaming_started:false,
-            scrcpy_server:crate::scrcpy::VideoServer::new(sid as u8,hu_tx.clone(), video_params.clone(),cancel.clone(), ignore_ack),
+            scrcpy_server:Some(crate::scrcpy::VideoServer::new(sid as u8,hu_tx.clone(), video_params.clone(),cancel.clone(), ignore_ack)),
         }
     }
 
@@ -853,7 +853,11 @@ impl SrvMediaSinkVideoStreaming {
     async fn start_scrcpy_media(&self)->Result<()> {
         debug!( "{:?}, Starting video streaming", self.base.srv_type);
         self.adb_start_server.notify_waiters();
-        self.scrcpy_server.start();
+
+		if let Some(server) = self.scrcpy_server.take() {
+			let handle = server.start();
+			self.scrcpy_server = Some(handle);
+		}
         Ok(())
     }
     async fn pause_scrcpy_media(&self)->Result<()> {
@@ -877,10 +881,10 @@ impl SrvMediaSinkAudioStreaming {
                 hu_tx: tx,
             },
             rx,
-            hu_tx,
+            hu_tx:hu_tx.clone(),
             adb_start_server:start_adb_server,
             acfg,
-            audio_params,
+            audio_params:audio_params.clone(),
 			cancel: cancel.clone(),
             enabled,
             audio_streaming_started :false,
@@ -888,7 +892,7 @@ impl SrvMediaSinkAudioStreaming {
             audio_focus:false,
             config_recived:false,
             session_id:1,
-			scrcpy_server:crate::scrcpy::AudioServer::new(sid as u8,hu_tx.clone(), audio_params.clone(),cancel.clone(), ignore_ack),
+			scrcpy_server:Some(crate::scrcpy::AudioServer::new(sid as u8,hu_tx.clone(), audio_params.clone(),cancel.clone(), ignore_ack)),
         }
     }
 
@@ -1018,7 +1022,10 @@ impl SrvMediaSinkAudioStreaming {
                         self.audio_streaming_started =true;
                         info!( "{:?} Start scrcpy audio server for ch {}",self.base.srv_type, self.base.sid);
 						self.adb_start_server.notify_waiters();
-						self.scrcpy_server.start();
+						if let Some(server) = self.scrcpy_server.take() {
+							let handle = server.start();
+							self.scrcpy_server = Some(handle);
+						}
                     }
                     else
                     {
@@ -1741,7 +1748,7 @@ impl ServiceManager {
         let task = tokio::spawn(async move {
             let mut service = self;
             info!( "{:?} Starting channel manager",service.srv_type);
-            while !self.cancel.is_canceled() {
+            while !self.cancel.is_cancel() {
                 tokio::select! {
                     _ = cancel.cancelled() => {
                         info!("{:?}: Stopping...",service.srv_type);
@@ -1894,8 +1901,8 @@ impl ServiceManager {
                                     self.sdr_audio_codec_params.sid=ch_id as u8;
                                     self.sdr_audio_codec_params.codec=acd;
 
-                                    let service = SrvMediaSinkAudioStreaming::new(ch_id as i8, self.hu_tx.clone(), self.sdr_audio_cfg_streaming.clone(), self.sdr_audio_codec_params.clone(), self.cancel, true, self.config.ignore_media_ack);
-                                    let (service_handle, task) = service.start(self.cancel.clone());
+                                    let service = SrvMediaSinkAudioStreaming::new(ch_id as i8, self.hu_tx.clone(), self.start_audio_server, self.sdr_audio_cfg_streaming.clone(), self.sdr_audio_codec_params.clone(), self.cancel, true, self.config.ignore_media_ack);
+                                    let (service_handle, task) = service.start();
                                     self.add_service(service_handle);
                                     self.srv_tsk_handles.push(task);
                                 }
@@ -1933,7 +1940,7 @@ impl ServiceManager {
                                 self.sdr_video_codec_params.sid=ch_id as u8;
 
                                 let service = SrvMediaSinkVideoStreaming::new(ch_id as i8, self.hu_tx.clone(), self.start_video_server, self.sdr_video_codec_params.clone(), self.cancel,true, self.config.ignore_media_ack);
-                                let (service_handle, task) = service.start(self.cancel.clone());
+                                let (service_handle, task) = service.start();
                                 self.add_service(service_handle);
                                 self.srv_tsk_handles.push(task);
                             }
@@ -1968,7 +1975,7 @@ impl ServiceManager {
                         else if proto_srv.input_source_service.is_some()
                         {
                             self.sdr_keys=proto_srv.input_source_service.keycodes_supported.iter().cloned().collect();
-                            let service = SrvInputSource::new(ch_id as i8, self.hu_tx.clone(),self.scrcpy_tx.clone(), self.sdr_keys.clone());
+                            let service = SrvInputSource::new(ch_id as i8, self.hu_tx.clone(), self.sdr_keys.clone());
                             let (service_handle, task) = service.start(self.cancel.clone());
                             self.add_service(service_handle);
                             self.srv_tsk_handles.push(task);
