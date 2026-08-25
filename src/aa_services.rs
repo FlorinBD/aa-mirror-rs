@@ -344,6 +344,7 @@ pub struct SrvMediaSinkVideoStreaming {
     video_params:VideoStreamingParams,
     cancel:CancellationToken,
     enabled:bool,
+	//private members
     video_focus:bool,
     config_recived:bool,
     session_id:i32,
@@ -357,7 +358,7 @@ pub struct SrvMediaSinkAudioGuidance {
     hu_tx: Sender<Packet>,
     acfg:AudioConfig,
     enabled:bool,
-    audio_stream_started:bool,
+    audio_streaming_started:bool,
 }
 
 pub struct SrvMediaSinkAudioStreaming {
@@ -367,8 +368,9 @@ pub struct SrvMediaSinkAudioStreaming {
     adb_start_server:Arc<Notify>,
     acfg:AudioConfig,
     audio_params:AudioStreamingParams,
+	cancel:CancellationToken,
     enabled:bool,
-    audio_stream_started:bool,
+	//private members
     audio_stream_paused:bool,
     audio_focus:bool,
     config_recived:bool,
@@ -620,13 +622,13 @@ impl SrvMediaSinkVideoStreaming {
         }
     }
 
-    pub fn start(&mut self,cancel: CancellationToken,) -> (AAService, JoinHandle<Result<()>>) {
+    pub fn start(self) -> (AAService, JoinHandle<Result<()>>) {
         let handle = self.base.clone();
         let task =tokio::spawn(async move {
             let mut service = self;
             loop {
                 tokio::select! {
-                    _ = cancel.cancelled() => {
+                    _ = service.cancel.cancelled() => {
                         info!("{:?}: Stopping...",service.base.srv_type);
                         break;
                     }
@@ -866,7 +868,7 @@ impl SrvMediaSinkVideoStreaming {
     }
 }
 impl SrvMediaSinkAudioStreaming {
-    pub fn new(sid:i8, hu_tx: Sender<Packet>, start_adb_server:Arc<Notify> ,acfg:AudioConfig,audio_params:AudioStreamingParams, enabled:bool) -> Self {
+    pub fn new(sid:i8, hu_tx: Sender<Packet>, start_adb_server:Arc<Notify> ,acfg:AudioConfig,audio_params:AudioStreamingParams, cancel:CancellationToken, enabled:bool, ignore_ack:bool) -> Self {
         let (tx, rx) = mpsc::channel(5);
         Self {
             base: AAService {
@@ -879,8 +881,9 @@ impl SrvMediaSinkAudioStreaming {
             adb_start_server:start_adb_server,
             acfg,
             audio_params,
+			cancel: cancel.clone(),
             enabled,
-            audio_stream_started :false,
+            audio_streaming_started :false,
             audio_stream_paused:false,
             audio_focus:false,
             config_recived:false,
@@ -889,13 +892,13 @@ impl SrvMediaSinkAudioStreaming {
         }
     }
 
-    pub fn start(self,cancel: CancellationToken,) -> (AAService, JoinHandle<Result<()>>) {
+    pub fn start(self) -> (AAService, JoinHandle<Result<()>>) {
         let handle = self.base.clone();
         let task =tokio::spawn(async move {
             let mut service = self;
             loop {
                 tokio::select! {
-                    _ = cancel.cancelled() => {
+                    _ = service.cancel.cancelled() => {
                         info!("{:?}: Stopping...",service.base.srv_type);
                         break;
                     }
@@ -1012,7 +1015,7 @@ impl SrvMediaSinkAudioStreaming {
                     {
                         self.session_id +=1;
                         self.start_media().await?;
-                        self.audio_stream_started =true;
+                        self.audio_streaming_started =true;
                         info!( "{:?} Start scrcpy audio server for ch {}",self.base.srv_type, self.base.sid);
 						self.adb_start_server.notify_waiters();
 						self.scrcpy_server.start();
@@ -1031,7 +1034,7 @@ impl SrvMediaSinkAudioStreaming {
         else if message_id == MediaMessageId::MEDIA_MESSAGE_ACK  as i32 //now this is done by PacketProxy, not needed
         {
             //error!("{:?}: Media ACK received by service, was not handled by PacketProxy", self.base.srv_type)
-            if self.audio_stream_started
+            if self.audio_streaming_started
             {
                 self.scrcpy_server.ack();
             }
@@ -1056,7 +1059,7 @@ impl SrvMediaSinkAudioStreaming {
                 if (msg.focus_state() == AudioFocusStateType::AUDIO_FOCUS_STATE_GAIN) || (msg.focus_state() == AudioFocusStateType::AUDIO_FOCUS_STATE_GAIN_TRANSIENT) || (msg.focus_state() == AudioFocusStateType::AUDIO_FOCUS_STATE_GAIN_MEDIA_ONLY)
                 {
                     self.audio_focus=true;
-                    if self.audio_stream_started
+                    if self.audio_streaming_started
                     {
                         if self.audio_stream_paused
                         {
@@ -1073,7 +1076,7 @@ impl SrvMediaSinkAudioStreaming {
                 else {
                     //focus lost
                     self.audio_focus=false;
-                    if self.audio_stream_started
+                    if self.audio_streaming_started
                     {
                         if !self.audio_stream_paused
                         {
@@ -1148,7 +1151,7 @@ impl SrvMediaSinkAudioGuidance {
             hu_tx,
             acfg,
             enabled,
-            audio_stream_started: false,
+            audio_streaming_started: false,
         }
     }
 
@@ -1285,7 +1288,7 @@ impl SrvMediaSinkAudioGuidance {
                     info!( "{:?}, channel {:?}: Starting audio capture", self.base.srv_type, pkt.channel);
                     if self.acfg.codec == MediaCodec::AUDIO_PCM
                     {
-                        self.audio_stream_started =true;
+                        self.audio_streaming_started =true;
                     }
                     else
                     {
@@ -1738,7 +1741,7 @@ impl ServiceManager {
         let task = tokio::spawn(async move {
             let mut service = self;
             info!( "{:?} Starting channel manager",service.srv_type);
-            loop {
+            while !self.cancel.is_canceled() {
                 tokio::select! {
                     _ = cancel.cancelled() => {
                         info!("{:?}: Stopping...",service.srv_type);
@@ -1891,7 +1894,7 @@ impl ServiceManager {
                                     self.sdr_audio_codec_params.sid=ch_id as u8;
                                     self.sdr_audio_codec_params.codec=acd;
 
-                                    let service = SrvMediaSinkAudioStreaming::new(ch_id as i8, self.hu_tx.clone(), self.scrcpy_tx.clone(), self.sdr_audio_cfg_streaming.clone(), self.sdr_audio_codec_params.clone(), false);
+                                    let service = SrvMediaSinkAudioStreaming::new(ch_id as i8, self.hu_tx.clone(), self.sdr_audio_cfg_streaming.clone(), self.sdr_audio_codec_params.clone(), self.cancel, true, self.config.ignore_media_ack);
                                     let (service_handle, task) = service.start(self.cancel.clone());
                                     self.add_service(service_handle);
                                     self.srv_tsk_handles.push(task);
