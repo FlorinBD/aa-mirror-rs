@@ -360,7 +360,7 @@ impl VideoServer {
     }
     pub fn start(mut self,) -> () {
         let task = tokio::spawn(async move {
-            let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), SCRCPY_PORT as i16);
+            let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), SCRCPY_PORT as u16);
             let stream = match timeout(
                 Duration::from_secs(5),
                 TcpStream::connect(addr),
@@ -570,7 +570,7 @@ impl AudioServer {
     }
     pub fn start(mut self,) -> () {
         let task = tokio::spawn(async move {
-            let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), SCRCPY_PORT as i16);
+            let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), SCRCPY_PORT as u16);
             let stream = match timeout(
                 Duration::from_secs(5),
                 TcpStream::connect(addr),
@@ -750,8 +750,8 @@ pub struct ControlServer {
     cancel: CancellationToken,
     //private members
 	last_touched_point:ScrcpyPoint,
-	pkt_tx: Sender<()>,
-    pkt_rx: Receiver<()>,
+	pkt_tx: Sender<Packet>,
+    pkt_rx: Receiver<Packet>,
 }
 
 impl ControlServer {
@@ -770,7 +770,7 @@ impl ControlServer {
     }
     pub fn start(mut self,) -> () {
         let task = tokio::spawn(async move {
-            let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), SCRCPY_PORT as i16);
+            let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), SCRCPY_PORT as u16);
             let stream = match timeout(Duration::from_secs(5), TcpStream::connect(addr),
             ).await {
                 Ok(Ok(stream)) =>
@@ -781,7 +781,7 @@ impl ControlServer {
 							let mut payload: Vec<u8> = Vec::new();
 							payload.push(ScrcpyControlMessageType::SetDisplayPower as u8);
 							payload.push(0);
-							if let Err(e) = stream.write_all(payload).await {
+							if let Err(e) = stream.write_all(&payload).await {
 								error!("tsk_scrcpy_control send error: {}", e);
 							}
 						}
@@ -832,7 +832,7 @@ impl ControlServer {
 													payload.push(ScrcpyControlMessageType::InjectTouchEvent as u8);
 													payload.extend_from_slice(&ev_bytes);
 													//stream.write_all(payload).await;											
-													if let Err(e) = stream.write_all(payload).await {
+													if let Err(e) = stream.write_all(&payload).await {
 														error!("tsk_scrcpy_control send error: {}", e);
 													}
 												}
@@ -869,7 +869,7 @@ impl ControlServer {
 													payload.push(ScrcpyControlMessageType::InjectTouchEvent as u8);
 													payload.extend_from_slice(&ev_bytes);
 													//stream.write_all(payload).await;
-													if let Err(e) = stream.write_all(payload).await {
+													if let Err(e) = stream.write_all(&payload).await {
 														error!("tsk_scrcpy_control send error: {}", e);
 													}
 												}
@@ -896,7 +896,7 @@ impl ControlServer {
 													payload.push(ScrcpyControlMessageType::InjectKeycode as u8);
 													payload.extend_from_slice(&ev_bytes);
 													//stream.write_all(payload).await;
-													if let Err(e) = stream.write_all(payload).await {
+													if let Err(e) = stream.write_all(&payload).await {
 														error!("tsk_scrcpy_control send error: {}", e);
 													}
 												}
@@ -919,7 +919,7 @@ impl ControlServer {
 														let mut payload: Vec<u8> = Vec::new();
 														payload.push(ScrcpyControlMessageType::InjectScrollEvent as u8);
 														payload.extend_from_slice(&ev_bytes);
-														if let Err(e) = stream.write_all(payload).await {
+														if let Err(e) = stream.write_all(&payload).await {
 															error!("tsk_scrcpy_control send error: {}", e);
 														}
 													}
