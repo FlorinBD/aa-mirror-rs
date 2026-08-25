@@ -773,7 +773,7 @@ impl ControlServer {
             let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), SCRCPY_PORT as u16);
             let stream = match timeout(Duration::from_secs(5), TcpStream::connect(addr),
             ).await {
-                Ok(Ok(stream)) =>
+                Ok(Ok(mut stream)) =>
                     {
                         info!("Starting control server!");
 						stream.set_nodelay(true);
