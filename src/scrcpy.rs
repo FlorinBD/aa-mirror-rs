@@ -3,6 +3,7 @@ use std::future::Future;
 use std::io;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::net::{SocketAddr, IpAddr, Ipv4Addr};
 use std::time::Duration;
 use std::time::Instant;
 use bytes::{BytesMut, Bytes, Buf};
@@ -544,7 +545,7 @@ impl VideoServer {
 pub struct AudioServer {
     sid:u8,
     hu_tx: Sender<Packet>,
-    video_codec_params :VideoStreamingParams,
+    audio_codec_params :AudioStreamingParams,
     cancel: CancellationToken,
     ignore_ack:bool,
     //private members
@@ -789,7 +790,7 @@ impl ControlServer {
                         while !self.cancel.is_cancelled()
                         {
                             match self.pkt_rx.recv().await {
-								Ok(pkt) => {
+								Ok(Some(pkt)) => {
 									// Received a packet
 									let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
 									info!("tsk_scrcpy_control Received command id {:?}", message_id);
@@ -982,12 +983,11 @@ impl ControlServer {
         });
     }
 	
-	pub fn enque_msg(&self, msg: Packet) {
-        if let Err(e) = self.pkt_tx.send(msg).await {
+	pub async fn enque_msg(&self, msg: Packet) {
+		if let Err(e) = self.pkt_tx.send(msg).await {
 			error!("scrcpy control send failed: {:?}", e);
-			return;
 		}
-    }
+	}
 }
 
 ///This task is not meant to be closed, it will always run
