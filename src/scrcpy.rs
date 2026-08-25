@@ -358,7 +358,8 @@ impl VideoServer {
             paused: AtomicBool::new(false),
         }
     }
-    pub fn start(mut self,) -> () {
+    pub fn start(mut self,) -> VideoServer {
+		let handle = self.clone_handle(); 
         let task = tokio::spawn(async move {
             let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), SCRCPY_PORT as u16);
             let stream = match timeout(
@@ -532,6 +533,7 @@ impl VideoServer {
             };
             return;
         });
+		handle
     }
     pub fn ack(&mut self) ->()
     {
@@ -568,7 +570,8 @@ impl AudioServer {
             paused: AtomicBool::new(false),
         }
     }
-    pub fn start(mut self,) -> () {
+    pub fn start(mut self,) -> AudioServer {
+		let handle = self.clone_handle(); 
         let task = tokio::spawn(async move {
             let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), SCRCPY_PORT as u16);
             let stream = match timeout(
@@ -732,6 +735,7 @@ impl AudioServer {
             };
             return;
         });
+		handle
     }
     pub fn ack(&mut self) ->()
     {
