@@ -343,6 +343,7 @@ pub struct SrvMediaSinkVideoStreaming {
     projection_state:ProjectionStatus,
     video_params:VideoStreamingParams,
     cancel:CancellationToken,
+    ignore_ack:bool,
     enabled:bool,
 	//private members
     video_focus:bool,
@@ -369,6 +370,7 @@ pub struct SrvMediaSinkAudioStreaming {
     acfg:AudioConfig,
     audio_params:AudioStreamingParams,
 	cancel:CancellationToken,
+    ignore_ack:bool,
     enabled:bool,
 	//private members
     audio_stream_paused:bool,
@@ -604,7 +606,7 @@ impl SrvSensorSource {
     }
 }
 impl SrvMediaSinkVideoStreaming {
-    pub fn new(sid:i8, hu_tx: Sender<Packet>, start_adb_server:Arc<Notify>, video_params:VideoStreamingParams, cancel:CancellationToken, enabled:bool, ignore_ack:bool) -> Self {
+    pub fn new(sid:i8, hu_tx: Sender<Packet>, start_adb_server:Arc<Notify>, video_params:VideoStreamingParams, cancel:CancellationToken, ignore_ack:bool, enabled:bool) -> Self {
         let (tx, rx) = mpsc::channel(5);
         Self {
             base: AAService {
@@ -617,6 +619,7 @@ impl SrvMediaSinkVideoStreaming {
             adb_start_server: start_adb_server,
             video_params:video_params.clone(),
             cancel: cancel.clone(),
+            ignore_ack,
             enabled,
             projection_state:ProjectionStatus::TransitionToProjected,
             video_focus:false,
@@ -624,7 +627,7 @@ impl SrvMediaSinkVideoStreaming {
             session_id:0,
             video_streaming_started:false,
             scrcpy_server: Some(VideoServerState::Created(
-                crate::scrcpy::VideoServer::new(sid as u8, hu_tx.clone(), cancel.clone(), ignore_ack)
+                crate::scrcpy::VideoServer::new(sid as u8, hu_tx.clone(), cancel.clone())
             )),
         }
     }
@@ -721,7 +724,15 @@ impl SrvMediaSinkVideoStreaming {
                 if rsp.status() == ConfigStatus::STATUS_READY
                 {
                     self.config_recived=true;
-                    self.video_params.max_unack=rsp.max_unacked();
+                    if self.ignore_ack
+                    {
+                        self.video_params.max_unack=0;
+                    }
+                    else
+                    {
+                        self.video_params.max_unack=rsp.max_unacked();
+                    }
+
                 }
             }
             else
@@ -890,7 +901,7 @@ impl SrvMediaSinkVideoStreaming {
     }
 }
 impl SrvMediaSinkAudioStreaming {
-    pub fn new(sid:i8, hu_tx: Sender<Packet>, start_adb_server:Arc<Notify> ,acfg:AudioConfig,audio_params:AudioStreamingParams, cancel:CancellationToken, enabled:bool, ignore_ack:bool) -> Self {
+    pub fn new(sid:i8, hu_tx: Sender<Packet>, start_adb_server:Arc<Notify> ,acfg:AudioConfig,audio_params:AudioStreamingParams, cancel:CancellationToken, ignore_ack:bool, enabled:bool) -> Self {
         let (tx, rx) = mpsc::channel(5);
         Self {
             base: AAService {
@@ -904,6 +915,7 @@ impl SrvMediaSinkAudioStreaming {
             acfg,
             audio_params:audio_params.clone(),
 			cancel: cancel.clone(),
+            ignore_ack,
             enabled,
             audio_streaming_started :false,
             audio_stream_paused:false,
@@ -911,7 +923,7 @@ impl SrvMediaSinkAudioStreaming {
             config_recived:false,
             session_id:1,
             scrcpy_server: Some(AudioServerState::Created(
-                crate::scrcpy::AudioServer::new(sid as u8,hu_tx.clone(), cancel.clone(), ignore_ack))
+                crate::scrcpy::AudioServer::new(sid as u8,hu_tx.clone(), cancel.clone()))
             ),
         }
     }
@@ -1033,7 +1045,15 @@ impl SrvMediaSinkAudioStreaming {
                 if rsp.status() == STATUS_READY
                 {
                     self.config_recived=true;
-                    self.audio_params.max_unack=rsp.max_unacked();
+                    if self.ignore_ack
+                    {
+                        self.audio_params.max_unack=0;
+                    }
+                    else
+                    {
+                        self.audio_params.max_unack=rsp.max_unacked();
+                    }
+
                     //info!( "{}, channel {:?}: Starting audio capture", get_name(), pkt.channel);
                     if (self.acfg.codec == MediaCodec::AUDIO_PCM) || (self.acfg.codec == MediaCodec::AUDIO_AAC_LC)
                     {
@@ -1948,7 +1968,7 @@ impl ServiceManager {
                                     self.sdr_audio_codec_params.sid=ch_id as u8;
                                     self.sdr_audio_codec_params.codec=acd;
 
-                                    let service = SrvMediaSinkAudioStreaming::new(ch_id as i8, self.hu_tx.clone(), self.start_audio_server.clone(), self.sdr_audio_cfg_streaming.clone(), self.sdr_audio_codec_params.clone(), self.cancel.clone(), true, self.config.ignore_media_ack);
+                                    let service = SrvMediaSinkAudioStreaming::new(ch_id as i8, self.hu_tx.clone(), self.start_audio_server.clone(), self.sdr_audio_cfg_streaming.clone(), self.sdr_audio_codec_params.clone(), self.cancel.clone(), self.config.ignore_media_ack,true);
                                     let (service_handle, task) = service.start();
                                     self.add_service(service_handle);
                                     self.srv_tsk_handles.push(task);
@@ -1986,7 +2006,7 @@ impl ServiceManager {
                                 self.sdr_video_codec_params.dpi=proto_srv.media_sink_service.video_configs[0].density() as i32;
                                 self.sdr_video_codec_params.sid=ch_id as u8;
 
-                                let service = SrvMediaSinkVideoStreaming::new(ch_id as i8, self.hu_tx.clone(), self.start_video_server.clone(), self.sdr_video_codec_params.clone(), self.cancel.clone(),true, self.config.ignore_media_ack);
+                                let service = SrvMediaSinkVideoStreaming::new(ch_id as i8, self.hu_tx.clone(), self.start_video_server.clone(), self.sdr_video_codec_params.clone(), self.cancel.clone(), self.config.ignore_media_ack, true);
                                 let (service_handle, task) = service.start();
                                 self.add_service(service_handle);
                                 self.srv_tsk_handles.push(task);

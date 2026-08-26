@@ -337,7 +337,6 @@ pub struct VideoServer {
     sid:u8,
     hu_tx: Sender<Packet>,
     cancel: CancellationToken,
-    ignore_ack:bool,
     //private members
     paused: Arc<AtomicBool>,
 }
@@ -365,17 +364,17 @@ impl VideoServerHandle {
     }
 }
 impl VideoServer {
-    pub fn new(sid:u8, hu_tx: Sender<Packet>, cancel: CancellationToken, ignore_ack:bool,) -> Self {
+    pub fn new(sid:u8, hu_tx: Sender<Packet>, cancel: CancellationToken,) -> Self {
 
         Self {
             sid,
             hu_tx,
             cancel,
-            ignore_ack,
             paused: Arc::new(AtomicBool::new(false)),
         }
     }
     pub fn start(mut self, max_unack :u8) -> VideoServerHandle {
+        let ignore_ack= max_unack == 0;
         let (ack_tx, ack_rx) = mpsc::channel::<()>(max_unack.max(1) as usize);
         let paused = self.paused.clone(); // clone Arc before moving self
         tokio::spawn(async move {
@@ -434,7 +433,7 @@ impl VideoServer {
                                     if !media_header.config
                                     {
                                         //wait for ACK
-                                        if !self.ignore_ack
+                                        if !ignore_ack
                                         {
                                             if let Err(e) = ack_tx.send(()).await {
 												error!("scrcpy video ack send failed: {:?}", e);
@@ -559,7 +558,6 @@ pub struct AudioServer {
     sid:u8,
     hu_tx: Sender<Packet>,
     cancel: CancellationToken,
-    ignore_ack:bool,
     //private members
     paused: Arc<AtomicBool>,
 }
@@ -587,16 +585,16 @@ impl AudioServerHandle {
     }
 }
 impl AudioServer {
-    pub fn new(sid:u8, hu_tx: Sender<Packet>, cancel: CancellationToken, ignore_ack:bool,) -> Self {
+    pub fn new(sid:u8, hu_tx: Sender<Packet>, cancel: CancellationToken) -> Self {
         Self {
             sid,
             hu_tx,
             cancel,
-            ignore_ack,
             paused: Arc::new(AtomicBool::new(false)),
         }
     }
     pub fn start(mut self, max_unack:u8) -> AudioServerHandle {
+        let ignore_ack= max_unack==0;
         let (ack_tx, ack_rx) = mpsc::channel::<()>(max_unack.max(1) as usize);
         let paused = self.paused.clone(); // clone Arc before moving self
         tokio::spawn(async move {
@@ -645,7 +643,7 @@ impl AudioServer {
                                     if !media_header.config
                                     {
                                         //wait for ACK
-                                        if !self.ignore_ack
+                                        if !ignore_ack
                                         {
                                             if let Err(e) = ack_tx.send(()).await {
 												error!("scrcpy audio ack send failed: {:?}", e);
