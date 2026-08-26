@@ -1570,7 +1570,7 @@ impl SrvInputSource {
         {
             let data = &pkt.payload[2..]; // start of message data, without message_id
             if  let Ok(rsp) = KeyBindingResponse::parse_from_bytes(&data) {
-                debug!("{:?} Decoded KeyBindingResponse status: {:?}",self.base.srv_type, rsp.status())
+                debug!("{:?} Decoded KeyBindingResponse status: {:?}",self.base.srv_type, rsp.status());
                 if let Some(ControlServerState::Created(server)) = self.scrcpy_server.take() {
                     self.scrcpy_server = Some(ControlServerState::Running(server.start()));
                 }
