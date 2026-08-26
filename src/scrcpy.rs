@@ -535,9 +535,14 @@ impl VideoServer {
         });
 		handle
     }
-    pub fn ack(&mut self) ->()
-    {
-        self.ack_rx.try_recv().expect("ACK channel dropped");
+    pub fn ack(&mut self) {
+        match self.ack_rx.try_recv() {
+            Ok(_) => { /* got ack */ }
+            Err(mpsc::error::TryRecvError::Empty) => { /* no ack yet, ignore */ }
+            Err(mpsc::error::TryRecvError::Disconnected) => {
+                error!("ACK channel dropped");
+            }
+        }
     }
     pub fn set_paused(&self, paused: bool) {
         self.paused.store(paused, Ordering::Relaxed);
@@ -737,9 +742,14 @@ impl AudioServer {
         });
 		handle
     }
-    pub fn ack(&mut self) ->()
-    {
-        self.ack_rx.try_recv().expect("ACK channel dropped");
+    pub fn ack(&mut self) {
+        match self.ack_rx.try_recv() {
+            Ok(_) => { /* got ack */ }
+            Err(mpsc::error::TryRecvError::Empty) => { /* no ack yet, ignore */ }
+            Err(mpsc::error::TryRecvError::Disconnected) => {
+                error!("ACK channel dropped");
+            }
+        }
     }
     pub fn set_paused(&self, paused: bool) {
         self.paused.store(paused, Ordering::Relaxed);

@@ -783,7 +783,12 @@ impl SrvMediaSinkVideoStreaming {
             //error!("{:?}: Media ACK received by service, was not handled by PacketProxy", self.base.srv_type)
             if self.video_streaming_started
             {
-                self.scrcpy_server.ack();
+                if let Some(server) = &mut self.scrcpy_server {
+                    server.ack();
+                }
+                else {
+                    error!("{:?}: Unable to ack, scrcpy_server is None ", self.base.srv_type);
+                }
             }
         }
         else
@@ -850,24 +855,31 @@ impl SrvMediaSinkVideoStreaming {
         self.video_streaming_started=false;
         Ok(())
     }
-    async fn start_scrcpy_media(&self)->Result<()> {
+    async fn start_scrcpy_media(&mut self) ->Result<()> {
         debug!( "{:?}, Starting video streaming", self.base.srv_type);
         self.adb_start_server.notify_waiters();
 
 		if let Some(server) = self.scrcpy_server.take() {
-			let handle = server.start();
-			self.scrcpy_server = Some(handle);
+            let handle = server.start();
+            self.scrcpy_server = Some(handle);
 		}
+        else {
+            error!("{:?}: Unable to start scrcpy_server, is None ", self.base.srv_type);
+        }
         Ok(())
     }
     async fn pause_scrcpy_media(&self)->Result<()> {
         debug!( "{:?}, Pausing video streaming", self.base.srv_type);
-        self.scrcpy_server.set_paused(true);
+        if let Some(server) = &self.scrcpy_server {
+            server.set_paused(true);
+        }
         Ok(())
     }
     async fn resume_scrcpy_media(&self)->Result<()> {
         debug!( "{:?}, Resuming video streaming", self.base.srv_type);
-        self.scrcpy_server.set_paused(false);
+        if let Some(server) = &self.scrcpy_server {
+            server.set_paused(false);
+        }
         Ok(())
     }
 }
@@ -1043,7 +1055,9 @@ impl SrvMediaSinkAudioStreaming {
             //error!("{:?}: Media ACK received by service, was not handled by PacketProxy", self.base.srv_type)
             if self.audio_streaming_started
             {
-                self.scrcpy_server.ack();
+                if let Some(server) = &mut self.scrcpy_server {
+                    server.ack();
+                }
             }
         }
         else if message_id == MediaMessageId::MEDIA_MESSAGE_AUDIO_UNDERFLOW_NOTIFICATION  as i32
@@ -1073,7 +1087,12 @@ impl SrvMediaSinkAudioStreaming {
                             debug!("{:?}: Resuming audio stream", self.base.srv_type);
                             self.audio_stream_paused=false;
                             self.start_media().await?;
-                            self.scrcpy_server.set_paused(false);
+                            if let Some(server) = &self.scrcpy_server {
+                                server.set_paused(false);
+                            }
+                            else {
+                                error!("{:?}: Unable to resume audio stream, scrcpy_server is None ", self.base.srv_type);
+                            }
                         }
                     }
                     else {
@@ -1090,7 +1109,13 @@ impl SrvMediaSinkAudioStreaming {
                             debug!("{:?}: Pausing audio stream", self.base.srv_type);
                             self.audio_stream_paused=true;
                             self.stop_media().await?;
-                            self.scrcpy_server.set_paused(true);
+                            if let Some(server) = &self.scrcpy_server {
+                                server.set_paused(true);
+                            }
+                            else {
+                                error!("{:?}: Unable to pause audio stream, scrcpy_server is None ", self.base.srv_type);
+                            }
+
                         }
                     }
                 }
@@ -1748,7 +1773,7 @@ impl ServiceManager {
         let task = tokio::spawn(async move {
             let mut service = self;
             info!( "{:?} Starting channel manager",service.srv_type);
-            while !self.cancel.is_cancel() {
+            while !self.cancel.cancelled() {
                 tokio::select! {
                     _ = cancel.cancelled() => {
                         info!("{:?}: Stopping...",service.srv_type);
