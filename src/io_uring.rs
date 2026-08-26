@@ -593,7 +593,7 @@ pub async fn io_loop_mirror(
         tsk_packet_proxy=pp.start(hu_w, rxr_hu, rx_proxy, None, Some(tx_proxy))?;
 
         // main processing threads:
-        let svrmgr=ServiceManager::new(rx_srv,tx_srv.clone(), start_audio_server.clone(),start_video_server.clone(), cfg.clone(), tk_cancel.clone());
+        let svrmgr=ServiceManager::new(rx_srv,tx_srv.clone(), start_audio_server.clone(),start_video_server.clone(), start_control_server.clone(), cfg.clone(), tk_cancel.clone());
         tsk_ch_manager =svrmgr.start(tk_cancel.clone());
 
         // Thread for monitoring transfer
