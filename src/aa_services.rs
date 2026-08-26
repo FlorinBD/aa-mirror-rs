@@ -40,7 +40,7 @@ use crate::channel_manager::{pkt_debug, Packet, TlsPacketProxy, ENCRYPTED, FRAME
 use crate::config::{AppConfig, HU_CONFIG_DELAY_MS, SCRCPY_PORT};
 use crate::config_types::HexdumpLevel;
 use crate::io_uring::{Endpoint, IoDevice};
-use crate::scrcpy::ScrcpyControlMessageType;
+use crate::scrcpy::{AudioServerState, ScrcpyControlMessageType, VideoServerState};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -349,7 +349,7 @@ pub struct SrvMediaSinkVideoStreaming {
     config_recived:bool,
     session_id:i32,
     video_streaming_started:bool,
-    scrcpy_server:Option<crate::scrcpy::VideoServer>,
+    scrcpy_server:Option<VideoServerState>,
 }
 
 pub struct SrvMediaSinkAudioGuidance {
@@ -376,7 +376,7 @@ pub struct SrvMediaSinkAudioStreaming {
     config_recived:bool,
     session_id:i32,
 	audio_streaming_started:bool,
-    scrcpy_server:Option<crate::scrcpy::AudioServer>,
+    scrcpy_server:Option<AudioServerState>,
 }
 
 pub struct SrvMediaSource {
@@ -618,7 +618,9 @@ impl SrvMediaSinkVideoStreaming {
             config_recived:false,
             session_id:0,
             video_streaming_started:false,
-            scrcpy_server:Some(crate::scrcpy::VideoServer::new(sid as u8,hu_tx.clone(), video_params.clone(),cancel.clone(), ignore_ack)),
+            scrcpy_server: Some(VideoServerState::Created(
+                crate::scrcpy::VideoServer::new(sid as u8, hu_tx.clone(), video_params.clone(), cancel.clone(), ignore_ack)
+            )),
         }
     }
 
@@ -783,7 +785,7 @@ impl SrvMediaSinkVideoStreaming {
             //error!("{:?}: Media ACK received by service, was not handled by PacketProxy", self.base.srv_type)
             if self.video_streaming_started
             {
-                if let Some(server) = &mut self.scrcpy_server {
+                if let Some(VideoServerState::Running(server)) = &mut self.scrcpy_server {
                     server.ack();
                 }
                 else {
@@ -859,25 +861,24 @@ impl SrvMediaSinkVideoStreaming {
         debug!( "{:?}, Starting video streaming", self.base.srv_type);
         self.adb_start_server.notify_waiters();
 
-		if let Some(server) = self.scrcpy_server.take() {
+        if let Some(VideoServerState::Created(server)) = self.scrcpy_server.take() {
             let handle = server.start();
-            self.scrcpy_server = Some(handle);
-		}
-        else {
-            error!("{:?}: Unable to start scrcpy_server, is None ", self.base.srv_type);
+            self.scrcpy_server = Some(VideoServerState::Running(handle));
+        } else {
+            error!("scrcpy_server: expected Created state, already started or missing");
         }
         Ok(())
     }
     async fn pause_scrcpy_media(&self)->Result<()> {
         debug!( "{:?}, Pausing video streaming", self.base.srv_type);
-        if let Some(server) = &self.scrcpy_server {
+        if let Some(VideoServerState::Running(server)) = &self.scrcpy_server {
             server.set_paused(true);
         }
         Ok(())
     }
     async fn resume_scrcpy_media(&self)->Result<()> {
         debug!( "{:?}, Resuming video streaming", self.base.srv_type);
-        if let Some(server) = &self.scrcpy_server {
+        if let Some(VideoServerState::Running(server)) = &self.scrcpy_server {
             server.set_paused(false);
         }
         Ok(())
@@ -904,7 +905,9 @@ impl SrvMediaSinkAudioStreaming {
             audio_focus:false,
             config_recived:false,
             session_id:1,
-			scrcpy_server:Some(crate::scrcpy::AudioServer::new(sid as u8,hu_tx.clone(), audio_params.clone(),cancel.clone(), ignore_ack)),
+            scrcpy_server: Some(AudioServerState::Created(
+                crate::scrcpy::AudioServer::new(sid as u8,hu_tx.clone(), audio_params.clone(),cancel.clone(), ignore_ack))
+            ),
         }
     }
 
@@ -1034,10 +1037,12 @@ impl SrvMediaSinkAudioStreaming {
                         self.audio_streaming_started =true;
                         info!( "{:?} Start scrcpy audio server for ch {}",self.base.srv_type, self.base.sid);
 						self.adb_start_server.notify_waiters();
-						if let Some(server) = self.scrcpy_server.take() {
-							let handle = server.start();
-							self.scrcpy_server = Some(handle);
-						}
+                        if let Some(AudioServerState::Created(server)) = self.scrcpy_server.take() {
+                            let handle = server.start();
+                            self.scrcpy_server = Some(AudioServerState::Running(handle));
+                        } else {
+                            error!("{:?} scrcpy_server: expected Created state, already started or missing", self.base.srv_type);
+                        }
                     }
                     else
                     {
@@ -1055,7 +1060,7 @@ impl SrvMediaSinkAudioStreaming {
             //error!("{:?}: Media ACK received by service, was not handled by PacketProxy", self.base.srv_type)
             if self.audio_streaming_started
             {
-                if let Some(server) = &mut self.scrcpy_server {
+                if let Some(AudioServerState::Running(server)) = &mut self.scrcpy_server {
                     server.ack();
                 }
             }
@@ -1087,7 +1092,7 @@ impl SrvMediaSinkAudioStreaming {
                             debug!("{:?}: Resuming audio stream", self.base.srv_type);
                             self.audio_stream_paused=false;
                             self.start_media().await?;
-                            if let Some(server) = &self.scrcpy_server {
+                            if let Some(AudioServerState::Running(server)) = &self.scrcpy_server {
                                 server.set_paused(false);
                             }
                             else {
@@ -1109,7 +1114,7 @@ impl SrvMediaSinkAudioStreaming {
                             debug!("{:?}: Pausing audio stream", self.base.srv_type);
                             self.audio_stream_paused=true;
                             self.stop_media().await?;
-                            if let Some(server) = &self.scrcpy_server {
+                            if let Some(AudioServerState::Running(server)) = &self.scrcpy_server {
                                 server.set_paused(true);
                             }
                             else {

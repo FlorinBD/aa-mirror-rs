@@ -342,7 +342,30 @@ pub struct VideoServer {
     //private members
     ack_tx: Sender<()>,
     ack_rx: Receiver<()>,
-    paused: AtomicBool,
+    paused: Arc<AtomicBool>,
+}
+pub struct VideoServerHandle {
+    ack_rx: Receiver<()>,
+    paused: Arc<AtomicBool>, // shared with the task
+}
+pub enum VideoServerState {
+    Created(VideoServer),
+    Running(VideoServerHandle),
+}
+impl VideoServerHandle {
+    pub fn ack(&mut self) {
+        match self.ack_rx.try_recv() {
+            Ok(_) => {}
+            Err(mpsc::error::TryRecvError::Empty) => {}
+            Err(mpsc::error::TryRecvError::Disconnected) => {
+                error!("ACK channel dropped");
+            }
+        }
+    }
+
+    pub fn set_paused(&self, paused: bool) {
+        self.paused.store(paused, Ordering::Relaxed);
+    }
 }
 impl VideoServer {
     pub fn new(sid:u8, hu_tx: Sender<Packet>, video_codec_params :VideoStreamingParams,cancel: CancellationToken, ignore_ack:bool,) -> Self {
@@ -355,12 +378,13 @@ impl VideoServer {
             ignore_ack,
             ack_tx,
             ack_rx,
-            paused: AtomicBool::new(false),
+            paused: Arc::new(AtomicBool::new(false)),
         }
     }
-    pub fn start(mut self,) -> VideoServer {
-		let handle = self.clone_handle(); 
-        let task = tokio::spawn(async move {
+    pub fn start(mut self,) -> VideoServerHandle {
+        let ack_rx = std::mem::replace(&mut self.ack_rx, mpsc::channel(5).1);
+        let paused = self.paused.clone(); // clone Arc before moving self
+        tokio::spawn(async move {
             let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), SCRCPY_PORT as u16);
             let stream = match timeout(
                 Duration::from_secs(5),
@@ -533,19 +557,7 @@ impl VideoServer {
             };
             return;
         });
-		handle
-    }
-    pub fn ack(&mut self) {
-        match self.ack_rx.try_recv() {
-            Ok(_) => { /* got ack */ }
-            Err(mpsc::error::TryRecvError::Empty) => { /* no ack yet, ignore */ }
-            Err(mpsc::error::TryRecvError::Disconnected) => {
-                error!("ACK channel dropped");
-            }
-        }
-    }
-    pub fn set_paused(&self, paused: bool) {
-        self.paused.store(paused, Ordering::Relaxed);
+        VideoServerHandle { ack_rx, paused }
     }
 }
 
@@ -558,9 +570,31 @@ pub struct AudioServer {
     //private members
     ack_tx: Sender<()>,
     ack_rx: Receiver<()>,
-    paused: AtomicBool,
+    paused: Arc<AtomicBool>,
 }
+pub struct AudioServerHandle {
+    ack_rx: Receiver<()>,
+    paused: Arc<AtomicBool>, // shared with the task
+}
+pub enum AudioServerState {
+    Created(AudioServer),
+    Running(AudioServerHandle),
+}
+impl AudioServerHandle {
+    pub fn ack(&mut self) {
+        match self.ack_rx.try_recv() {
+            Ok(_) => {}
+            Err(mpsc::error::TryRecvError::Empty) => {}
+            Err(mpsc::error::TryRecvError::Disconnected) => {
+                error!("ACK channel dropped");
+            }
+        }
+    }
 
+    pub fn set_paused(&self, paused: bool) {
+        self.paused.store(paused, Ordering::Relaxed);
+    }
+}
 impl AudioServer {
     pub fn new(sid:u8, hu_tx: Sender<Packet>, audio_codec_params :AudioStreamingParams,cancel: CancellationToken, ignore_ack:bool,) -> Self {
         let (ack_tx, mut ack_rx) = mpsc::channel::<()>(audio_codec_params.max_unack as usize);
@@ -572,12 +606,13 @@ impl AudioServer {
             ignore_ack,
             ack_tx,
             ack_rx,
-            paused: AtomicBool::new(false),
+            paused: Arc::new(AtomicBool::new(false)),
         }
     }
-    pub fn start(mut self,) -> AudioServer {
-		let handle = self.clone_handle(); 
-        let task = tokio::spawn(async move {
+    pub fn start(mut self,) -> AudioServerHandle {
+        let ack_rx = std::mem::replace(&mut self.ack_rx, mpsc::channel(5).1);
+        let paused = self.paused.clone(); // clone Arc before moving self
+        tokio::spawn(async move {
             let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), SCRCPY_PORT as u16);
             let stream = match timeout(
                 Duration::from_secs(5),
@@ -740,19 +775,7 @@ impl AudioServer {
             };
             return;
         });
-		handle
-    }
-    pub fn ack(&mut self) {
-        match self.ack_rx.try_recv() {
-            Ok(_) => { /* got ack */ }
-            Err(mpsc::error::TryRecvError::Empty) => { /* no ack yet, ignore */ }
-            Err(mpsc::error::TryRecvError::Disconnected) => {
-                error!("ACK channel dropped");
-            }
-        }
-    }
-    pub fn set_paused(&self, paused: bool) {
-        self.paused.store(paused, Ordering::Relaxed);
+        AudioServerHandle { ack_rx, paused }
     }
 }
 
