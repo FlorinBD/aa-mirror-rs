@@ -1769,7 +1769,7 @@ impl SrvBluetooth {
 }
 
 impl ServiceManager {
-    pub fn new(hu_rx: Receiver<Packet>, hu_tx: Sender<Packet>, start_audio_server: Arc<Notify>, start_video_server: Arc<Notify>, config: AppConfig, cancel:CancellationToken) -> Self {
+    pub fn new(hu_rx: Receiver<Packet>, hu_tx: Sender<Packet>, start_audio_server: Arc<Notify>, start_video_server: Arc<Notify>, start_control_server: Arc<Notify>, config: AppConfig, cancel:CancellationToken) -> Self {
         //This service is different, we don't own mspc channels, we use those passed by parameters
         Self {
             srv_type: ServiceType::Control,
@@ -1777,6 +1777,7 @@ impl ServiceManager {
             hu_tx,
             start_audio_server,
             start_video_server,
+            start_control_server,
             config,
             cancel,
             ch_opened:false,
@@ -1794,7 +1795,7 @@ impl ServiceManager {
         let task = tokio::spawn(async move {
             let mut service = self;
             info!( "{:?} Starting channel manager",service.srv_type);
-            while !service.cancel.cancelled() {
+            while !service.cancel.is_cancelled() {
                 tokio::select! {
                     _ = cancel.cancelled() => {
                         info!("{:?}: Stopping...",service.srv_type);
