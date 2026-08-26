@@ -399,6 +399,7 @@ impl VideoServer {
                             }
                             Err(e) => {
                                 error!("SCRCPY Video reading error: {:?}",e);
+                                self.cancel.cancel();
                                 return ;
                             }
                         }
@@ -613,11 +614,13 @@ impl AudioServer {
                                 info!("SCRCPY Audio metadata decoded: id={}", codec_id);
                                 if codec_id != "raw" && codec_id != "aac" {
                                     error!("SCRCPY Invalid Audio codec configuration");
+                                    self.cancel.cancel();
                                     return ;
                                 }
                             }
                             Err(e) => {
                                 error!("SCRCPY Audio reading error: {:?}",e);
+                                self.cancel.cancel();
                                 return ;
                             }
                         }
@@ -1101,7 +1104,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                         continue 'outer;
                     }
                 }
-                if start_audio_recived && start_video_recived && start_control_recived
+                if start_audio_recived && start_video_recived //&& start_control_recived
                 {
                     break;
                 }
