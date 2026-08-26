@@ -459,11 +459,13 @@ pub async fn io_loop_mirror(
     let md_connected = Arc::new(Notify::new());
     let start_audio_server = Arc::new(Notify::new());
     let start_video_server = Arc::new(Notify::new());
+    let start_control_server = Arc::new(Notify::new());
 
     let mut tsk_adb;
     tsk_adb = tokio_uring::spawn(scrcpy::tsk_adb_scrcpy(
         start_audio_server.clone(),
         start_video_server.clone(),
+        start_control_server.clone(),
         md_connected.clone(),
         tk_cancel.clone(),
         shared_config.clone(),

@@ -1039,6 +1039,7 @@ impl ControlServer {
 pub(crate) async fn tsk_adb_scrcpy(
     start_audio_server:Arc<Notify>,
     start_video_server:Arc<Notify>,
+    start_control_server:Arc<Notify>,
     md_connected:Arc<Notify>,
     cancel:CancellationToken,
     pconfig: SharedConfig,
@@ -1091,9 +1092,10 @@ pub(crate) async fn tsk_adb_scrcpy(
                 info!("ADB port forwarding done to {}", SCRCPY_PORT);
             }
 
-            info!("ADB config done, sending  and wait for start recording");
+            info!("ADB config done, waiting for start server commands");
             let mut start_audio_recived=false;
             let mut start_video_recived=false;
+            let mut start_control_recived=false;
             md_connected.notify_one();
             loop {
                 tokio::select! {
@@ -1105,20 +1107,22 @@ pub(crate) async fn tsk_adb_scrcpy(
                         // Notification received
                         start_video_recived=true;
                     }
+                    _ = start_control_server.notified() => {
+                        // Notification received
+                        start_control_recived=true;
+                    }
                     _ = cancel.cancelled() => {
                         // Cancellation requested
                         continue 'outer;
                     }
                 }
-                if start_audio_recived && start_video_recived
+                if start_audio_recived && start_video_recived && start_control_recived
                 {
                     break;
                 }
 
             }
-
-
-
+            info!("ADB config done, start server commands received");
             let video_sid=video_codec_params.sid.clone();
             let audio_sid=audio_codec_params.sid.clone();
             let mut cmd_push = vec![];

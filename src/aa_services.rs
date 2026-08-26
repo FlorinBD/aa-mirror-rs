@@ -388,6 +388,7 @@ pub struct SrvInputSource {
     pub base: AAService,
     rx: Receiver<Packet>,
     hu_tx: Sender<Packet>,
+    adb_start_server:Arc<Notify>,
     keys:Vec<i32>,
     cfg_screen_off:bool,
     cancel:CancellationToken,
@@ -413,6 +414,7 @@ pub struct ServiceManager {
     hu_tx: Sender<Packet>,
     start_audio_server:Arc<Notify>,
     start_video_server:Arc<Notify>,
+    start_control_server:Arc<Notify>,
     config: AppConfig,
     cancel:CancellationToken,
     //private fields
@@ -1447,7 +1449,7 @@ impl SrvMediaSource {
     }
 }
 impl SrvInputSource {
-    pub fn new(sid:i8, hu_tx: Sender<Packet>,keys:Vec<i32>,screen_size:ScrcpySize,cfg_screen_off:bool, cancel: CancellationToken) -> Self {
+    pub fn new(sid:i8, hu_tx: Sender<Packet>, start_adb_server:Arc<Notify>, keys:Vec<i32>,screen_size:ScrcpySize,cfg_screen_off:bool, cancel: CancellationToken) -> Self {
         let (tx, rx) = mpsc::channel(5);
         Self {
             base: AAService {
@@ -1457,6 +1459,7 @@ impl SrvInputSource {
             },
             rx,
             hu_tx:hu_tx.clone(),
+            adb_start_server: start_adb_server,
             keys,
             cfg_screen_off,
             cancel:cancel.clone(),
@@ -1472,7 +1475,7 @@ impl SrvInputSource {
             let mut service = self;
             loop {
                 tokio::select! {
-                    _ = self.cancel.cancelled() => {
+                    _ = service.cancel.cancelled() => {
                         info!("{:?}: Stopping...",service.base.srv_type);
                         break;
                     }
@@ -1572,6 +1575,7 @@ impl SrvInputSource {
             if  let Ok(rsp) = KeyBindingResponse::parse_from_bytes(&data) {
                 debug!("{:?} Decoded KeyBindingResponse status: {:?}",self.base.srv_type, rsp.status());
                 if let Some(ControlServerState::Created(server)) = self.scrcpy_server.take() {
+                    self.adb_start_server.notify_waiters();
                     self.scrcpy_server = Some(ControlServerState::Running(server.start()));
                 }
             }
@@ -1790,7 +1794,7 @@ impl ServiceManager {
         let task = tokio::spawn(async move {
             let mut service = self;
             info!( "{:?} Starting channel manager",service.srv_type);
-            while !self.cancel.cancelled() {
+            while !service.cancel.cancelled() {
                 tokio::select! {
                     _ = cancel.cancelled() => {
                         info!("{:?}: Stopping...",service.srv_type);
@@ -1943,7 +1947,7 @@ impl ServiceManager {
                                     self.sdr_audio_codec_params.sid=ch_id as u8;
                                     self.sdr_audio_codec_params.codec=acd;
 
-                                    let service = SrvMediaSinkAudioStreaming::new(ch_id as i8, self.hu_tx.clone(), self.start_audio_server, self.sdr_audio_cfg_streaming.clone(), self.sdr_audio_codec_params.clone(), self.cancel, true, self.config.ignore_media_ack);
+                                    let service = SrvMediaSinkAudioStreaming::new(ch_id as i8, self.hu_tx.clone(), self.start_audio_server.clone(), self.sdr_audio_cfg_streaming.clone(), self.sdr_audio_codec_params.clone(), self.cancel.clone(), true, self.config.ignore_media_ack);
                                     let (service_handle, task) = service.start();
                                     self.add_service(service_handle);
                                     self.srv_tsk_handles.push(task);
@@ -1981,7 +1985,7 @@ impl ServiceManager {
                                 self.sdr_video_codec_params.dpi=proto_srv.media_sink_service.video_configs[0].density() as i32;
                                 self.sdr_video_codec_params.sid=ch_id as u8;
 
-                                let service = SrvMediaSinkVideoStreaming::new(ch_id as i8, self.hu_tx.clone(), self.start_video_server, self.sdr_video_codec_params.clone(), self.cancel,true, self.config.ignore_media_ack);
+                                let service = SrvMediaSinkVideoStreaming::new(ch_id as i8, self.hu_tx.clone(), self.start_video_server.clone(), self.sdr_video_codec_params.clone(), self.cancel.clone(),true, self.config.ignore_media_ack);
                                 let (service_handle, task) = service.start();
                                 self.add_service(service_handle);
                                 self.srv_tsk_handles.push(task);
@@ -2018,7 +2022,7 @@ impl ServiceManager {
                         {
                             let screen_size=ScrcpySize{ width: self.sdr_video_codec_params.res_w as u16, height: self.sdr_video_codec_params.res_h as u16 };
                             self.sdr_keys=proto_srv.input_source_service.keycodes_supported.iter().cloned().collect();
-                            let service = SrvInputSource::new(ch_id as i8, self.hu_tx.clone(), self.sdr_keys.clone(), screen_size, self.config.scrcpy_screen_off, self.cancel.clone());
+                            let service = SrvInputSource::new(ch_id as i8, self.hu_tx.clone(),self.start_control_server.clone(), self.sdr_keys.clone(), screen_size, self.config.scrcpy_screen_off, self.cancel.clone());
                             let (service_handle, task) = service.start();
                             self.add_service(service_handle);
                             self.srv_tsk_handles.push(task);
