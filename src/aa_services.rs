@@ -2016,8 +2016,9 @@ impl ServiceManager {
                         }
                         else if proto_srv.input_source_service.is_some()
                         {
+                            let screen_size=ScrcpySize{ width: self.sdr_video_codec_params.res_w as u16, height: self.sdr_video_codec_params.res_h as u16 };
                             self.sdr_keys=proto_srv.input_source_service.keycodes_supported.iter().cloned().collect();
-                            let service = SrvInputSource::new(ch_id as i8, self.hu_tx.clone(), self.sdr_keys.clone());
+                            let service = SrvInputSource::new(ch_id as i8, self.hu_tx.clone(), self.sdr_keys.clone(), screen_size, self.config.scrcpy_screen_off, self.cancel.clone());
                             let (service_handle, task) = service.start();
                             self.add_service(service_handle);
                             self.srv_tsk_handles.push(task);
