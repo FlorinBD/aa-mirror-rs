@@ -624,7 +624,7 @@ impl SrvMediaSinkVideoStreaming {
             session_id:0,
             video_streaming_started:false,
             scrcpy_server: Some(VideoServerState::Created(
-                crate::scrcpy::VideoServer::new(sid as u8, hu_tx.clone(), video_params.clone(), cancel.clone(), ignore_ack)
+                crate::scrcpy::VideoServer::new(sid as u8, hu_tx.clone(), cancel.clone(), ignore_ack)
             )),
         }
     }
@@ -867,7 +867,7 @@ impl SrvMediaSinkVideoStreaming {
         self.adb_start_server.notify_waiters();
 
         if let Some(VideoServerState::Created(server)) = self.scrcpy_server.take() {
-            let handle = server.start();
+            let handle = server.start(self.video_params.max_unack as u8);
             self.scrcpy_server = Some(VideoServerState::Running(handle));
         } else {
             error!("scrcpy_server: expected Created state, already started or missing");
@@ -911,7 +911,7 @@ impl SrvMediaSinkAudioStreaming {
             config_recived:false,
             session_id:1,
             scrcpy_server: Some(AudioServerState::Created(
-                crate::scrcpy::AudioServer::new(sid as u8,hu_tx.clone(), audio_params.clone(),cancel.clone(), ignore_ack))
+                crate::scrcpy::AudioServer::new(sid as u8,hu_tx.clone(), cancel.clone(), ignore_ack))
             ),
         }
     }
@@ -1043,7 +1043,7 @@ impl SrvMediaSinkAudioStreaming {
                         info!( "{:?} Start scrcpy audio server for ch {}",self.base.srv_type, self.base.sid);
 						self.adb_start_server.notify_waiters();
                         if let Some(AudioServerState::Created(server)) = self.scrcpy_server.take() {
-                            let handle = server.start();
+                            let handle = server.start(self.audio_params.max_unack as u8);
                             self.scrcpy_server = Some(AudioServerState::Running(handle));
                         } else {
                             error!("{:?} scrcpy_server: expected Created state, already started or missing", self.base.srv_type);

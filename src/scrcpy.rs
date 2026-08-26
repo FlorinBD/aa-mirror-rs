@@ -336,12 +336,9 @@ impl ScrcpyMediaReader {
 pub struct VideoServer {
     sid:u8,
     hu_tx: Sender<Packet>,
-    video_codec_params :VideoStreamingParams,
     cancel: CancellationToken,
     ignore_ack:bool,
     //private members
-    ack_tx: Sender<()>,
-    ack_rx: Receiver<()>,
     paused: Arc<AtomicBool>,
 }
 pub struct VideoServerHandle {
@@ -368,21 +365,18 @@ impl VideoServerHandle {
     }
 }
 impl VideoServer {
-    pub fn new(sid:u8, hu_tx: Sender<Packet>, video_codec_params :VideoStreamingParams,cancel: CancellationToken, ignore_ack:bool,) -> Self {
-        let (ack_tx, mut ack_rx) = mpsc::channel::<()>(video_codec_params.max_unack as usize);
+    pub fn new(sid:u8, hu_tx: Sender<Packet>, cancel: CancellationToken, ignore_ack:bool,) -> Self {
+
         Self {
             sid,
             hu_tx,
-            video_codec_params,
             cancel,
             ignore_ack,
-            ack_tx,
-            ack_rx,
             paused: Arc::new(AtomicBool::new(false)),
         }
     }
-    pub fn start(mut self,) -> VideoServerHandle {
-        let ack_rx = std::mem::replace(&mut self.ack_rx, mpsc::channel(5).1);
+    pub fn start(mut self, max_unack :u8) -> VideoServerHandle {
+        let (ack_tx, ack_rx) = mpsc::channel::<()>(max_unack.max(1) as usize);
         let paused = self.paused.clone(); // clone Arc before moving self
         tokio::spawn(async move {
             let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), SCRCPY_PORT as u16);
@@ -442,7 +436,7 @@ impl VideoServer {
                                         //wait for ACK
                                         if !self.ignore_ack
                                         {
-                                            if let Err(e) = self.ack_tx.send(()).await {
+                                            if let Err(e) = ack_tx.send(()).await {
 												error!("scrcpy video ack send failed: {:?}", e);
 												return;
 											}
@@ -564,12 +558,9 @@ impl VideoServer {
 pub struct AudioServer {
     sid:u8,
     hu_tx: Sender<Packet>,
-    audio_codec_params :AudioStreamingParams,
     cancel: CancellationToken,
     ignore_ack:bool,
     //private members
-    ack_tx: Sender<()>,
-    ack_rx: Receiver<()>,
     paused: Arc<AtomicBool>,
 }
 pub struct AudioServerHandle {
@@ -596,21 +587,17 @@ impl AudioServerHandle {
     }
 }
 impl AudioServer {
-    pub fn new(sid:u8, hu_tx: Sender<Packet>, audio_codec_params :AudioStreamingParams,cancel: CancellationToken, ignore_ack:bool,) -> Self {
-        let (ack_tx, mut ack_rx) = mpsc::channel::<()>(audio_codec_params.max_unack as usize);
+    pub fn new(sid:u8, hu_tx: Sender<Packet>, cancel: CancellationToken, ignore_ack:bool,) -> Self {
         Self {
             sid,
             hu_tx,
-            audio_codec_params,
             cancel,
             ignore_ack,
-            ack_tx,
-            ack_rx,
             paused: Arc::new(AtomicBool::new(false)),
         }
     }
-    pub fn start(mut self,) -> AudioServerHandle {
-        let ack_rx = std::mem::replace(&mut self.ack_rx, mpsc::channel(5).1);
+    pub fn start(mut self, max_unack:u8) -> AudioServerHandle {
+        let (ack_tx, ack_rx) = mpsc::channel::<()>(max_unack.max(1) as usize);
         let paused = self.paused.clone(); // clone Arc before moving self
         tokio::spawn(async move {
             let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), SCRCPY_PORT as u16);
@@ -660,7 +647,7 @@ impl AudioServer {
                                         //wait for ACK
                                         if !self.ignore_ack
                                         {
-                                            if let Err(e) = self.ack_tx.send(()).await {
+                                            if let Err(e) = ack_tx.send(()).await {
 												error!("scrcpy audio ack send failed: {:?}", e);
 												return;
 											}
