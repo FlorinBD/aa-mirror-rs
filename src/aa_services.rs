@@ -40,7 +40,7 @@ use crate::channel_manager::{pkt_debug, Packet, TlsPacketProxy, ENCRYPTED, FRAME
 use crate::config::{AppConfig, HU_CONFIG_DELAY_MS, SCRCPY_PORT};
 use crate::config_types::HexdumpLevel;
 use crate::io_uring::{Endpoint, IoDevice};
-use crate::scrcpy::{AudioServerState, ScrcpyControlMessageType, VideoServerState};
+use crate::scrcpy::{AudioServerState, ControlServerState, ScrcpyControlMessageType, ScrcpySize, VideoServerState};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -388,8 +388,11 @@ pub struct SrvInputSource {
     pub base: AAService,
     rx: Receiver<Packet>,
     hu_tx: Sender<Packet>,
-    scrcpy_tx: Sender<Packet>,
     keys:Vec<i32>,
+    cfg_screen_off:bool,
+    cancel:CancellationToken,
+    //private
+    scrcpy_server:Option<ControlServerState>,
 }
 
 pub struct SrvVendorExtension {
@@ -1444,7 +1447,7 @@ impl SrvMediaSource {
     }
 }
 impl SrvInputSource {
-    pub fn new(sid:i8, hu_tx: Sender<Packet>, scrcpy_tx: Sender<Packet>,keys:Vec<i32>) -> Self {
+    pub fn new(sid:i8, hu_tx: Sender<Packet>,keys:Vec<i32>,screen_size:ScrcpySize,cfg_screen_off:bool, cancel: CancellationToken) -> Self {
         let (tx, rx) = mpsc::channel(5);
         Self {
             base: AAService {
@@ -1453,19 +1456,23 @@ impl SrvInputSource {
                 hu_tx: tx,
             },
             rx,
-            hu_tx,
-            scrcpy_tx,
-            keys
+            hu_tx:hu_tx.clone(),
+            keys,
+            cfg_screen_off,
+            cancel:cancel.clone(),
+            scrcpy_server: Some(ControlServerState::Created(
+                crate::scrcpy::ControlServer::new(sid as u8,hu_tx.clone(), screen_size, cfg_screen_off,cancel.clone()))
+            ),
         }
     }
 
-    pub fn start(self,cancel: CancellationToken,) -> (AAService, JoinHandle<Result<()>>) {
+    pub fn start(self,) -> (AAService, JoinHandle<Result<()>>) {
         let handle = self.base.clone();
         let task =tokio::spawn(async move {
             let mut service = self;
             loop {
                 tokio::select! {
-                    _ = cancel.cancelled() => {
+                    _ = self.cancel.cancelled() => {
                         info!("{:?}: Stopping...",service.base.srv_type);
                         break;
                     }
@@ -1552,16 +1559,21 @@ impl SrvInputSource {
         }
         else if message_id == InputMessageId::INPUT_MESSAGE_INPUT_REPORT  as i32
         {
-            if let Err(_) = self.scrcpy_tx.send(pkt).await{
+            if let Some(ControlServerState::Running(server)) = &self.scrcpy_server {
+                server.enque_msg(pkt).await;
+            }
+            else {
                 error!( "{:?} scrcpy_cmd send error",self.base.srv_type);
-            };
-            //tokio::task::yield_now().await;
+            }
         }
         else if message_id == InputMessageId::INPUT_MESSAGE_KEY_BINDING_RESPONSE  as i32
         {
             let data = &pkt.payload[2..]; // start of message data, without message_id
             if  let Ok(rsp) = KeyBindingResponse::parse_from_bytes(&data) {
                 debug!("{:?} Decoded KeyBindingResponse status: {:?}",self.base.srv_type, rsp.status())
+                if let Some(ControlServerState::Created(server)) = self.scrcpy_server.take() {
+                    self.scrcpy_server = Some(ControlServerState::Running(server.start()));
+                }
             }
         }
         else {
@@ -2006,7 +2018,7 @@ impl ServiceManager {
                         {
                             self.sdr_keys=proto_srv.input_source_service.keycodes_supported.iter().cloned().collect();
                             let service = SrvInputSource::new(ch_id as i8, self.hu_tx.clone(), self.sdr_keys.clone());
-                            let (service_handle, task) = service.start(self.cancel.clone());
+                            let (service_handle, task) = service.start();
                             self.add_service(service_handle);
                             self.srv_tsk_handles.push(task);
                         }

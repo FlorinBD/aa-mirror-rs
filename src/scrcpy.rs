@@ -791,6 +791,21 @@ pub struct ControlServer {
     pkt_rx: Receiver<Packet>,
 }
 
+pub enum ControlServerState {
+    Created(ControlServer),
+    Running(ControlServerHandle),
+}
+
+pub struct ControlServerHandle {
+    pkt_tx: Sender<Packet>,
+}
+impl ControlServerHandle {
+    pub async fn enque_msg(&self, msg: Packet) {
+        if let Err(e) = self.pkt_tx.send(msg).await {
+            error!("scrcpy control send failed: {:?}", e);
+        }
+    }
+}
 impl ControlServer {
     pub fn new(sid:u8, hu_tx: Sender<Packet>, screen_size:ScrcpySize, cfg_screen_off:bool, cancel: CancellationToken,) -> Self {
         let (pkt_tx, mut pkt_rx) = mpsc::channel::<Packet>(5);
@@ -805,15 +820,18 @@ impl ControlServer {
 			pkt_tx,
         }
     }
-    pub fn start(mut self,) -> () {
-        let task = tokio::spawn(async move {
+    pub fn start(mut self,) -> ControlServerHandle {
+        let pkt_tx = self.pkt_tx.clone(); // clone before moving self into the task
+        tokio::spawn(async move {
             let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), SCRCPY_PORT as u16);
             let stream = match timeout(Duration::from_secs(5), TcpStream::connect(addr),
             ).await {
                 Ok(Ok(mut stream)) =>
                     {
                         info!("Starting control server!");
-						stream.set_nodelay(true);
+                        if let Err(e) = stream.set_nodelay(true) {
+                            error!("Failed to set TCP_NODELAY: {}", e);
+                        }
 						if self.cfg_screen_off {
 							let mut payload: Vec<u8> = Vec::new();
 							payload.push(ScrcpyControlMessageType::SetDisplayPower as u8);
@@ -1013,13 +1031,8 @@ impl ControlServer {
             };
             return;
         });
+        ControlServerHandle { pkt_tx }
     }
-	
-	pub async fn enque_msg(&self, msg: Packet) {
-		if let Err(e) = self.pkt_tx.send(msg).await {
-			error!("scrcpy control send failed: {:?}", e);
-		}
-	}
 }
 
 ///This task is not meant to be closed, it will always run
