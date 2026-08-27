@@ -669,7 +669,7 @@ impl SrvMediaSinkVideoStreaming {
     async fn handle_message(&mut self, pkt: Packet) -> Result<()> {
 
         let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-        info!("{:?} Received {} message", self.base.srv_type, message_id);
+        //info!("{:?} Received {} message", self.base.srv_type, message_id);
         if message_id == ControlMessageType::MESSAGE_CHANNEL_OPEN_RESPONSE  as i32
         {
             let data = &pkt.payload[2..]; // start of message data, without message_id
@@ -968,7 +968,7 @@ impl SrvMediaSinkAudioStreaming {
     async fn handle_message(&mut self, pkt: Packet) -> Result<()> {
 
         let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-        info!("{:?} Received message id {}", self.base.srv_type, message_id);
+        //info!("{:?} Received message id {}", self.base.srv_type, message_id);
         if message_id == MESSAGE_CHANNEL_OPEN_RESPONSE  as i32
         {
             let data = &pkt.payload[2..]; // start of message data, without message_id
@@ -1261,7 +1261,7 @@ impl SrvMediaSinkAudioGuidance {
     async fn handle_message(&mut self, pkt: Packet) -> Result<()> {
 
         let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-        info!("{:?} Received message id {}", self.base.srv_type, message_id);
+        //info!("{:?} Received message id {}", self.base.srv_type, message_id);
         if message_id == MESSAGE_CHANNEL_OPEN_RESPONSE  as i32
         {
 
@@ -1433,7 +1433,7 @@ impl SrvMediaSource {
     async fn handle_message(&mut self, pkt: Packet) -> Result<()> {
 
         let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-        info!("{:?} Received message id {}", self.base.srv_type, message_id);
+        //info!("{:?} Received message id {}", self.base.srv_type, message_id);
         if message_id == MESSAGE_CHANNEL_OPEN_RESPONSE  as i32
         {
             let data = &pkt.payload[2..]; // start of message data, without message_id
@@ -1533,7 +1533,7 @@ impl SrvInputSource {
     async fn handle_message(&mut self, pkt: Packet) -> Result<()> {
 
         let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-        info!("{:?} Received message id {}", self.base.srv_type, message_id);
+        //info!("{:?} Received message id {}", self.base.srv_type, message_id);
         if message_id == MESSAGE_CHANNEL_OPEN_RESPONSE  as i32
         {
             let data = &pkt.payload[2..]; // start of message data, without message_id
@@ -1675,7 +1675,7 @@ impl SrvVendorExtension {
     async fn handle_message(&mut self, pkt: Packet) -> Result<()> {
 
         let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-        info!("{:?} Received message id {}", self.base.srv_type, message_id);
+        //info!("{:?} Received message id {}", self.base.srv_type, message_id);
         if message_id == MESSAGE_CHANNEL_OPEN_RESPONSE  as i32
         {
             let data = &pkt.payload[2..]; // start of message data, without message_id
@@ -1766,7 +1766,7 @@ impl SrvBluetooth {
 
     async fn handle_message(&mut self, pkt: Packet) -> Result<()> {
         let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-        info!("{:?} Received message id {}", self.base.srv_type, message_id);
+        //info!("{:?} Received message id {}", self.base.srv_type, message_id);
         if message_id == MESSAGE_CHANNEL_OPEN_RESPONSE as i32
         {
             let data = &pkt.payload[2..]; // start of message data, without message_id
@@ -1894,7 +1894,7 @@ impl ServiceManager {
         {
             //Control channel
             let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-            info!("{:?} Received message id {}", self.srv_type, message_id);
+            //info!("{:?} Received message id {}", self.srv_type, message_id);
             if message_id == ControlMessageType::MESSAGE_VERSION_REQUEST as i32
             {
                 info!( "{:?} HU version request received, sending VersionResponse back...",self.srv_type);
