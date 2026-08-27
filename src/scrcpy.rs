@@ -1078,18 +1078,6 @@ pub(crate) async fn tsk_adb_scrcpy(
                 info!("ADB port forwarding done to {}", SCRCPY_PORT);
             }
 
-            info!("ADB config done, waiting for start server commands");
-            md_connected.notify_one();
-            tokio::select! {
-                    _ = cancel.cancelled() => {
-                        info!("{}: Cancel detected, starting over...",NAME);
-                        continue;
-                    }
-                    _ = start_recording_servers.notified() => {
-                    //just continue
-                    }
-            }
-            info!("ADB config done, start server commands received");
             let video_sid=video_codec_params.sid.clone();
             let audio_sid=audio_codec_params.sid.clone();
             let mut cmd_push = vec![];
@@ -1168,6 +1156,19 @@ pub(crate) async fn tsk_adb_scrcpy(
             cmd_shell.push(format!("video_bit_rate={}", video_codec_params.bitrate));
             cmd_shell.push(format!("new_display={}x{}/{}", (video_codec_params.res_w as f64 * res_multiplier) as i32, (video_codec_params.res_h as f64 * res_multiplier) as i32, video_codec_params.dpi));
             cmd_shell.push(format!("max_fps={}", video_codec_params.fps));
+
+            info!("ADB config done, waiting for start server commands");
+            md_connected.notify_one();
+            tokio::select! {
+                    _ = cancel.cancelled() => {
+                        info!("{}: Cancel detected, starting over...",NAME);
+                        continue;
+                    }
+                    _ = start_recording_servers.notified() => {
+                    //just continue
+                    }
+            }
+            info!("ADB config done, start server commands received");
             let (mut shell, mut sh_reader,line)=adb::shell_cmd(cmd_shell).await?;
             info!("ADB shell response: {:?}", line);
             if line.contains("[server] INFO: Device:") && shell.id().is_some()
