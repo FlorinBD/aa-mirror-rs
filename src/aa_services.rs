@@ -723,7 +723,7 @@ impl SrvMediaSinkVideoStreaming {
                     self.scrcpy_server = Some(VideoServerState::Running(handle));
                 } else {
                     error!("scrcpy_server: expected Created state, already started or missing");
-                    self.cancel.cancel().await?;
+                    self.cancel.cancel();
                 }
             }
         }
@@ -1047,7 +1047,7 @@ impl SrvMediaSinkAudioStreaming {
                     self.scrcpy_server = Some(AudioServerState::Running(handle));
                 } else {
                     error!("{:?} scrcpy_server: expected Created state, already started or missing", self.base.srv_type);
-                    self.cancel.cancel().await?;
+                    self.cancel.cancel();
                 }
             }
         }
@@ -1595,7 +1595,7 @@ impl SrvInputSource {
                 }
                 else {
                     error!( "{:?} Unable to start control server",self.base.srv_type);
-                    self.cancel.cancel().await;
+                    self.cancel.cancel();
                 }
             }
         }
@@ -2253,13 +2253,13 @@ impl ServiceManager {
             else
             {
                 error!( "{:?} Invalid channel {} vor video service",self.srv_type, self.sdr_video_codec_params.sid);
-                self.cancel.cancel().await;
+                self.cancel.cancel();
             }
         }
         else
         {
             error!( "{:?} Invalid channel {} vor video service",self.srv_type, self.sdr_video_codec_params.sid);
-            self.cancel.cancel().await;
+            self.cancel.cancel();
         }
         tokio::time::sleep(Duration::from_millis(100)).await;//give time to connect
         if(self.sdr_audio_codec_params.sid > 0)
@@ -2280,13 +2280,13 @@ impl ServiceManager {
             else
             {
                 error!( "{:?} Invalid channel {} vor video service",self.srv_type, self.sdr_audio_codec_params.sid);
-                self.cancel.cancel().await;
+                self.cancel.cancel();
             }
         }
         else
         {
             error!( "{:?} Invalid channel {} vor audio service",self.srv_type, self.sdr_audio_codec_params.sid);
-            self.cancel.cancel().await;
+            self.cancel.cancel();
         }
         tokio::time::sleep(Duration::from_millis(100)).await;//give time to connect
         if(self.sdr_control_server_sid > 0)
@@ -2307,13 +2307,13 @@ impl ServiceManager {
             else
             {
                 error!( "{:?} Invalid channel {} vor video service",self.srv_type, self.sdr_control_server_sid);
-                self.cancel.cancel().await;
+                self.cancel.cancel();
             }
         }
         else
         {
             error!( "{:?} Invalid channel {} vor control service",self.srv_type, self.sdr_control_server_sid);
-            self.cancel.cancel().await;
+            self.cancel.cancel();
         }
         Ok(())
     }
