@@ -1091,7 +1091,6 @@ pub(crate) async fn tsk_adb_scrcpy(
                     }
                 }
             }
-            start_recording_servers.notified().await;
             info!("ADB config done, start server commands received");
             let video_sid=video_codec_params.sid.clone();
             let audio_sid=audio_codec_params.sid.clone();
