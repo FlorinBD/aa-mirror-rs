@@ -414,12 +414,13 @@ pub struct ServiceManager {
     srv_type: ServiceType,
     hu_rx: Receiver<Packet>,
     hu_tx: Sender<Packet>,
-    start_audio_server:Arc<Notify>,
-    start_video_server:Arc<Notify>,
-    start_control_server:Arc<Notify>,
+    start_adb_server:Arc<Notify>,
     config: AppConfig,
     cancel:CancellationToken,
     //private fields
+    audio_server_ready:Arc<Notify>,
+    video_server_ready:Arc<Notify>,
+    control_server_ready:Arc<Notify>,
     ch_opened:bool,
     sdr_services: Vec<Option<AAService>>,
     srv_tsk_handles:Vec<JoinHandle<Result<()>>>,
@@ -429,6 +430,7 @@ pub struct ServiceManager {
     sdr_audio_cfg_streaming:AudioConfig,
     sdr_video_codec_params : VideoStreamingParams,
     sdr_audio_codec_params : AudioStreamingParams,
+    sdr_control_server_sid: u8,
 }
 impl SrvSensorSource {
     pub fn new(sid:i8, hu_tx: Sender<Packet>, sensors: Vec<SensorType>) -> Self {
@@ -714,6 +716,16 @@ impl SrvMediaSinkVideoStreaming {
                 self.stop_media().await?;
                 self.video_setup().await?;
             }
+            else if cmd == CustomCommand::CMD_START_VIDEO_RECORDING as i32 {
+                info!("{:?} CMD_START_VIDEO_RECORDING received, starting SCRCPY server", self.base.srv_type);
+                if let Some(VideoServerState::Created(server)) = self.scrcpy_server.take() {
+                    let handle = server.start(self.video_params.max_unack as u8);
+                    self.scrcpy_server = Some(VideoServerState::Running(handle));
+                } else {
+                    error!("scrcpy_server: expected Created state, already started or missing");
+                    self.cancel.cancel().await?;
+                }
+            }
         }
         else if message_id == MediaMessageId::MEDIA_MESSAGE_CONFIG  as i32
         {
@@ -874,15 +886,8 @@ impl SrvMediaSinkVideoStreaming {
         Ok(())
     }
     async fn start_scrcpy_media(&mut self) ->Result<()> {
-        debug!( "{:?}, Starting video streaming", self.base.srv_type);
+        debug!( "{:?}, Notify video streaming ready", self.base.srv_type);
         self.adb_start_server.notify_waiters();
-
-        if let Some(VideoServerState::Created(server)) = self.scrcpy_server.take() {
-            let handle = server.start(self.video_params.max_unack as u8);
-            self.scrcpy_server = Some(VideoServerState::Running(handle));
-        } else {
-            error!("scrcpy_server: expected Created state, already started or missing");
-        }
         Ok(())
     }
     async fn pause_scrcpy_media(&self)->Result<()> {
@@ -1035,6 +1040,16 @@ impl SrvMediaSinkAudioStreaming {
                 debug!("{:?} MD diconnected",self.base.srv_type);
                 self.stop_media().await?;
             }
+            else if cmd == CustomCommand::CMD_START_AUDIO_RECORDING as i32 {
+                debug!("{:?} CMD_START_AUDIO_RECORDING received, starting SCRCPY server",self.base.srv_type);
+                if let Some(AudioServerState::Created(server)) = self.scrcpy_server.take() {
+                    let handle = server.start(self.audio_params.max_unack as u8);
+                    self.scrcpy_server = Some(AudioServerState::Running(handle));
+                } else {
+                    error!("{:?} scrcpy_server: expected Created state, already started or missing", self.base.srv_type);
+                    self.cancel.cancel().await?;
+                }
+            }
         }
         else if message_id == MEDIA_MESSAGE_CONFIG  as i32
         {
@@ -1060,14 +1075,8 @@ impl SrvMediaSinkAudioStreaming {
                         self.session_id +=1;
                         self.start_media().await?;
                         self.audio_streaming_started =true;
-                        info!( "{:?} Start scrcpy audio server for ch {}",self.base.srv_type, self.base.sid);
+                        info!( "{:?} Notify audio streaming ready",self.base.srv_type);
 						self.adb_start_server.notify_waiters();
-                        if let Some(AudioServerState::Created(server)) = self.scrcpy_server.take() {
-                            let handle = server.start(self.audio_params.max_unack as u8);
-                            self.scrcpy_server = Some(AudioServerState::Running(handle));
-                        } else {
-                            error!("{:?} scrcpy_server: expected Created state, already started or missing", self.base.srv_type);
-                        }
                     }
                     else
                     {
@@ -1579,6 +1588,16 @@ impl SrvInputSource {
                     error!( "{:?} response send error",self.base.srv_type);
                 };
             }
+            else if cmd == CustomCommand::CMD_START_CONTROL_SERVER as i32
+            {
+                if let Some(ControlServerState::Created(server)) = self.scrcpy_server.take() {
+                    self.scrcpy_server = Some(ControlServerState::Running(server.start()));
+                }
+                else {
+                    error!( "{:?} Unable to start control server",self.base.srv_type);
+                    self.cancel.cancel().await;
+                }
+            }
         }
         else if message_id == InputMessageId::INPUT_MESSAGE_INPUT_REPORT  as i32
         {
@@ -1595,8 +1614,8 @@ impl SrvInputSource {
             if  let Ok(rsp) = KeyBindingResponse::parse_from_bytes(&data) {
                 debug!("{:?} Decoded KeyBindingResponse status: {:?}",self.base.srv_type, rsp.status());
                 if let Some(ControlServerState::Created(server)) = self.scrcpy_server.take() {
+                    debug!("{:?} Notify control server ready",self.base.srv_type);
                     self.adb_start_server.notify_waiters();
-                    self.scrcpy_server = Some(ControlServerState::Running(server.start()));
                 }
             }
         }
@@ -1789,18 +1808,19 @@ impl SrvBluetooth {
 }
 
 impl ServiceManager {
-    pub fn new(hu_rx: Receiver<Packet>, hu_tx: Sender<Packet>, start_audio_server: Arc<Notify>, start_video_server: Arc<Notify>, start_control_server: Arc<Notify>, config: AppConfig, cancel:CancellationToken) -> Self {
+    pub fn new(hu_rx: Receiver<Packet>, hu_tx: Sender<Packet>, start_adb_server: Arc<Notify>, config: AppConfig, cancel:CancellationToken) -> Self {
         //This service is different, we don't own mspc channels, we use those passed by parameters
         Self {
             srv_type: ServiceType::Control,
             hu_rx,
             hu_tx,
-            start_audio_server,
-            start_video_server,
-            start_control_server,
+            start_adb_server,
             config,
             cancel,
             ch_opened:false,
+            audio_server_ready: Arc::new(Notify::new()),
+            video_server_ready: Arc::new(Notify::new()),
+            control_server_ready: Arc::new(Notify::new()),
             sdr_services: Vec::new(),
             srv_tsk_handles:Vec::new(),
             sdr_sensors:Vec::new(),
@@ -1809,17 +1829,45 @@ impl ServiceManager {
             sdr_audio_cfg_streaming: AudioConfig::default(),
             sdr_video_codec_params : VideoStreamingParams::default(),
             sdr_audio_codec_params : AudioStreamingParams::default(),
+            sdr_control_server_sid:0,
         }
     }
     pub fn start(self, cancel: CancellationToken, ) -> (JoinHandle<Result<()>>) {
         let task = tokio::spawn(async move {
             let mut service = self;
             info!( "{:?} Starting channel manager",service.srv_type);
+            let mut audio_srv_ready=false;
+            let mut video_srv_ready=false;
+            let mut control_srv_ready=false;
             while !service.cancel.is_cancelled() {
                 tokio::select! {
                     _ = cancel.cancelled() => {
                         info!("{:?}: Stopping...",service.srv_type);
                         break;
+                    }
+                    _ = self.audio_server_ready.notified() => {
+                        // Notification received
+                        audio_srv_ready=true;
+                        if(audio_srv_ready && video_srv_ready && control_srv_ready)
+                        {
+                            service.start_adb_servers();
+                        }
+                    }
+                    _ = self.video_server_ready.notified() => {
+                        // Notification received
+                        video_srv_ready=true;
+                        if(audio_srv_ready && video_srv_ready && control_srv_ready)
+                        {
+                            service.start_adb_servers();
+                        }
+                    }
+                    _ = self.control_server_ready.notified() => {
+                        // Notification received
+                        control_srv_ready=true;
+                        if(audio_srv_ready && video_srv_ready && control_srv_ready)
+                        {
+                            service.start_adb_servers();
+                        }
                     }
                     msg = service.hu_rx.recv() => {
                         match msg {
@@ -1968,7 +2016,7 @@ impl ServiceManager {
                                     self.sdr_audio_codec_params.sid=ch_id as u8;
                                     self.sdr_audio_codec_params.codec=acd;
 
-                                    let service = SrvMediaSinkAudioStreaming::new(ch_id as i8, self.hu_tx.clone(), self.start_audio_server.clone(), self.sdr_audio_cfg_streaming.clone(), self.sdr_audio_codec_params.clone(), self.cancel.clone(), self.config.ignore_media_ack,true);
+                                    let service = SrvMediaSinkAudioStreaming::new(ch_id as i8, self.hu_tx.clone(), self.audio_server_ready.clone(), self.sdr_audio_cfg_streaming.clone(), self.sdr_audio_codec_params.clone(), self.cancel.clone(), self.config.ignore_media_ack,true);
                                     let (service_handle, task) = service.start();
                                     self.add_service(service_handle);
                                     self.srv_tsk_handles.push(task);
@@ -2006,7 +2054,7 @@ impl ServiceManager {
                                 self.sdr_video_codec_params.dpi=proto_srv.media_sink_service.video_configs[0].density() as i32;
                                 self.sdr_video_codec_params.sid=ch_id as u8;
 
-                                let service = SrvMediaSinkVideoStreaming::new(ch_id as i8, self.hu_tx.clone(), self.start_video_server.clone(), self.sdr_video_codec_params.clone(), self.cancel.clone(), self.config.ignore_media_ack, true);
+                                let service = SrvMediaSinkVideoStreaming::new(ch_id as i8, self.hu_tx.clone(), self.video_server_ready.clone(), self.sdr_video_codec_params.clone(), self.cancel.clone(), self.config.ignore_media_ack, true);
                                 let (service_handle, task) = service.start();
                                 self.add_service(service_handle);
                                 self.srv_tsk_handles.push(task);
@@ -2043,7 +2091,8 @@ impl ServiceManager {
                         {
                             let screen_size=ScrcpySize{ width: self.sdr_video_codec_params.res_w as u16, height: self.sdr_video_codec_params.res_h as u16 };
                             self.sdr_keys=proto_srv.input_source_service.keycodes_supported.iter().cloned().collect();
-                            let service = SrvInputSource::new(ch_id as i8, self.hu_tx.clone(),self.start_control_server.clone(), self.sdr_keys.clone(), screen_size, self.config.scrcpy_screen_off, self.cancel.clone());
+                            self.sdr_control_server_sid= ch_id as u8;
+                            let service = SrvInputSource::new(ch_id as i8, self.hu_tx.clone(),self.control_server_ready.clone(), self.sdr_keys.clone(), screen_size, self.config.scrcpy_screen_off, self.cancel.clone());
                             let (service_handle, task) = service.start();
                             self.add_service(service_handle);
                             self.srv_tsk_handles.push(task);
@@ -2181,63 +2230,90 @@ impl ServiceManager {
         }
         Ok(())
     }
-    async fn handle_scrcpy_message(&mut self, mut pkt: Packet) -> Result<()> {
-        let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
-        if message_id == ControlMessageType::MESSAGE_CUSTOM_CMD  as i32
+    async fn start_adb_servers(&mut self) -> Result<()> {
+        //Start ADB server first
+        self.start_adb_server.notify_one();
+        //this waiting time is MANDATORY, otherwise we get error on video socket, why???
+        tokio::time::sleep(Duration::from_millis(500)).await;//give some time to start sockets
+        if(self.sdr_video_codec_params.sid > 0)
         {
-            let cmd_id: i32 = u16::from_be_bytes(pkt.payload[2..=3].try_into()?).into();
-            if cmd_id == CustomCommand::MD_CONNECTED as i32
-            {
-                //forward to services
-                if !self.sdr_services.is_empty()
-                {
-                    for service in self.sdr_services.iter().flatten() {
-                        info!( "{:?} Send custom MD_CONNECTED for ch {}",self.srv_type, service.sid());
-                        let mut payload= Vec::new();
-                        payload.extend_from_slice(&(ControlMessageType::MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
-                        payload.extend_from_slice(&(CustomCommand::MD_CONNECTED as u16).to_be_bytes());
-                        let msg = Packet {
-                            channel: service.sid() as u8,
-                            flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                            final_length: None,
-                            payload,
-                        };
-                        service.enqueue_message(msg)?;
-                    }
-                }
-                else
-                {
-                    error!( "{:?} MD_CONNECTED received before SDR",self.srv_type);
-                }
-            }
-            else if cmd_id == CustomCommand::MD_DISCONNECTED as i32
-            {
-                //forward to services
-                if !self.sdr_services.is_empty()
-                {
-                    for service in self.sdr_services.iter().flatten() {
-                        info!( "{:?} Send custom MD_DISCONNECTED for ch {}",self.srv_type, service.sid());
-                        let mut payload= Vec::new();
-                        payload.extend_from_slice(&(ControlMessageType::MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
-                        payload.extend_from_slice(&(CustomCommand::MD_DISCONNECTED as u16).to_be_bytes());
-                        let msg = Packet {
-                            channel: service.sid() as u8,
-                            flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                            final_length: None,
-                            payload,
-                        };
-                        service.enqueue_message(msg)?;
-                    }
-                }
-                else
-                {
-                    error!( "{:?} MD_CONNECTED received before SDR",self.srv_type);
-                }
+            let mut payload= Vec::new();
+            payload.extend_from_slice(&(ControlMessageType::MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+            payload.extend_from_slice(&(CustomCommand::CMD_START_VIDEO_RECORDING as u16).to_be_bytes());
+            let msg = Packet {
+                channel: self.sdr_video_codec_params.sid,
+                flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                final_length: None,
+                payload,
+            };
+            info!( "{:?} Send custom CMD_START_VIDEO_RECORDING for ch {}",self.srv_type, self.sdr_video_codec_params.sid);
+            if let Some(service) = self.sdr_services.get(self.sdr_video_codec_params.sid as usize).and_then(|s| s.as_ref()) {
+                service.enqueue_message(msg)?;
             }
             else
             {
-                error!( "{:?} Unmanaged SCRCPY Message ID: {}",self.srv_type, message_id);
+                error!( "{:?} Invalid channel {} vor video service",self.srv_type, self.sdr_video_codec_params.sid);
+                self.cancel.cancel().await;
             }
+        }
+        else
+        {
+            error!( "{:?} Invalid channel {} vor video service",self.srv_type, self.sdr_video_codec_params.sid);
+            self.cancel.cancel().await;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;//give time to connect
+        if(self.sdr_audio_codec_params.sid > 0)
+        {
+            let mut payload= Vec::new();
+            payload.extend_from_slice(&(ControlMessageType::MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+            payload.extend_from_slice(&(CustomCommand::CMD_START_AUDIO_RECORDING as u16).to_be_bytes());
+            let msg = Packet {
+                channel: self.sdr_audio_codec_params.sid,
+                flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                final_length: None,
+                payload,
+            };
+            info!( "{:?} Send custom CMD_START_VIDEO_RECORDING for ch {}",self.srv_type, self.sdr_audio_codec_params.sid);
+            if let Some(service) = self.sdr_services.get(self.sdr_audio_codec_params.sid as usize).and_then(|s| s.as_ref()) {
+                service.enqueue_message(msg)?;
+            }
+            else
+            {
+                error!( "{:?} Invalid channel {} vor video service",self.srv_type, self.sdr_audio_codec_params.sid);
+                self.cancel.cancel().await;
+            }
+        }
+        else
+        {
+            error!( "{:?} Invalid channel {} vor audio service",self.srv_type, self.sdr_audio_codec_params.sid);
+            self.cancel.cancel().await;
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;//give time to connect
+        if(self.sdr_control_server_sid > 0)
+        {
+            let mut payload= Vec::new();
+            payload.extend_from_slice(&(ControlMessageType::MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+            payload.extend_from_slice(&(CustomCommand::CMD_START_CONTROL_SERVER as u16).to_be_bytes());
+            let msg = Packet {
+                channel: self.sdr_control_server_sid,
+                flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                final_length: None,
+                payload,
+            };
+            info!( "{:?} Send custom CMD_START_VIDEO_RECORDING for ch {}",self.srv_type, self.sdr_control_server_sid);
+            if let Some(service) = self.sdr_services.get(self.sdr_control_server_sid as usize).and_then(|s| s.as_ref()) {
+                service.enqueue_message(msg)?;
+            }
+            else
+            {
+                error!( "{:?} Invalid channel {} vor video service",self.srv_type, self.sdr_control_server_sid);
+                self.cancel.cancel().await;
+            }
+        }
+        else
+        {
+            error!( "{:?} Invalid channel {} vor control service",self.srv_type, self.sdr_control_server_sid);
+            self.cancel.cancel().await;
         }
         Ok(())
     }

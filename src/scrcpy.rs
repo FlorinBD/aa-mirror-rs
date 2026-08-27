@@ -1025,9 +1025,7 @@ impl ControlServer {
 
 ///This task is not meant to be closed, it will always run
 pub(crate) async fn tsk_adb_scrcpy(
-    start_audio_server:Arc<Notify>,
-    start_video_server:Arc<Notify>,
-    start_control_server:Arc<Notify>,
+    start_recording_servers:Arc<Notify>,
     md_connected:Arc<Notify>,
     cancel:CancellationToken,
     pconfig: SharedConfig,
@@ -1050,7 +1048,7 @@ pub(crate) async fn tsk_adb_scrcpy(
         }
     }
     let mut hu_conn_restart=false;
-    'outer:loop
+    loop
     {
         // reload new config
         let config = pconfig.read().await.clone();
@@ -1081,35 +1079,8 @@ pub(crate) async fn tsk_adb_scrcpy(
             }
 
             info!("ADB config done, waiting for start server commands");
-            let mut start_audio_recived=false;
-            let mut start_video_recived=false;
-            let mut start_control_recived=false;
             md_connected.notify_one();
-            loop {
-                tokio::select! {
-                    _ = start_audio_server.notified() => {
-                        // Notification received
-                        start_audio_recived=true;
-                    }
-                    _ = start_video_server.notified() => {
-                        // Notification received
-                        start_video_recived=true;
-                    }
-                    _ = start_control_server.notified() => {
-                        // Notification received
-                        start_control_recived=true;
-                    }
-                    _ = cancel.cancelled() => {
-                        // Cancellation requested
-                        continue 'outer;
-                    }
-                }
-                if start_audio_recived && start_video_recived //&& start_control_recived
-                {
-                    break;
-                }
-
-            }
+            start_recording_servers.notified().await?;
             info!("ADB config done, start server commands received");
             let video_sid=video_codec_params.sid.clone();
             let audio_sid=audio_codec_params.sid.clone();
