@@ -1850,7 +1850,7 @@ impl ServiceManager {
                         audio_srv_ready=true;
                         if(audio_srv_ready && video_srv_ready && control_srv_ready)
                         {
-                            service.start_adb_servers();
+                            service.start_adb_servers().await?;
                         }
                     }
                     _ = service.video_server_ready.notified() => {
@@ -1858,7 +1858,7 @@ impl ServiceManager {
                         video_srv_ready=true;
                         if(audio_srv_ready && video_srv_ready && control_srv_ready)
                         {
-                            service.start_adb_servers();
+                            service.start_adb_servers().await?;
                         }
                     }
                     _ = service.control_server_ready.notified() => {
@@ -1866,7 +1866,7 @@ impl ServiceManager {
                         control_srv_ready=true;
                         if(audio_srv_ready && video_srv_ready && control_srv_ready)
                         {
-                            service.start_adb_servers();
+                            service.start_adb_servers().await?;
                         }
                     }
                     msg = service.hu_rx.recv() => {
