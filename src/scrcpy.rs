@@ -1048,7 +1048,7 @@ pub(crate) async fn tsk_adb_scrcpy(
         }
     }
     let mut hu_conn_restart=false;
-    'outer:loop
+    loop
     {
         // reload new config
         let config = pconfig.read().await.clone();
@@ -1080,16 +1080,14 @@ pub(crate) async fn tsk_adb_scrcpy(
 
             info!("ADB config done, waiting for start server commands");
             md_connected.notify_one();
-            loop {
-                tokio::select! {
+            tokio::select! {
                     _ = cancel.cancelled() => {
                         info!("{}: Cancel detected, starting over...",NAME);
-                        continue 'outer;
+                        continue;
                     }
                     _ = start_recording_servers.notified() => {
-                        break;
+                    //just continue
                     }
-                }
             }
             info!("ADB config done, start server commands received");
             let video_sid=video_codec_params.sid.clone();
