@@ -1845,7 +1845,7 @@ impl ServiceManager {
                         info!("{:?}: Stopping...",service.srv_type);
                         break;
                     }
-                    _ = self.audio_server_ready.notified() => {
+                    _ = service.audio_server_ready.notified() => {
                         // Notification received
                         audio_srv_ready=true;
                         if(audio_srv_ready && video_srv_ready && control_srv_ready)
@@ -1853,7 +1853,7 @@ impl ServiceManager {
                             service.start_adb_servers();
                         }
                     }
-                    _ = self.video_server_ready.notified() => {
+                    _ = service.video_server_ready.notified() => {
                         // Notification received
                         video_srv_ready=true;
                         if(audio_srv_ready && video_srv_ready && control_srv_ready)
@@ -1861,7 +1861,7 @@ impl ServiceManager {
                             service.start_adb_servers();
                         }
                     }
-                    _ = self.control_server_ready.notified() => {
+                    _ = service.control_server_ready.notified() => {
                         // Notification received
                         control_srv_ready=true;
                         if(audio_srv_ready && video_srv_ready && control_srv_ready)
