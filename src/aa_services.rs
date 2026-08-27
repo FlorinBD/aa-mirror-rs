@@ -1613,8 +1613,8 @@ impl SrvInputSource {
             let data = &pkt.payload[2..]; // start of message data, without message_id
             if  let Ok(rsp) = KeyBindingResponse::parse_from_bytes(&data) {
                 debug!("{:?} Decoded KeyBindingResponse status: {:?}",self.base.srv_type, rsp.status());
-                if let Some(ControlServerState::Created(server)) = self.scrcpy_server.take() {
-                    debug!("{:?} Notify control server ready",self.base.srv_type);
+                if matches!(self.scrcpy_server, Some(ControlServerState::Created(_))) {
+                    debug!("{:?} Notify control server ready", self.base.srv_type);
                     self.adb_start_server.notify_one();
                 }
             }
