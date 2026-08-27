@@ -198,6 +198,7 @@ pub struct ScrcpyMediaHeader {
 pub struct ScrcpyMediaReader {
     stream: TcpStream,
     buf: BytesMut,   // reusable buffer
+    read_timeout_ms:u64,
 }
 
 impl ScrcpyMediaReader {
@@ -205,11 +206,12 @@ impl ScrcpyMediaReader {
         Self {
             stream,
             buf: BytesMut::with_capacity(256 * 1024),
+            read_timeout_ms:2000,
         }
     }
 
     /// Read exactly N bytes into internal buffer
-    async fn read_exact_into_buf(&mut self, size: usize) -> io::Result<()> {
+    async fn read_exact_into_buf_old(&mut self, size: usize) -> io::Result<()> {
         self.buf.clear();
         self.buf.reserve(size);
 
@@ -226,6 +228,46 @@ impl ScrcpyMediaReader {
                     io::ErrorKind::UnexpectedEof,
                     "EOF",
                 ));
+            }
+
+            self.buf.extend_from_slice(&tmp[..n]);
+            read_total += n;
+        }
+
+        Ok(())
+    }
+
+    async fn read_exact_into_buf(&mut self, size: usize) -> io::Result<()> {
+        let deadline = tokio::time::Instant::now() + Duration::from_millis(self.read_timeout_ms);
+
+        loop {
+            self.buf.clear();
+            self.buf.reserve(size);
+
+            match self.try_read_exact(size).await {
+                Ok(()) => return Ok(()),
+                Err(e) => {
+                    if tokio::time::Instant::now() >= deadline {
+                        return Err(e);
+                    }
+                    debug!("read_exact_into_buf retrying after error: {:?}", e);
+                    tokio::time::sleep(Duration::from_millis(50)).await;
+                }
+            }
+        }
+    }
+
+    async fn try_read_exact(&mut self, size: usize) -> io::Result<()> {
+        let mut read_total = 0;
+        let mut tmp = [0u8; 64 * 1024];
+
+        while read_total < size {
+            let to_read = (size - read_total).min(tmp.len());
+
+            let n = self.stream.read(&mut tmp[..to_read]).await?;
+
+            if n == 0 {
+                return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "EOF"));
             }
 
             self.buf.extend_from_slice(&tmp[..n]);
