@@ -449,13 +449,6 @@ pub async fn io_loop_mirror(
     dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
     info!("{} 🛰️ DHU TCP server bound to: <u>{}</u>", NAME, bind_addr);
 
-
-
-    //cmd srv>scrcpy channel
-    //let (tx_srv_cmd, rx_scrcpy_cmd):(Sender<Packet>, Receiver<Packet>)=mpsc::channel(5);
-    //cmd scrcpy>srv channel
-    //let (tx_scrcpy_cmd, rx_srv_cmd):(Sender<Packet>, Receiver<Packet>)=mpsc::channel(5);
-
     let md_connected = Arc::new(Notify::new());
     let start_adb_server = Arc::new(Notify::new());
 
@@ -578,7 +571,7 @@ pub async fn io_loop_mirror(
         }
         //io channels for AA services
         //MD>TLSProxy
-        let (tx_srv, rx_proxy):   (Sender<Packet>, Receiver<Packet>) = mpsc::channel(10);
+        let (tx_srv, rx_proxy):   (Sender<Packet>, Receiver<Packet>) = mpsc::channel(100);
         //TLSProxy>MD
         let (tx_proxy, rx_srv):   (Sender<Packet>, Receiver<Packet>) = mpsc::channel(5);
         // dedicated reading threads:
