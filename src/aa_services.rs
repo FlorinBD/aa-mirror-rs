@@ -2232,7 +2232,7 @@ impl ServiceManager {
     }
     async fn start_adb_servers(&mut self) -> Result<()> {
         //Start ADB server first
-        info!( "{:?} All 3 SCRCPY servers ready to connect, Send notification to ADB server {}",self.srv_type);
+        info!( "{:?} All 3 SCRCPY servers ready to connect, Send notification to ADB server",self.srv_type);
         self.start_adb_server.notify_one();
         //this waiting time is MANDATORY, otherwise we get error on video socket, why???
         tokio::time::sleep(Duration::from_millis(500)).await;//give some time to start sockets
