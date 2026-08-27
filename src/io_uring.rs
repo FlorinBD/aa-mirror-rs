@@ -608,7 +608,7 @@ pub async fn io_loop_mirror(
             flatten(&mut tsk_monitor,"tsk_monitor".into()),
             flatten(&mut tsk_packet_proxy,"tsk_pkt_proxy".into()),
         );
-        tk_cancel.cancel();
+        //tk_cancel.cancel();
         if let Err(e) = res {
             error!("{} 🔴 Connection error: {}", NAME, e);
         }
