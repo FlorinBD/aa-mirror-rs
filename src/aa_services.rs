@@ -554,7 +554,7 @@ impl SrvSensorSource {
                             cmd_shell.push("uimode".to_string());
                             cmd_shell.push("night".to_string());
                             cmd_shell.push(format!("{}",mode.to_string() ));
-                            let (mut shell, mut sh_reader,line)=adb::shell_cmd(cmd_shell).await?;
+                            let (mut shell, mut sh_reader,line)=adb::shell_cmd_timed(cmd_shell, Duration::from_secs(5)).await?;
                             info!("{:?} ADB cmd shell response: {:?}",self.base.srv_type, line);
                             if !line.contains("Night mode:") && shell.id().is_some()
                             {
@@ -2408,7 +2408,7 @@ pub async fn th_sensor_source(ch_id: i32, enabled:bool, tx_srv: Sender<Packet>, 
                                 cmd_shell.push("uimode".to_string());
                                 cmd_shell.push("night".to_string());
                                 cmd_shell.push(format!("{}",mode.to_string() ));
-                                let (mut shell, mut sh_reader,line)=adb::shell_cmd(cmd_shell).await?;
+                                let (mut shell, mut sh_reader,line)=adb::shell_cmd_timed(cmd_shell, Duration::from_secs(5)).await?;
                                 info!("{} ADB cmd shell response: {:?}",get_name(), line);
                                 if !line.contains("Night mode:") && shell.id().is_some()
                                 {

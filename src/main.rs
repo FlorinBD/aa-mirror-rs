@@ -539,13 +539,12 @@ fn main() -> Result<()> {
 
     // build and spawn main tokio runtime
     let runtime = Builder::new_multi_thread().enable_all().build().unwrap();
-    let restart_tx_cloned = restart_tx.clone();
 
     runtime.spawn(async move {
         tokio_main(
             config_lck_cloned,
             config_json.clone(),
-            restart_tx_cloned,
+            restart_tx.clone(),
             args.config.clone(),
             led_support,
         )

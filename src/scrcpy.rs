@@ -1184,7 +1184,7 @@ pub(crate) async fn tsk_adb_scrcpy(
                     }
             }
             info!("ADB config done, start server commands received");
-            let (mut shell, mut sh_reader,line)=adb::shell_cmd(cmd_shell).await?;
+            let (mut shell, mut sh_reader,line)=adb::shell_cmd(cmd_shell, cancel).await?;
             info!("ADB shell response: {:?}", line);
             if line.contains("[server] INFO: Device:") && shell.id().is_some()
             {

@@ -12,6 +12,7 @@ use crate::config::{AppConfig, ADB_DEVICE_PORT};
 use simplelog;
 use tokio::net::TcpStream;
 use tokio::time::timeout;
+use tokio_util::sync::CancellationToken;
 
 ///ADB wrapper, needs adb binary installed
 
@@ -217,7 +218,7 @@ where
     Err("no output received".into())
 }
 
-pub(crate) async fn shell_cmd<I,S>(args: I) ->Result<(tokio::process::Child, BufReader<tokio::process::ChildStdout>, String), Box<dyn std::error::Error + Send + Sync>>
+pub(crate) async fn shell_cmd<I,S>(args: I, cancel:CancellationToken) ->Result<(tokio::process::Child, BufReader<tokio::process::ChildStdout>, String), Box<dyn std::error::Error + Send + Sync>>
 where
     I: IntoIterator<Item = S>,
     I::Item: AsRef<OsStr>,
@@ -227,10 +228,8 @@ where
 
     let mut adb_cmd = Command::new("adb")
         .arg("shell")
-        //.args(args)
         .args(args)
         .stdout(Stdio::piped())
-        //.stderr(Stdio::piped())
         .spawn()?;
 
     let stdout = adb_cmd
@@ -240,21 +239,73 @@ where
     let mut reader = BufReader::new(stdout);
     let mut buf = vec![0u8; 1024];
 
-    // Read *some* output, not a full line
-    let n = reader.read(&mut buf).await?;
+    let n = tokio::select! {
+        result = reader.read(&mut buf) => {
+            result?
+        }
+        _ = cancel.cancelled() => {
+            let _ = adb_cmd.kill().await;
+            return Err("cancelled while waiting for output".into());
+        }
+    };
+
     if n == 0 {
         return Err("no output received".into());
     }
 
     let first_output = String::from_utf8_lossy(&buf[..n]).to_string();
 
-    // IMPORTANT:
-    // - child is still alive
-    // - stdout is now partially consumed
-    // - process keeps running
-    Ok((adb_cmd,reader, first_output))
+    Ok((adb_cmd, reader, first_output))
 }
 
+pub(crate) async fn shell_cmd_timed<I, S>(
+    args: I,
+    timeout_duration: Duration,
+) -> Result<(tokio::process::Child, BufReader<tokio::process::ChildStdout>, String), Box<dyn std::error::Error + Send + Sync>>
+where
+    I: IntoIterator<Item = S>,
+    I::Item: AsRef<OsStr>,
+{
+    let args: Vec<S> = args.into_iter().collect();
+
+    let mut adb_cmd = Command::new("adb")
+        .arg("shell")
+        .args(args)
+        .stdout(Stdio::piped())
+        .spawn()?;
+
+    let stdout = match adb_cmd.stdout.take() {
+        Some(s) => s,
+        None => {
+            let _ = adb_cmd.kill().await;
+            return Err("stdout not piped".into());
+        }
+    };
+
+    let mut reader = BufReader::new(stdout);
+    let mut buf = vec![0u8; 1024];
+
+    let n = match tokio::time::timeout(timeout_duration, reader.read(&mut buf)).await {
+        Ok(Ok(n)) => n,
+        Ok(Err(e)) => {
+            let _ = adb_cmd.kill().await;
+            return Err(e.into());
+        }
+        Err(_) => {
+            let _ = adb_cmd.kill().await;
+            return Err("timed out waiting for output".into());
+        }
+    };
+
+    if n == 0 {
+        let _ = adb_cmd.kill().await;
+        return Err("no output received".into());
+    }
+
+    let first_output = String::from_utf8_lossy(&buf[..n]).to_string();
+
+    Ok((adb_cmd, reader, first_output))
+}
 pub(crate) async fn run_cmd<I, S>(args: I) ->Result<Vec<String>, Box<dyn std::error::Error + Send + Sync>>
 where
     I: IntoIterator<Item = S>,
