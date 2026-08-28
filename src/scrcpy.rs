@@ -394,6 +394,7 @@ impl VideoServer {
                                 info!("SCRCPY Video metadata decoded: id={}", info.codec_id);
                                 if info.codec_id != "h264".to_string() {
                                     error!("SCRCPY Invalid Video codec configuration");
+                                    self.cancel.cancel();
                                     return ;
                                 }
                             }
@@ -409,6 +410,7 @@ impl VideoServer {
                             }
                             Err(e) => {
                                 error!("SCRCPY Video Session metadata reading error: {:?}",e);
+                                self.cancel.cancel();
                                 return ;
                             }
                         }
@@ -707,6 +709,7 @@ impl AudioServer {
                                             };
                                             if let Err(e) = self.hu_tx.send(pkt_rsp).await {
 												error!("Error sending audio chunk: {:?}", e);
+                                                self.cancel.cancel();
 												return;
 											}
                                         }
@@ -733,6 +736,7 @@ impl AudioServer {
                                         };
                                         if let Err(e) = self.hu_tx.send(pkt_rsp).await {
 											error!("Error sending audio chunk: {:?}", e);
+                                            self.cancel.cancel();
 											return;
 										}
                                     }
@@ -740,10 +744,12 @@ impl AudioServer {
                                 }
                                 Ok(None) => {
                                     error!("scrcpy audio read failed");
+                                    self.cancel.cancel();
                                     return ;
                                 }
                                 Err(e) => {
                                     error!("scrcpy audio read failed: {}", e);
+                                    self.cancel.cancel();
                                     break;
                                 }
                             }
@@ -753,11 +759,13 @@ impl AudioServer {
 
                 Ok(Err(e)) => {
                     error!("AudioServer TCP connect failed: {}", e);
+                    self.cancel.cancel();
                     return;
                 }
 
                 Err(_) => {
                     error!("AudioServer TCP connect timeout");
+                    self.cancel.cancel();
                     return;
                 }
             };
@@ -826,6 +834,7 @@ impl ControlServer {
 							payload.push(0);
 							if let Err(e) = stream.write_all(&payload).await {
 								error!("tsk_scrcpy_control send error: {}", e);
+                                self.cancel.cancel();
 							}
 						}
                         debug!("SCRCPY Control entering main loop");
@@ -1009,11 +1018,13 @@ impl ControlServer {
 
                 Ok(Err(e)) => {
                     error!("ControlServer TCP connect failed: {}", e);
+                    self.cancel.cancel();
                     return;
                 }
 
                 Err(_) => {
                     error!("ControlServer TCP connect timeout");
+                    self.cancel.cancel();
                     return;
                 }
             };
@@ -1035,6 +1046,7 @@ pub(crate) async fn tsk_adb_scrcpy(
     let cmd_adb = Command::new("adb").arg("start-server").output().await.unwrap();
     if !cmd_adb.status.success() {
         error!("ADB server can't start");
+        cancel.cancel();
     }
 
     let mut audio_codec_params = AudioStreamingParams::default();
