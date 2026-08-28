@@ -2235,7 +2235,7 @@ impl ServiceManager {
         info!( "{:?} All 3 SCRCPY servers ready to connect, Send notification to ADB server",self.srv_type);
         self.start_adb_server.notify_one();
         //this waiting time is MANDATORY, otherwise we get error on video socket, why??? (socket connect but gets disconnected on first read)
-        tokio::time::sleep(Duration::from_millis(500)).await;//give some time to start server and sockets
+        tokio::time::sleep(Duration::from_millis(800)).await;//give some time to start server and sockets
         if(self.sdr_video_codec_params.sid > 0)
         {
             let mut payload= Vec::new();
