@@ -18,7 +18,7 @@ use nix::sys::prctl::get_name;
 use sha2::digest::typenum::private::Trim;
 use tokio::sync::broadcast::Sender as BroadcastSender;
 use tokio::sync::mpsc::{Receiver, Sender};
-use tokio::sync::{mpsc, Mutex, Notify};
+use tokio::sync::{mpsc, Mutex, Notify, RwLock};
 use tokio::task::JoinHandle;
 use tokio::time::{sleep, timeout};
 use tokio::fs::File as TokioFile;
@@ -93,6 +93,27 @@ impl Endpoint<TcpStream> for TcpStream {
     }
     fn write<T: BoundedBuf>(&self, buf: T) -> UnsubmittedWrite<T> {
         self.write(buf)
+    }
+}
+
+//Resealable cancellation token
+#[derive(Clone)]
+pub(crate) struct CancelSlot {
+    inner: Arc<RwLock<CancellationToken>>,
+}
+
+impl CancelSlot {
+    fn new() -> Self {
+        Self { inner: Arc::new(RwLock::new(CancellationToken::new())) }
+    }
+
+    pub(crate) async fn current(&self) -> CancellationToken {
+        self.inner.read().await.clone()
+    }
+
+    async fn reset(&self) {
+        let mut guard = self.inner.write().await;
+        *guard = CancellationToken::new();
     }
 }
 
@@ -438,7 +459,8 @@ pub async fn io_loop_mirror(
         break;
     }
 
-    let tk_cancel=CancellationToken::new();
+    //let tk_cancel=CancellationToken::new();
+    let cancel_slot = CancelSlot::new();
     let cfg = shared_config.read().await.clone();
     let cfg_clone=cfg.clone();
     let hex_requested = cfg.hexdump_level;
@@ -456,10 +478,12 @@ pub async fn io_loop_mirror(
     tsk_adb = tokio_uring::spawn(scrcpy::tsk_adb_scrcpy(
         start_adb_server.clone(),
         md_connected.clone(),
-        tk_cancel.clone(),
+        cancel_slot.clone(),
         shared_config.clone(),
     ));
     loop {
+        cancel_slot.reset().await;
+        let cancel = cancel_slot.current().await; // fetch fresh each iteration
         //drain scrcpy commands?
         //while let Ok(msg) = rx_scrcpy_srv_cmd.clone().try_recv() {
         //}
@@ -582,8 +606,8 @@ pub async fn io_loop_mirror(
         tsk_packet_proxy=pp.start(hu_w, rxr_hu, rx_proxy, None, Some(tx_proxy))?;
 
         // main processing threads:
-        let svrmgr=ServiceManager::new(rx_srv,tx_srv.clone(), start_adb_server.clone(), cfg.clone(), tk_cancel.clone());
-        tsk_ch_manager =svrmgr.start(tk_cancel.clone());
+        let svrmgr=ServiceManager::new(rx_srv,tx_srv.clone(), start_adb_server.clone(), cfg.clone(), cancel.clone());
+        tsk_ch_manager =svrmgr.start(cancel.clone());
 
         // Thread for monitoring transfer
         let mut tsk_monitor = tokio_uring::spawn(transfer_monitor(

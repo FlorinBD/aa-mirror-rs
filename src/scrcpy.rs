@@ -30,6 +30,7 @@ use tokio::task::JoinHandle;
 use tokio::time::timeout;
 use tokio_util::sync::CancellationToken;
 use crate::config_types::HexdumpLevel;
+use crate::io_uring::CancelSlot;
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 const NAME: &str = "<i><bright-black> scrcpy: </>";
@@ -1038,12 +1039,13 @@ impl ControlServer {
 pub(crate) async fn tsk_adb_scrcpy(
     start_recording_servers:Arc<Notify>,
     md_connected:Arc<Notify>,
-    cancel:CancellationToken,
+    cancel_slot: CancelSlot,
     pconfig: SharedConfig,
 
 ) -> Result<()> {
     info!("{}: ADB task started",NAME);
     let cmd_adb = Command::new("adb").arg("start-server").output().await.unwrap();
+    let cancel = cancel_slot.current().await; // fetch fresh each iteration
     if !cmd_adb.status.success() {
         error!("ADB server can't start");
         cancel.cancel();
@@ -1062,6 +1064,7 @@ pub(crate) async fn tsk_adb_scrcpy(
     let mut hu_conn_restart=false;
     loop
     {
+        let cancel = cancel_slot.current().await; // fetch fresh each iteration
         // reload new config
         let config = pconfig.read().await.clone();
         hu_conn_restart=false;
@@ -1187,6 +1190,7 @@ pub(crate) async fn tsk_adb_scrcpy(
             {
                 //wait here until something goes wrong
                 loop {
+                    let cancel = cancel_slot.current().await; // fetch fresh each iteration
                     let mut line = String::new();
                     tokio::select! {
                         result = sh_reader.read_line(&mut line) => {

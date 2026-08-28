@@ -1839,7 +1839,7 @@ impl ServiceManager {
             let mut audio_srv_ready=false;
             let mut video_srv_ready=false;
             let mut control_srv_ready=false;
-            while !service.cancel.is_cancelled() {
+            loop {
                 tokio::select! {
                     _ = cancel.cancelled() => {
                         info!("{:?}: Stopping...",service.srv_type);
