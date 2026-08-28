@@ -1140,6 +1140,7 @@ pub(crate) async fn tsk_adb_scrcpy(
             {
                 audio_codec="aac";
             }
+            info!("{}: Set SCRCPY parameters, video: {:?}, audio: {:?}", NAME, video_codec_params, audio_codec_params);
             cmd_shell.push("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar".to_string());
             cmd_shell.push("app_process".to_string());
             cmd_shell.push("/".to_string());
