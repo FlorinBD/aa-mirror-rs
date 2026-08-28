@@ -255,7 +255,7 @@ async fn tokio_main(
         // wait for restart notification
         let _ = need_restart.recv().await;
         info!("{} 📵 Main app finished, trying again...",NAME);
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        //tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
         // TODO: make proper main loop with cancellation
     }
