@@ -533,6 +533,7 @@ fn main() -> Result<()> {
     let cfg = config.clone();
     // notify for syncing threads
     let (restart_tx, _) = broadcast::channel(1);
+    let restart_tx_main=restart_tx.clone();
     let config_lck = Arc::new(RwLock::new(config));
     let config_json = Arc::new(RwLock::new(config_json));
     let config_lck_cloned = config_lck.clone();
@@ -544,7 +545,7 @@ fn main() -> Result<()> {
         tokio_main(
             config_lck_cloned,
             config_json.clone(),
-            restart_tx.clone(),
+            restart_tx_main,
             args.config.clone(),
             led_support,
         )
