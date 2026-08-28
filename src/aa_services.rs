@@ -109,7 +109,7 @@ pub struct SCRCPYParams {
     pub audio: AudioStreamingParams,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Copy, Clone, Debug)]
 pub(crate) struct VideoStreamingParams {
     pub(crate) bitrate: i32,
     pub(crate) res_w:i32,
@@ -120,7 +120,7 @@ pub(crate) struct VideoStreamingParams {
     pub(crate) max_unack:u32,
 }
 
-#[derive(Serialize, Deserialize, Clone,Debug)]
+#[derive(Serialize, Deserialize, Copy, Clone,Debug)]
 pub(crate) struct AudioStreamingParams {
     pub(crate) codec: MediaCodec,
     pub(crate) bitrate: i32,
