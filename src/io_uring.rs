@@ -36,7 +36,7 @@ use tokio_uring::UnsubmittedWrite;
 use tokio_util::sync::CancellationToken;
 use crate::{bluetooth, scrcpy};
 use crate::channel_manager::{ChannelProxyHandle, TlsPacketProxy, SslMemBuf, HEADER_LENGTH, KEYS_PATH};
-use crate::aa_services::{VideoStreamingParams, AudioStreamingParams, ServiceManager};
+use crate::aa_services::{VideoStreamingParams, AudioStreamingParams, ServiceManager, SCRCPYParams};
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use protos::*;
 
@@ -472,11 +472,12 @@ pub async fn io_loop_mirror(
     info!("{} 🛰️ DHU TCP server bound to: <u>{}</u>", NAME, bind_addr);
 
     let md_connected = Arc::new(Notify::new());
-    let start_adb_server = Arc::new(Notify::new());
+    //let start_adb_server = Arc::new(Notify::new());
+    let (scrcpy_params_tx, mut scrcpy_params_rx) = tokio::sync::watch::channel(SCRCPYParams::default());
 
     let mut tsk_adb;
     tsk_adb = tokio_uring::spawn(scrcpy::tsk_adb_scrcpy(
-        start_adb_server.clone(),
+        scrcpy_params_rx,
         md_connected.clone(),
         cancel_slot.clone(),
         shared_config.clone(),
@@ -606,7 +607,7 @@ pub async fn io_loop_mirror(
         tsk_packet_proxy=pp.start(hu_w, rxr_hu, rx_proxy, None, Some(tx_proxy))?;
 
         // main processing threads:
-        let svrmgr=ServiceManager::new(rx_srv,tx_srv.clone(), start_adb_server.clone(), cfg.clone(), cancel.clone());
+        let svrmgr=ServiceManager::new(rx_srv,tx_srv.clone(), scrcpy_params_tx.clone(), cfg.clone(), cancel.clone());
         tsk_ch_manager =svrmgr.start(cancel.clone());
 
         // Thread for monitoring transfer

@@ -14,9 +14,9 @@ use serde::{Deserialize, Serialize};
 use simplelog::{error, info};
 use tokio::process::Command;
 use tokio::sync::mpsc::Receiver;
-use tokio::sync::{mpsc, oneshot, Mutex, Notify};
+use tokio::sync::{mpsc, oneshot, watch, Mutex, Notify};
 use tokio::net::TcpStream;
-use crate::aa_services::{AAService, AudioConfig, AudioStreamingParams, MediaCodec, SensorType, ServiceType, SrvSensorSource, VideoStreamingParams};
+use crate::aa_services::{AAService, AudioConfig, AudioStreamingParams, MediaCodec, SCRCPYParams, SensorType, ServiceType, SrvSensorSource, VideoStreamingParams};
 use crate::{adb, channel_manager};
 use crate::channel_manager::{ChannelProxyHandle, Packet, TlsPacketProxy, ENCRYPTED, FRAME_TYPE_CONTROL, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
 use crate::config::{AppConfig, SharedConfig, MAX_DATA_LEN, SCRCPY_METADATA_HEADER_LEN, SCRCPY_PORT, SCRCPY_VERSION};
@@ -1037,10 +1037,11 @@ impl ControlServer {
 
 ///This task is not meant to be closed, it will always run
 pub(crate) async fn tsk_adb_scrcpy(
-    start_recording_servers:Arc<Notify>,
+    //start_recording_servers:Arc<Notify>,
+    mut start_params:watch::Receiver<SCRCPYParams>,
     md_connected:Arc<Notify>,
     cancel_slot: CancelSlot,
-    pconfig: SharedConfig,
+    config: SharedConfig,
 
 ) -> Result<()> {
     info!("{}: ADB task started",NAME);
@@ -1050,9 +1051,6 @@ pub(crate) async fn tsk_adb_scrcpy(
         error!("ADB server can't start");
         cancel.cancel();
     }
-
-    let mut audio_codec_params = AudioStreamingParams::default();
-    let mut video_codec_params = VideoStreamingParams::default();
 
     let cmd_disconnect = Command::new("adb").arg("disconnect").output().await?;
     let lines=adb::parse_response_lines(cmd_disconnect.stdout).expect("TODO: panic message");
@@ -1066,7 +1064,7 @@ pub(crate) async fn tsk_adb_scrcpy(
     {
         let cancel = cancel_slot.current().await; // fetch fresh each iteration
         // reload new config
-        let config = pconfig.read().await.clone();
+        let config = config.read().await.clone();
         hu_conn_restart=false;
         if let Some(device)=adb::get_first_adb_device(config.clone()).await {
             info!("{}: ADB device found: {:?}, trying to get video/audio from it now",NAME, device);
@@ -1093,8 +1091,6 @@ pub(crate) async fn tsk_adb_scrcpy(
                 info!("ADB port forwarding done to {}", SCRCPY_PORT);
             }
 
-            let video_sid=video_codec_params.sid.clone();
-            let audio_sid=audio_codec_params.sid.clone();
             let mut cmd_push = vec![];
             cmd_push.push(String::from("/etc/aa-mirror-rs/scrcpy-server"));
             cmd_push.push(String::from("/data/local/tmp/scrcpy-server-manual.jar"));
@@ -1110,21 +1106,23 @@ pub(crate) async fn tsk_adb_scrcpy(
                 }
             }
             if !push_ok {
-                error!("ADB invalid push response received for control task");
-                info!("tsk_adb_scrcpy Sending MD_DISCONNECT");
-                /*let mut payload: Vec<u8>=Vec::new();
-                payload.extend_from_slice(&(ControlMessageType::MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
-                payload.extend_from_slice(&(CustomCommand::MD_DISCONNECTED as u16).to_be_bytes());
-                let pkt_rsp = Packet {
-                    channel: 0,
-                    flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                    final_length: None,
-                    payload: std::mem::take(&mut payload),
-                };
-                srv_cmd_tx.send(pkt_rsp).await?;*/
+                error!("ADB invalid push response received, canceling...");
                 cancel.cancel();
                 continue;
             }
+            info!("ADB config done, waiting for start server commands");
+            md_connected.notify_one();
+            tokio::select! {
+                    _ = cancel.cancelled() => {
+                        info!("{}: Cancel detected, starting over...",NAME);
+                        continue;
+                    }
+                    _ = start_params.changed() => {
+                    //just continue
+                    }
+            }
+            let params = start_params.borrow().clone(); // clone out the whole struct
+            info!("ADB config done, start server commands received");
             //Configure SCRCPY for recording
             //AVC base profile, no B frames, only I and P frames, low-latency is MANDATORY
             let video_codec_options=format!("profile:int=1,level:int=512,i-frame-interval:int={},low-latency:int=1,max-bframes:int=0",video_codec_params.fps);
@@ -1136,11 +1134,11 @@ pub(crate) async fn tsk_adb_scrcpy(
                 res_multiplier =config.res_multiplier;
             }
 
-            if audio_codec_params.codec == MediaCodec::AUDIO_AAC_LC
+            if params.audio.codec == MediaCodec::AUDIO_AAC_LC
             {
                 audio_codec="aac";
             }
-            info!("{}: Set SCRCPY parameters, video: {:?}, audio: {:?}", NAME, video_codec_params, audio_codec_params);
+            info!("{}: Set SCRCPY parameters, video: {:?}, audio: {:?}", NAME, params.video, params.audio);
             cmd_shell.push("CLASSPATH=/data/local/tmp/scrcpy-server-manual.jar".to_string());
             cmd_shell.push("app_process".to_string());
             cmd_shell.push("/".to_string());
@@ -1161,30 +1159,18 @@ pub(crate) async fn tsk_adb_scrcpy(
             cmd_shell.push("stay_awake=true".to_string());
             cmd_shell.push("keep_active=true".to_string());
             cmd_shell.push(format!("audio_codec={}",audio_codec.to_string() ));
-            if audio_codec_params.codec == MediaCodec::AUDIO_AAC_LC
+            if params.audio.codec == MediaCodec::AUDIO_AAC_LC
             {
                 cmd_shell.push("audio_codec_options=aac-profile:int=2".to_string());
             }
-            cmd_shell.push(format!("audio_bit_rate={}", audio_codec_params.bitrate));
-            cmd_shell.push(format!("max_size={}", video_codec_params.res_w));
+            cmd_shell.push(format!("audio_bit_rate={}", params.audio.bitrate));
+            cmd_shell.push(format!("max_size={}", params.video.res_w));
             cmd_shell.push("video_codec=h264".to_string());
             cmd_shell.push(format!("video_codec_options={}", video_codec_options.to_string()));
-            cmd_shell.push(format!("video_bit_rate={}", video_codec_params.bitrate));
-            cmd_shell.push(format!("new_display={}x{}/{}", (video_codec_params.res_w as f64 * res_multiplier) as i32, (video_codec_params.res_h as f64 * res_multiplier) as i32, video_codec_params.dpi));
-            cmd_shell.push(format!("max_fps={}", video_codec_params.fps));
+            cmd_shell.push(format!("video_bit_rate={}", params.video.bitrate));
+            cmd_shell.push(format!("new_display={}x{}/{}", (params.video.res_w as f64 * res_multiplier) as i32, (params.video.res_h as f64 * res_multiplier) as i32, params.video.dpi));
+            cmd_shell.push(format!("max_fps={}", params.video.fps));
 
-            info!("ADB config done, waiting for start server commands");
-            md_connected.notify_one();
-            tokio::select! {
-                    _ = cancel.cancelled() => {
-                        info!("{}: Cancel detected, starting over...",NAME);
-                        continue;
-                    }
-                    _ = start_recording_servers.notified() => {
-                    //just continue
-                    }
-            }
-            info!("ADB config done, start server commands received");
             let (mut shell, mut sh_reader,line)=adb::shell_cmd(cmd_shell, cancel).await?;
             info!("ADB shell response: {:?}", line);
             if line.contains("[server] INFO: Device:") && shell.id().is_some()

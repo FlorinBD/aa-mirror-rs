@@ -25,7 +25,7 @@ use crate::aa_services::SensorMessageId::*;
 //use crate::aa_services::SensorType::*;
 use crate::aa_services::MediaCodecType::*;
 use protobuf::{Message};
-use tokio::sync::{mpsc, Notify};
+use tokio::sync::{mpsc, watch, Notify};
 use tokio::task::JoinHandle;
 //use tokio::sync::broadcast;
 use tokio_uring::net::{TcpStream, TcpListener};
@@ -101,6 +101,20 @@ pub struct ServiceStatus {
     pub ch_id:i32,
     ///Send Setup and all other subsequent commands
     pub enabled:bool,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct SCRCPYParams {
+    pub video: VideoStreamingParams,
+    pub audio: AudioStreamingParams,
+}
+impl Default for SCRCPYParams {
+    fn default() -> Self {
+        Self {
+            video: VideoStreamingParams::default(),
+            audio: AudioStreamingParams::default(),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -414,7 +428,7 @@ pub struct ServiceManager {
     srv_type: ServiceType,
     hu_rx: Receiver<Packet>,
     hu_tx: Sender<Packet>,
-    start_adb_server:Arc<Notify>,
+    start_adb_server:watch::Sender<SCRCPYParams>,
     config: AppConfig,
     cancel:CancellationToken,
     //private fields
@@ -1808,7 +1822,7 @@ impl SrvBluetooth {
 }
 
 impl ServiceManager {
-    pub fn new(hu_rx: Receiver<Packet>, hu_tx: Sender<Packet>, start_adb_server: Arc<Notify>, config: AppConfig, cancel:CancellationToken) -> Self {
+    pub fn new(hu_rx: Receiver<Packet>, hu_tx: Sender<Packet>, start_adb_server: watch::Sender<SCRCPYParams>, config: AppConfig, cancel:CancellationToken) -> Self {
         //This service is different, we don't own mspc channels, we use those passed by parameters
         Self {
             srv_type: ServiceType::Control,
@@ -2233,9 +2247,10 @@ impl ServiceManager {
     async fn start_adb_servers(&mut self) -> Result<()> {
         //Start ADB server first
         info!( "{:?} All 3 SCRCPY servers ready to connect, Send notification to ADB server",self.srv_type);
-        self.start_adb_server.notify_one();
+        
+        self.start_adb_server.send(SCRCPYParams{audio:self.sdr_audio_codec_params, video:self.sdr_video_codec_params}).await?;
         //this waiting time is MANDATORY, otherwise we get error on video socket, why??? (socket connect but gets disconnected on first read)
-        tokio::time::sleep(Duration::from_millis(1000)).await;//give some time to start server and sockets
+        tokio::time::sleep(Duration::from_millis(1500)).await;//give some time to start server and sockets
         if(self.sdr_video_codec_params.sid > 0)
         {
             let mut payload= Vec::new();
