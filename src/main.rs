@@ -555,14 +555,14 @@ fn main() -> Result<()> {
     if cfg.aa_mode == AAMode::Mirror
     {
         let _ = tokio_uring::start(io_loop_mirror(
-            restart_tx,
+            restart_tx.clone(),
             config_lck,
         ));
     }
     else
     {
         let _ = tokio_uring::start(io_loop_aa(
-            restart_tx,
+            restart_tx.clone(),
             config_lck,
         ));
     }
