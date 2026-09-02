@@ -182,18 +182,26 @@ impl ScrcpySize {
 pub struct ScrcpyVideoCodecInfo {
     pub codec_id: String,
 }
+#[derive(Debug, Clone)]
+pub enum ScrcpyPacketHeader {
+    Media(ScrcpyMediaHeader),
+    Session(ScrcpySessionMeta),
+}
 
+pub enum ScrcpyPacket {
+    Media(ScrcpyMediaHeader, Vec<Bytes>),
+    Session(ScrcpySessionMeta),
+}
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct ScrcpySessionMeta {
-    pub flags: u32,
     pub width: u32,
     pub height: u32,
+    pub is_client_resize: bool,
 }
 #[derive(Debug, Clone, Copy)]
 pub struct ScrcpyMediaHeader {
     pub size:usize,
     pub timestamp: u64,
-    pub session:bool,
     pub config:bool,
     pub keyframe:bool,
 }
@@ -237,39 +245,30 @@ impl ScrcpyMediaReader {
         Ok(())
     }
 
-    pub async fn read_chunks(&mut self) -> tokio::io::Result<Option<(ScrcpyMediaHeader, Vec<Bytes>)>> {
-        // 1. Read header
+    pub async fn read_chunks(&mut self) -> tokio::io::Result<Option<ScrcpyPacket>> {
         self.read_exact_into_buf(SCRCPY_METADATA_HEADER_LEN).await?;
 
-        let header = ScrcpyMediaReader::parse_header(&self.buf[..SCRCPY_METADATA_HEADER_LEN]);
-        if header.session
-        {
-            Ok(Some((header, Vec::new())))//return, no payload received
-        }
-        else
-        {
-            // 2. Read payload exactly
-            self.read_exact_into_buf(header.size).await?;
-
-            // 3. Split into chunks WITHOUT copying (zero-copy via Bytes)
-            let mut chunks = Vec::with_capacity((header.size + MAX_DATA_LEN - 1) / MAX_DATA_LEN);
-
-            let mut offset = 0;
-            while offset < header.size {
-                let end = (offset + MAX_DATA_LEN).min(header.size);
-
-                let slice = self.buf[offset..end].to_vec(); // unavoidable copy with tokio_uring
-                chunks.push(Bytes::from(slice));
-
-                offset = end;
+        match ScrcpyMediaReader::parse_header(&self.buf[..SCRCPY_METADATA_HEADER_LEN]) {
+            ScrcpyPacketHeader::Session(meta) => {
+                Ok(Some(ScrcpyPacket::Session(meta)))
             }
-            Ok(Some((header, chunks)))
+            ScrcpyPacketHeader::Media(header) => {
+                self.read_exact_into_buf(header.size).await?;
+
+                let mut chunks = Vec::with_capacity((header.size + MAX_DATA_LEN - 1) / MAX_DATA_LEN);
+                let mut offset = 0;
+                while offset < header.size {
+                    let end = (offset + MAX_DATA_LEN).min(header.size);
+                    let slice = self.buf[offset..end].to_vec();
+                    chunks.push(Bytes::from(slice));
+                    offset = end;
+                }
+                Ok(Some(ScrcpyPacket::Media(header, chunks)))
+            }
         }
-
-
     }
 
-    fn parse_header(buf: &[u8]) -> ScrcpyMediaHeader {
+    fn parse_header_old(buf: &[u8]) -> ScrcpyMediaHeader {
         use std::convert::TryInto;
         //debug!("ScrcpyMediaReader raw header bytes: {:02x?}",&buf);
         let pts = u64::from_be_bytes(buf[..8].try_into().unwrap());
@@ -279,6 +278,40 @@ impl ScrcpyMediaReader {
         let config_frame = (pts & 0x4000_0000_0000_0000u64) != 0;
         let key_frame = (pts & 0x2000_0000_0000_0000u64) != 0;
         ScrcpyMediaHeader {size:size, timestamp: rec_ts, config: config_frame, keyframe: key_frame, session: session_frame, }
+    }
+
+    fn parse_header(buf: &[u8]) -> ScrcpyPacketHeader {
+        use std::convert::TryInto;
+
+        let first_u32 = u32::from_be_bytes(buf[0..4].try_into().unwrap());
+        let is_session = (first_u32 & 0x8000_0000) != 0;
+
+        if is_session {
+            // Session meta layout: 4 bytes flags, 4 bytes width, 4 bytes height
+            let is_client_resize = (first_u32 & 0x1) != 0;
+            let width = u32::from_be_bytes(buf[4..8].try_into().unwrap());
+            let height = u32::from_be_bytes(buf[8..12].try_into().unwrap());
+            ScrcpyPacketHeader::Session(ScrcpySessionMeta {
+                width,
+                height,
+                is_client_resize,
+            })
+        } else {
+            // Regular frame header: 8 bytes ptsAndFlags, 4 bytes size
+            let pts_and_flags = u64::from_be_bytes(buf[0..8].try_into().unwrap());
+            let size = u32::from_be_bytes(buf[8..12].try_into().unwrap()) as usize;
+
+            let config_frame = (pts_and_flags & 0x4000_0000_0000_0000u64) != 0;
+            let key_frame = (pts_and_flags & 0x2000_0000_0000_0000u64) != 0;
+            let timestamp = pts_and_flags & 0x1FFF_FFFF_FFFF_FFFFu64; // mask out top 3 flag bits (63,62,61)
+
+            ScrcpyPacketHeader::Media(ScrcpyMediaHeader {
+                size,
+                timestamp,
+                config: config_frame,
+                keyframe: key_frame,
+            })
+        }
     }
 
     pub async fn read_video_codec_info(&mut self)  -> io::Result<ScrcpyVideoCodecInfo> {
@@ -318,9 +351,10 @@ impl ScrcpyMediaReader {
         let height = u32::from_be_bytes(
             metadata[8..12].try_into().unwrap()
         );
+        let is_client_resize = (flags & 0x1) != 0;
 
         Ok(ScrcpySessionMeta {
-            flags,
+            is_client_resize,
             width,
             height,
         })
@@ -429,22 +463,22 @@ impl VideoServer {
                         {
                             //Read video frames from SCRCPY server
                             match reader.read_chunks().await {
-                                Ok(Some((media_header, chunks))) => {
+                                Ok(Some(ScrcpyPacket::Session(meta))) => {
+                                    info!("SCRCPY Video Session meta updated: width={}, height={}, is_client_resize={}",meta.width, meta.height, meta.is_client_resize);
+                                    continue;
+                                }
+                                Ok(Some(ScrcpyPacket::Media(media_header, chunks))) => {
                                     //let rd_len = header.size ;
                                     //let dbg_len = min(media_header.size, 16);
                                     let raw_bytes = chunks.first().map(|chunk| &chunk[..chunk.len().min(media_header.size).min(16)]).unwrap_or(&[]);
                                     if dbg_count <  1000
                                     {
-                                        debug!("Video task got frame config={:?}, session={:?}, ts={}, act size: {}, raw bytes: {:02x?}",media_header.config, media_header.session, media_header.timestamp, media_header.size, raw_bytes);
+                                        debug!("Video task got frame config={:?}, ts={}, act size: {}, raw bytes: {:02x?}",media_header.config, media_header.timestamp, media_header.size, raw_bytes);
                                         dbg_count += 1;
                                     }
                                     if self.paused.load(Ordering::Relaxed) || media_header.size <=0
                                     {
                                         continue;
-                                    }
-                                    if !media_header.session
-                                    {
-                                        continue
                                     }
                                     if !media_header.config
                                     {
@@ -649,22 +683,22 @@ impl AudioServer {
                         {
                             //Read audio frames from SCRCPY server
                             match reader.read_chunks().await {
-                                Ok(Some((media_header, chunks))) => {
+                                Ok(Some(ScrcpyPacket::Session(meta))) => {
+                                    info!("SCRCPY Audio Session meta updated: width={}, height={}, is_client_resize={}",meta.width, meta.height, meta.is_client_resize);
+                                    continue;
+                                }
+                                Ok(Some(ScrcpyPacket::Media(media_header, chunks))) => {
                                     //let rd_len = header.size ;
                                     //let dbg_len = min(media_header.size, 16);
                                     let raw_bytes = chunks.first().map(|chunk| &chunk[..chunk.len().min(media_header.size).min(16)]).unwrap_or(&[]);
                                     if dbg_count <  1000
                                     {
-                                        debug!("Audio task got frame config={:?}, session={:?}, ts={}, act size: {}, raw bytes: {:02x?}",media_header.config, media_header.session, media_header.timestamp, media_header.size, raw_bytes);
+                                        debug!("Audio task got frame config={:?}, ts={}, act size: {}, raw bytes: {:02x?}",media_header.config, media_header.timestamp, media_header.size, raw_bytes);
                                         dbg_count += 1;
                                     }
                                     if self.paused.load(Ordering::Relaxed) || media_header.size <=0
                                     {
                                         continue;
-                                    }
-                                    if !media_header.session
-                                    {
-                                        continue
                                     }
                                     if !media_header.config
                                     {
