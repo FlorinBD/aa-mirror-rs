@@ -531,10 +531,12 @@ impl VideoServer {
                                 }
                                 Ok(None) => {
                                     error!("scrcpy video read failed");
+                                    self.cancel.cancel();
                                     return ;
                                 }
                                 Err(e) => {
                                     error!("scrcpy video read failed: {}", e);
+                                    self.cancel.cancel();
                                     break;
                                 }
                             }
@@ -544,11 +546,13 @@ impl VideoServer {
 
                 Ok(Err(e)) => {
                     error!("VideoServer TCP connect failed: {}", e);
+                    self.cancel.cancel();
                     return;
                 }
 
                 Err(_) => {
                     error!("VideoServer TCP connect timeout");
+                    self.cancel.cancel();
                     return;
                 }
             };
