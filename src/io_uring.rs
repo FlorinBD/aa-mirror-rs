@@ -56,7 +56,7 @@ const TCP_BUFFER_SIZE: usize = 32 * 1024; // 32 KB
 // reach Android and trigger bitrate/resolution adaptation.
 
 use crate::config::{Action, AppConfig, SharedConfig, WifiConfig, DEFAULT_WLAN_ADDR, TCP_DHU_PORT, TCP_MD_SERVER_PORT};
-use crate::channel_manager::{endpoint_reader, ch_proxy, ENCRYPTED, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
+use crate::channel_manager::{endpoint_reader, ENCRYPTED, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
 use crate::channel_manager::Packet;
 use crate::config_types::AAMode;
 use crate::usb_gadget::UsbGadgetState;
