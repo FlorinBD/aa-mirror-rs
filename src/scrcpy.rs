@@ -274,10 +274,10 @@ impl ScrcpyMediaReader {
         let pts = u64::from_be_bytes(buf[..8].try_into().unwrap());
         let size = u32::from_be_bytes(buf[8..12].try_into().unwrap()) as usize;
         let rec_ts = pts & 0x3FFF_FFFF_FFFF_FFFFu64;
-        let session_frame = (pts & 0x8000_0000_0000_0000u64) != 0;//this is for Session metadata only
+        //let session_frame = (pts & 0x8000_0000_0000_0000u64) != 0;//this is for Session metadata only
         let config_frame = (pts & 0x4000_0000_0000_0000u64) != 0;
         let key_frame = (pts & 0x2000_0000_0000_0000u64) != 0;
-        ScrcpyMediaHeader {size:size, timestamp: rec_ts, config: config_frame, keyframe: key_frame, session: session_frame, }
+        ScrcpyMediaHeader {size:size, timestamp: rec_ts, config: config_frame, keyframe: key_frame, }
     }
 
     fn parse_header(buf: &[u8]) -> ScrcpyPacketHeader {
@@ -449,7 +449,7 @@ impl VideoServer {
                         }
                         match reader.read_video_session_info().await {
                             Ok(info) => {
-                                info!("SCRCPY Video Session metadata decoded: flags={}, res_w={}, res_h={}", info.flags, info.width, info.height);
+                                info!("SCRCPY Video Session metadata decoded: resize={}, res_w={}, res_h={}", info.is_client_resize, info.width, info.height);
                             }
                             Err(e) => {
                                 error!("SCRCPY Video Session metadata reading error: {:?}",e);
