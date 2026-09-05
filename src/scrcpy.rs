@@ -579,13 +579,8 @@ impl VideoServer {
                                 }
                                 Err(e) => {
                                     error!("scrcpy video read failed: {}", e);
-                                    if e.kind() == io::ErrorKind::UnexpectedEof {
-                                        continue;
-                                    } else {
-                                        self.cancel.cancel();
-                                        break;
-                                    }
-
+                                    self.cancel.cancel();
+                                    break;
                                 }
                             }
 
@@ -806,12 +801,8 @@ impl AudioServer {
                                 }
                                 Err(e) => {
                                     error!("scrcpy audio read failed: {}", e);
-                                    if e.kind() == io::ErrorKind::UnexpectedEof {
-                                        continue;
-                                    } else {
-                                        self.cancel.cancel();
-                                        break;
-                                    }
+                                    self.cancel.cancel();
+                                    break;
                                 }
                             }
 
