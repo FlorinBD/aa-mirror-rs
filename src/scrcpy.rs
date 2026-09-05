@@ -232,10 +232,8 @@ impl ScrcpyMediaReader {
             let n = self.stream.read(&mut tmp[..to_read]).await?;
 
             if n == 0 {
-                return Err(io::Error::new(
-                    io::ErrorKind::UnexpectedEof,
-                    "EOF",
-                ));
+                //return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "EOF",));
+                continue;
             }
 
             self.buf.extend_from_slice(&tmp[..n]);

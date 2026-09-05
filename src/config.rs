@@ -26,7 +26,7 @@ pub const SCRCPY_VERSION: &str = "4.1";
 ///Delay after SDR to allow HU to configure its AV system, codecs, etc
 pub const HU_CONFIG_DELAY_MS: u64 = 600;
 ///Max encrypted len including SSL and AA headers
-pub const MAX_PACKET_LEN: usize = 0x4000;
+pub const MAX_PACKET_LEN: usize = 0x4000;//1024*16
 ///Max unencrypted data len, we have around 50bytes overhead for TLS header and 4 bytes for AA packet
 pub const MAX_DATA_LEN: usize = MAX_PACKET_LEN-100;
 
