@@ -232,8 +232,7 @@ impl ScrcpyMediaReader {
             let n = self.stream.read(&mut tmp[..to_read]).await?;
 
             if n == 0 {
-                //return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "EOF",));
-                continue;
+                return Err(io::Error::new(io::ErrorKind::UnexpectedEof, "EOF",));
             }
 
             self.buf.extend_from_slice(&tmp[..n]);
@@ -580,8 +579,13 @@ impl VideoServer {
                                 }
                                 Err(e) => {
                                     error!("scrcpy video read failed: {}", e);
-                                    self.cancel.cancel();
-                                    break;
+                                    if e.kind() == io::ErrorKind::UnexpectedEof {
+                                        continue;
+                                    } else {
+                                        self.cancel.cancel();
+                                        break;
+                                    }
+
                                 }
                             }
 

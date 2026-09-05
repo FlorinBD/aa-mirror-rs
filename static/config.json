@@ -111,7 +111,7 @@
         },
         "dpi": {
           "typ": "integer",
-          "description": "Force DPI\n0 = do not change DPI\nIf you are unsure what value to use, start experimenting with e.g. 130. Logs are helpful, as they show both the original HU value and the new one."
+          "description": "DPI override, for AA ONLY\n0 = do not change DPI\nIf you are unsure what value to use, start experimenting with e.g. 130. Logs are helpful, as they show both the original HU value and the new one."
         },
         "developer_mode": {
           "typ": "boolean",
