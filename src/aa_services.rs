@@ -1217,7 +1217,7 @@ impl SrvMediaSinkAudioStreaming {
 }
 impl SrvMediaSinkAudioGuidance {
     pub fn new(sid:i8, hu_tx: Sender<Packet>, acfg:AudioConfig, enabled:bool) -> Self {
-        let (tx, rx) = mpsc::channel(5);
+        let (tx, rx) = mpsc::channel(50);
         Self {
             base: AAService {
                 sid,
