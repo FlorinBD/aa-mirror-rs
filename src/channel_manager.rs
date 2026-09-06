@@ -587,6 +587,11 @@ impl TlsPacketProxy
 
             // 🔴 highest priority, SCRCPY/SRV_CH>HU
             Some(mut msg) = srv_rx.recv() =>{
+                    if srv_rx.capacity() > 5
+                    {
+                        info!("{}: scrcpy/srv queue: {}/{}",get_name(), 200 - srv_rx.capacity(), 200);
+                    }
+
                     if msg.flags&ENCRYPTED !=0
                     {
                         if !ssl_handshake_done
