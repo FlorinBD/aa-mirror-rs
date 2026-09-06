@@ -615,7 +615,7 @@ impl SrvSensorSource {
 }
 impl SrvMediaSinkVideoStreaming {
     pub fn new(sid:i8, hu_tx: Sender<Packet>, start_adb_server:Arc<Notify>, video_params:VideoStreamingParams, cancel:CancellationToken, ignore_ack:bool, enabled:bool) -> Self {
-        let (tx, rx) = mpsc::channel(5);
+        let (tx, rx) = mpsc::channel(50);
         Self {
             base: AAService {
                 sid,
@@ -913,7 +913,7 @@ impl SrvMediaSinkVideoStreaming {
 }
 impl SrvMediaSinkAudioStreaming {
     pub fn new(sid:i8, hu_tx: Sender<Packet>, start_adb_server:Arc<Notify> ,acfg:AudioConfig,audio_params:AudioStreamingParams, cancel:CancellationToken, ignore_ack:bool, enabled:bool) -> Self {
-        let (tx, rx) = mpsc::channel(5);
+        let (tx, rx) = mpsc::channel(50);
         Self {
             base: AAService {
                 sid,
