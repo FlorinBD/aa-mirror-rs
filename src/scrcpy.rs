@@ -582,7 +582,7 @@ impl VideoServer {
 										}
                                         let send_elapsed = send_start.elapsed();
                                         if send_elapsed.as_millis() > 5 {
-                                            info!("hu_tx.send (chunk {}/{}) took {:?}", i + 1, chunks.len(), send_elapsed);
+                                            info!("hu_tx.send took {:?}", send_elapsed);
                                         }
                                     }
 

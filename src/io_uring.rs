@@ -598,7 +598,7 @@ pub async fn io_loop_mirror(
         //MD>TLSProxy
         let (tx_srv, rx_proxy):   (Sender<Packet>, Receiver<Packet>) = mpsc::channel(100);
         //TLSProxy>MD
-        let (tx_proxy, rx_srv):   (Sender<Packet>, Receiver<Packet>) = mpsc::channel(5);
+        let (tx_proxy, rx_srv):   (Sender<Packet>, Receiver<Packet>) = mpsc::channel(50);
         // dedicated reading threads:
         tsk_hu_read = tokio_uring::spawn(endpoint_reader(hu_r, txr_hu));
 
