@@ -468,7 +468,7 @@ impl VideoServer {
                                     //let rd_len = header.size ;
                                     //let dbg_len = min(media_header.size, 16);
                                     let raw_bytes = chunks.first().map(|chunk| &chunk[..chunk.len().min(media_header.size).min(16)]).unwrap_or(&[]);
-                                    if dbg_count <  1000
+                                    if dbg_count <  100
                                     {
                                         debug!("Video task got frame config={:?}, ts={}, act size: {}, raw bytes: {:02x?}",media_header.config, media_header.timestamp, media_header.size, raw_bytes);
                                         dbg_count += 1;
@@ -482,10 +482,15 @@ impl VideoServer {
                                         //wait for ACK
                                         if !ignore_ack
                                         {
+                                            let ack_start = std::time::Instant::now();
                                             if let Err(e) = ack_tx.send(()).await {
 												error!("scrcpy video ack send failed: {:?}", e);
 												return;
 											}
+                                            let ack_elapsed = ack_start.elapsed();
+                                            if ack_elapsed.as_millis() > 5 {
+                                                info!("ack_tx.send took {:?}", ack_elapsed);
+                                            }
                                         }
 
                                     }
@@ -539,10 +544,15 @@ impl VideoServer {
                                                 final_length: total_len,
                                                 payload,
                                             };
+                                            let send_start = std::time::Instant::now();
                                             if let Err(e) = self.hu_tx.send(pkt_rsp).await {
 												error!("Error sending video chunk: {:?}", e);
 												return;
 											}
+                                            let send_elapsed = send_start.elapsed();
+                                            if send_elapsed.as_millis() > 5 {
+                                                info!("hu_tx.send (chunk {}/{}) took {:?}", i + 1, chunks.len(), send_elapsed);
+                                            }
                                         }
                                     }
                                     else {
@@ -565,10 +575,15 @@ impl VideoServer {
                                             final_length: None,
                                             payload,
                                         };
+                                        let send_start = std::time::Instant::now();
                                         if let Err(e) = self.hu_tx.send(pkt_rsp).await {
 											error!("Error sending video chunk: {:?}", e);
 											return;
 										}
+                                        let send_elapsed = send_start.elapsed();
+                                        if send_elapsed.as_millis() > 5 {
+                                            info!("hu_tx.send (chunk {}/{}) took {:?}", i + 1, chunks.len(), send_elapsed);
+                                        }
                                     }
 
                                 }
