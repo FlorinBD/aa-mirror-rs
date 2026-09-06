@@ -293,6 +293,7 @@ impl fmt::Display for ServiceType {
 pub struct  AAService {
     sid: i8,
     pub srv_type: ServiceType,
+    ///Used to dispatch messages from Control channel
     hu_tx: Sender<Packet>,
 }
 
