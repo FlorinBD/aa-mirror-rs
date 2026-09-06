@@ -587,7 +587,7 @@ impl TlsPacketProxy
 
             // 🔴 highest priority, SCRCPY/SRV_CH>HU
             Some(mut msg) = srv_rx.recv() =>{
-                    if srv_rx.capacity() > 5
+                    if srv_rx.capacity() < 50
                     {
                         info!("{}: scrcpy/srv queue: {}/{}",get_name(), 200 - srv_rx.capacity(), 200);
                     }
