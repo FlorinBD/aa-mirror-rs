@@ -468,7 +468,7 @@ impl VideoServer {
                                     //let rd_len = header.size ;
                                     //let dbg_len = min(media_header.size, 16);
                                     let raw_bytes = chunks.first().map(|chunk| &chunk[..chunk.len().min(media_header.size).min(16)]).unwrap_or(&[]);
-                                    if dbg_count <  100
+                                    if dbg_count <  0//100
                                     {
                                         debug!("Video task got frame config={:?}, ts={}, act size: {}, raw bytes: {:02x?}",media_header.config, media_header.timestamp, media_header.size, raw_bytes);
                                         dbg_count += 1;
@@ -688,7 +688,7 @@ impl AudioServer {
                                     //let rd_len = header.size ;
                                     //let dbg_len = min(media_header.size, 16);
                                     let raw_bytes = chunks.first().map(|chunk| &chunk[..chunk.len().min(media_header.size).min(16)]).unwrap_or(&[]);
-                                    if dbg_count <  1000
+                                    if dbg_count <  0//100
                                     {
                                         debug!("Audio task got frame config={:?}, ts={}, act size: {}, raw bytes: {:02x?}",media_header.config, media_header.timestamp, media_header.size, raw_bytes);
                                         dbg_count += 1;
