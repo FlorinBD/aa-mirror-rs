@@ -596,7 +596,7 @@ pub async fn io_loop_mirror(
         }
         //io channels for AA services
         //MD>TLSProxy
-        let (tx_srv, rx_proxy):   (Sender<Packet>, Receiver<Packet>) = mpsc::channel(100);
+        let (tx_srv, rx_proxy):   (Sender<Packet>, Receiver<Packet>) = mpsc::channel(200);
         //TLSProxy>MD
         let (tx_proxy, rx_srv):   (Sender<Packet>, Receiver<Packet>) = mpsc::channel(50);
         // dedicated reading threads:

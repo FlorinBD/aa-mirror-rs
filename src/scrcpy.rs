@@ -482,15 +482,10 @@ impl VideoServer {
                                         //wait for ACK
                                         if !ignore_ack
                                         {
-                                            let ack_start = std::time::Instant::now();
                                             if let Err(e) = ack_tx.send(()).await {
 												error!("scrcpy video ack send failed: {:?}", e);
 												return;
 											}
-                                            let ack_elapsed = ack_start.elapsed();
-                                            if ack_elapsed.as_millis() > 5 {
-                                                info!("ack_tx.send took {:?}", ack_elapsed);
-                                            }
                                         }
 
                                     }
@@ -544,15 +539,10 @@ impl VideoServer {
                                                 final_length: total_len,
                                                 payload,
                                             };
-                                            let send_start = std::time::Instant::now();
                                             if let Err(e) = self.hu_tx.send(pkt_rsp).await {
 												error!("Error sending video chunk: {:?}", e);
 												return;
 											}
-                                            let send_elapsed = send_start.elapsed();
-                                            if send_elapsed.as_millis() > 5 {
-                                                info!("hu_tx.send (chunk {}/{}) took {:?}", i + 1, chunks.len(), send_elapsed);
-                                            }
                                         }
                                     }
                                     else {
@@ -575,15 +565,10 @@ impl VideoServer {
                                             final_length: None,
                                             payload,
                                         };
-                                        let send_start = std::time::Instant::now();
                                         if let Err(e) = self.hu_tx.send(pkt_rsp).await {
 											error!("Error sending video chunk: {:?}", e);
 											return;
 										}
-                                        let send_elapsed = send_start.elapsed();
-                                        if send_elapsed.as_millis() > 5 {
-                                            info!("hu_tx.send took {:?}", send_elapsed);
-                                        }
                                     }
 
                                 }
