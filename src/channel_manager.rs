@@ -584,51 +584,7 @@ impl TlsPacketProxy
         loop {
             tokio::select! {
             biased;
-
-            // 🔴 highest priority, SCRCPY/SRV_CH>HU
-            Some(mut msg) = srv_rx.recv() =>{
-                    if srv_rx.capacity() < 50
-                    {
-                        info!("{}: scrcpy/srv queue: {}/{}",get_name(), 200 - srv_rx.capacity(), 200);
-                    }
-
-                    if msg.flags&ENCRYPTED !=0
-                    {
-                        if !ssl_handshake_done
-                        {
-                            error!( "{}: tls proxy error: received encrypted message from service before TLS handshake", get_name());
-                        }
-                        else
-                        {
-                            match msg.encrypt_payload(&mut mem_buf, &mut server).await {
-                                Ok(_) => {
-                                    // Increment byte counters for statistics
-                                    // fixme: compute final_len for precise stats
-                                    self.w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
-                                    if msg.payload.len() > MAX_PACKET_LEN {
-                                        error!("tls_proxy SRV>HU packet payload too big, got {}",msg.payload.len());
-                                    }
-                                    if let Err(e) = msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: SRV transmit to HU failed", get_name())) {
-                                        error!("SRV>HU Transmission error: {:?}", e);
-                                        return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SRV>HU channel closed")));
-                                    }
-                                    // yield so other tasks can run to release backpressure on TCP, this improves lag
-                                    //tokio::task::yield_now().await;
-                                }
-                                Err(e) => {
-                                    error!( "{} encrypt_payload error: {:?}", get_name(), e);
-                                    return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SRV>HU encrypt_payload error")));
-                                },
-                            }
-                        }
-                    }
-                    else
-                    {
-                        self.w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
-                        msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: Service transmit to HU failed", get_name()))?;
-                    }
-            }
-            // low priority, HU>Service/SCRCPY
+            // High priority, HU>Service/SCRCPY
             Some(mut msg) = hu_rx.recv() => {
                 // Increment byte counters for statistics
                 // fixme: compute final_len for precise stats
@@ -750,6 +706,50 @@ impl TlsPacketProxy
 
                 }
             }
+            // 🔴 low priority, SCRCPY/SRV_CH>HU
+            Some(mut msg) = srv_rx.recv() =>{
+                    if srv_rx.capacity() < 50
+                    {
+                        info!("{}: scrcpy/srv queue: {}/{}",get_name(), 200 - srv_rx.capacity(), 200);
+                    }
+
+                    if msg.flags&ENCRYPTED !=0
+                    {
+                        if !ssl_handshake_done
+                        {
+                            error!( "{}: tls proxy error: received encrypted message from service before TLS handshake", get_name());
+                        }
+                        else
+                        {
+                            match msg.encrypt_payload(&mut mem_buf, &mut server).await {
+                                Ok(_) => {
+                                    // Increment byte counters for statistics
+                                    // fixme: compute final_len for precise stats
+                                    self.w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
+                                    if msg.payload.len() > MAX_PACKET_LEN {
+                                        error!("tls_proxy SRV>HU packet payload too big, got {}",msg.payload.len());
+                                    }
+                                    if let Err(e) = msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: SRV transmit to HU failed", get_name())) {
+                                        error!("SRV>HU Transmission error: {:?}", e);
+                                        return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SRV>HU channel closed")));
+                                    }
+                                    // yield so other tasks can run to release backpressure on TCP, this improves lag
+                                    //tokio::task::yield_now().await;
+                                }
+                                Err(e) => {
+                                    error!( "{} encrypt_payload error: {:?}", get_name(), e);
+                                    return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SRV>HU encrypt_payload error")));
+                                },
+                            }
+                        }
+                    }
+                    else
+                    {
+                        self.w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
+                        msg.transmit(&mut hu_wr).await.with_context(|| format!("{}: Service transmit to HU failed", get_name()))?;
+                    }
+            }
+
             else => {
                 // all channels closed
                 tokio::time::sleep(Duration::from_secs(1)).await;
