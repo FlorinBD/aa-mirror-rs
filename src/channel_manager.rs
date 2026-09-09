@@ -358,7 +358,7 @@ impl TlsPacketProxy
         }
     }
 
-    async fn run_aa_mitm<A: Endpoint<A>>(mut self, mut hu_wr: IoDevice<A>,
+    async fn run_aa_mitm<A: Endpoint<A> + 'static>(mut self, mut hu_wr: IoDevice<A>,
                                          mut hu_rx: Receiver<Packet>,
                                          mut md_rx: Receiver<Packet>,
                                          mut md_tx: IoDevice<TcpStream>,
@@ -626,7 +626,7 @@ impl TlsPacketProxy
         Ok(())
     }
 
-    async fn run_aa_pt<A: Endpoint<A>>(mut self, mut hu_wr: IoDevice<A>,
+    async fn run_aa_pt<A: Endpoint<A> + 'static>(mut self, mut hu_wr: IoDevice<A>,
                                        mut hu_rx: Receiver<Packet>,
                                        mut md_rx: Receiver<Packet>,
                                        mut md_tx: IoDevice<TcpStream>,
