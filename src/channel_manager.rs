@@ -314,9 +314,11 @@ impl SslActor {
         if let Err(err) = res {
             match err.code() {
                 ErrorCode::WANT_READ | ErrorCode::WANT_WRITE | ErrorCode::SYSCALL => Ok(()),
-                _ => return Err(Box::new(err)),
+                _ => Err(Box::new(err)),
             }
-        } else {
+        }
+        else
+        {
             Ok(())
         }
     }
