@@ -37,6 +37,9 @@ use crate::config_types::{AAMode, HexdumpLevel};
 use crate::io_uring::Endpoint;
 use crate::io_uring::{IoDevice, Result};
 use crate::io_uring::BUFFER_LEN;
+use crate::usb_stream::{UsbStreamRead, UsbStreamWrite};
+
+fn assert_send<T: Send>() {}
 
 // module name for logging engine
 fn get_name() -> String {
@@ -631,7 +634,9 @@ impl TlsPacketProxy
                                        mut md_rx: Receiver<Packet>,
                                        mut md_tx: IoDevice<TcpStream>,
     ) -> Result<()> {
-
+        assert_send::<UsbStreamWrite>();
+        assert_send::<UsbStreamRead>();
+        assert_send::<TcpStream>();
         info!( "{}: Starting AA PT message proxy loop...", get_name());
         loop {
             tokio::select! {
