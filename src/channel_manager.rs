@@ -933,30 +933,6 @@ impl TlsPacketProxy
 
         Ok(())
     }
-
-    async fn encrypt_and_send(pkt: Packet, ssl_tx: &Sender<SslRequest>, hu_out_tx: &Sender<Packet>,) -> Result<usize> {
-        let (tx, rx) = oneshot::channel();
-        ssl_tx.send(SslRequest::Encrypt(pkt, tx)).await.map_err(|_| io::Error::new(io::ErrorKind::Other, "SSL actor gone"))?;
-        match rx.await {
-            Ok(Ok(msg)) => {
-                if msg.payload.len() > MAX_PACKET_LEN {
-                    error!("tls_proxy SRV>HU packet payload too big, got {}", msg.payload.len());
-                    return Err(io::Error::new(io::ErrorKind::Other, "SSL Packet too big", ).into());
-                }
-                let size = HEADER_LENGTH + msg.payload.len();
-                hu_out_tx.send(msg).await.map_err(|_| io::Error::new(io::ErrorKind::Other, "SRV>HU channel closed"))?;
-                Ok(size)
-            }
-
-            Ok(Err(e)) => {
-                return Err(e);
-            }
-
-            Err(_) => {
-                return Err(io::Error::new(io::ErrorKind::Other, "SSL actor gone", ).into());
-            }
-        }
-    }
     pub fn start<A: Endpoint<A> + 'static>(self, hu_wr: IoDevice<A>,
                                            hu_rx: Receiver<Packet>,
                                            md_rx: Receiver<Packet>,
@@ -1210,6 +1186,30 @@ impl TlsPacketProxy
         })
     }
 
+    ///Encrypt the payload and send it to HU
+    async fn encrypt_and_send(pkt: Packet, ssl_tx: &Sender<SslRequest>, hu_out_tx: &Sender<Packet>,) -> Result<usize> {
+        let (tx, rx) = oneshot::channel();
+        ssl_tx.send(SslRequest::Encrypt(pkt, tx)).await.map_err(|_| io::Error::new(io::ErrorKind::Other, "SSL actor gone"))?;
+        match rx.await {
+            Ok(Ok(msg)) => {
+                if msg.payload.len() > MAX_PACKET_LEN {
+                    error!("tls_proxy SRV>HU packet payload too big, got {}", msg.payload.len());
+                    return Err(io::Error::new(io::ErrorKind::Other, "SSL Packet too big", ).into());
+                }
+                let size = HEADER_LENGTH + msg.payload.len();
+                hu_out_tx.send(msg).await.map_err(|_| io::Error::new(io::ErrorKind::Other, "SRV>HU channel closed"))?;
+                Ok(size)
+            }
+
+            Ok(Err(e)) => {
+                return Err(e);
+            }
+
+            Err(_) => {
+                return Err(io::Error::new(io::ErrorKind::Other, "SSL actor gone", ).into());
+            }
+        }
+    }
     /// shows packet/message contents as pretty string for debug
     pub async fn pkt_debug(&self,
                            msg_type:AAMessageType,
