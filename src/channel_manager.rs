@@ -37,9 +37,6 @@ use crate::config_types::{AAMode, HexdumpLevel};
 use crate::io_uring::Endpoint;
 use crate::io_uring::{IoDevice, Result};
 use crate::io_uring::BUFFER_LEN;
-use crate::usb_stream::{UsbStreamRead, UsbStreamWrite};
-
-fn assert_send<T: Send>() {}
 
 // module name for logging engine
 fn get_name() -> String {
@@ -634,9 +631,6 @@ impl TlsPacketProxy
                                        mut md_rx: Receiver<Packet>,
                                        mut md_tx: IoDevice<TcpStream>,
     ) -> Result<()> {
-        assert_send::<UsbStreamWrite>();
-        assert_send::<UsbStreamRead>();
-        assert_send::<TcpStream>();
         info!( "{}: Starting AA PT message proxy loop...", get_name());
         loop {
             tokio::select! {
@@ -684,7 +678,7 @@ impl TlsPacketProxy
         let mut server = openssl::ssl::SslStream::new(ssl, mem_buf.clone())?;
         // ---- SSL actor: sole owner of `server` / `mem_buf` ----
         let (ssl_tx, ssl_rx) = mpsc::channel::<SslRequest>(64);
-        tokio::spawn(SslActor { server, mem_buf }.run(ssl_rx));
+        tokio_uring::spawn(SslActor { server, mem_buf }.run(ssl_rx));
 
         info!( "{}: Starting MIRROR mode message proxy loop...", get_name());
 
@@ -716,7 +710,7 @@ impl TlsPacketProxy
             let hu_out_tx = hu_out_tx.clone();
             let srv_tx = srv_tx.clone();
 
-            tokio::spawn(async move {
+            tokio_uring::spawn(async move {
                 loop {
                     let Some(mut msg) = hu_rx.recv().await else {
                         info!("{}: hu_rx closed, HU task exiting", get_name());
@@ -850,7 +844,7 @@ impl TlsPacketProxy
             let handshake_done = handshake_done.clone();
             let hu_out_tx = hu_out_tx.clone();
 
-            tokio::spawn(async move {
+            tokio_uring::spawn(async move {
                 loop {
                     tokio::select! {
                         biased;
