@@ -684,7 +684,7 @@ impl TlsPacketProxy
 
         // ---- HU writer: sole owner of hu_wr ----
         let (hu_out_tx, mut hu_out_rx) = mpsc::channel::<Packet>(200);
-        let hu_writer = tokio::spawn(async move {
+        let hu_writer = tokio_uring::spawn(async move {
             while let Some(pkt) = hu_out_rx.recv().await {
                 if let Err(e) = pkt.transmit(&mut hu_wr).await {
                     error!("{}: HU transmit failed: {:?}", get_name(), e);
