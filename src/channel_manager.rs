@@ -661,7 +661,7 @@ impl TlsPacketProxy
         Ok(())
     }
 
-    async fn run_mirror<A: Endpoint<A>>(mut self, mut hu_wr: IoDevice<A>,
+    async fn run_mirror<A: Endpoint<A> + 'static>(mut self, mut hu_wr: IoDevice<A>,
                                         mut hu_rx: Receiver<Packet>,
                                         mut audio_rx: Receiver<Packet>,
                                         mut video_rx: Receiver<Packet>,
@@ -735,8 +735,7 @@ impl TlsPacketProxy
                             Ok(Ok(msg)) => {
                                 let is_media = audio_sid > 0 && video_sid > 0 && (msg.channel == audio_sid || msg.channel == video_sid);
                                 if is_media && !ignore_media_ack {
-                                    let message_id: i32 =
-                                        u16::from_be_bytes(msg.payload[0..=1].try_into()?).into();
+                                    let message_id: i32 = u16::from_be_bytes(msg.payload[0..=1].try_into()?).into();
                                     if message_id == MediaMessageId::MEDIA_MESSAGE_ACK as i32 {
                                         if msg.channel == audio_sid {
                                             if let Some(ref mut ack_rx) = audio_ack_rx {
@@ -767,17 +766,15 @@ impl TlsPacketProxy
                                 break;
                             }
                         }
-                    } else {
+                    }
+                    else
+                    {
                         let _ = pkt_debug(HexdumpLevel::DecryptedInput, dmp_level, &msg, "HU".parse().unwrap()).await;
-
                         let message_id: i32 = u16::from_be_bytes(msg.payload[0..=1].try_into()?).into();
-
-                        if !handshake_done.load(Ordering::Acquire)
-                            && message_id == ControlMessageType::MESSAGE_ENCAPSULATED_SSL as i32
+                        if !handshake_done.load(Ordering::Acquire) && message_id == ControlMessageType::MESSAGE_ENCAPSULATED_SSL as i32
                         {
                             // ---- Step 1: ClientHello ----
                             let _ = pkt_debug(HexdumpLevel::RawInput, dmp_level, &msg, "HU".parse().unwrap()).await;
-
                             let (tx, rx) = oneshot::channel();
                             if ssl_tx.send(SslRequest::ClientHello(msg, tx)).await.is_err() {
                                 error!("{}: SSL actor gone during handshake", get_name());
