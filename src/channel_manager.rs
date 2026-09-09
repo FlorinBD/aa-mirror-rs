@@ -888,8 +888,7 @@ impl TlsPacketProxy
                                 // plain passthrough (e.g. version response) — no SSL involved
                                 w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
                                 if hu_out_tx.send(msg).await.is_err() {
-                                    return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SRV>HU channel closed"))
-                                        as Box<dyn std::error::Error + Send + Sync>);
+                                    return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SRV>HU channel closed")) as Box<dyn std::error::Error + Send + Sync>);
                                 }
                             }
                         }
@@ -898,14 +897,49 @@ impl TlsPacketProxy
                             if ssl_tx.send(SslRequest::Encrypt(pkt, tx)).await.is_err() {
                                     error!("{}: SSL actor gone, aborting SRV task", get_name());
                                     return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SSL actor gone")) as Box<dyn std::error::Error + Send + Sync>);
+                            }
+                            match rx.await {
+                                Ok(Ok(msg)) => {
+                                    w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(),Ordering::Relaxed,);
+
+                                    if hu_out_tx.send(msg).await.is_err() {
+                                        return Err(Box::new(io::Error::new(io::ErrorKind::Other,"SRV>HU channel closed",)) as Box<dyn std::error::Error + Send + Sync>);
+                                    }
                                 }
+
+                                Ok(Err(e)) => {
+                                    error!("{}: audio encrypt error: {:?}", get_name(), e);
+                                }
+
+                                Err(_) => {
+                                    error!("{}: SSL actor gone", get_name());
+                                    return Err(Box::new(io::Error::new(io::ErrorKind::Other,"SSL actor gone",)) as Box<dyn std::error::Error + Send + Sync>);
+                                }
+                            }
                         }
                         Some(pkt) = video_rx.recv() => {
                             let (tx, rx) = oneshot::channel();
                             if ssl_tx.send(SslRequest::Encrypt(pkt, tx)).await.is_err() {
                                     error!("{}: SSL actor gone, aborting SRV task", get_name());
                                     return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SSL actor gone")) as Box<dyn std::error::Error + Send + Sync>);
+                            }
+                            match rx.await {
+                                Ok(Ok(msg)) => {
+                                    w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(),Ordering::Relaxed,);
+                                    if hu_out_tx.send(msg).await.is_err() {
+                                        return Err(Box::new(io::Error::new(io::ErrorKind::Other,"SRV>HU channel closed",)) as Box<dyn std::error::Error + Send + Sync>);
+                                    }
                                 }
+
+                                Ok(Err(e)) => {
+                                    error!("{}: video encrypt error: {:?}", get_name(), e);
+                                }
+
+                                Err(_) => {
+                                    error!("{}: SSL actor gone", get_name());
+                                    return Err(Box::new(io::Error::new(io::ErrorKind::Other,"SSL actor gone",)) as Box<dyn std::error::Error + Send + Sync>);
+                                }
+                            }
                         }
                         else =>
                         {
@@ -913,10 +947,6 @@ impl TlsPacketProxy
                             break;
                         }
                     }
-                    let Some(mut msg) = srv_rx.recv().await else {
-                        info!("{}: srv_rx closed, SRV task exiting", get_name());
-                        break;
-                    };
                 }
                 Ok(())
             })
