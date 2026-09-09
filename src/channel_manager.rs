@@ -852,6 +852,7 @@ impl TlsPacketProxy
 
                             Err(e) => {
                                 error!("{}: audio encrypt error: {:?}", get_name(), e);
+                                return Err(e);
                             }
                         }
                     }
@@ -862,7 +863,7 @@ impl TlsPacketProxy
                             {
                                 if !handshake_done.load(Ordering::Acquire) {
                                     error!("{}: tls proxy error: received encrypted message from service before TLS handshake", get_name());
-                                    continue;
+                                    break;
                                 }
                                 match Self::encrypt_and_send(msg, &ssl_tx, &hu_out_tx).await {
                                     Ok(size) => {
@@ -870,7 +871,8 @@ impl TlsPacketProxy
                                     }
 
                                     Err(e) => {
-                                        error!("{}: audio encrypt error: {:?}", get_name(), e);
+                                        error!("{}: service encrypt error: {:?}", get_name(), e);
+                                        break;
                                     }
                                 }
                             }
@@ -894,6 +896,7 @@ impl TlsPacketProxy
 
                                 Err(e) => {
                                     error!("{}: audio encrypt error: {:?}", get_name(), e);
+                                    break;
                                 }
                             }
                         }
@@ -908,6 +911,7 @@ impl TlsPacketProxy
 
                                 Err(e) => {
                                     error!("{}: video encrypt error: {:?}", get_name(), e);
+                                    break;
                                 }
                             }
                         }
