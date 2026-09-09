@@ -596,7 +596,9 @@ pub async fn io_loop_mirror(
         }
         //io channels for AA services
         //MD>TLSProxy
-        let (tx_srv, rx_proxy):   (Sender<Packet>, Receiver<Packet>) = mpsc::channel(200);
+        let (tx_srv, rx_proxy):   (Sender<Packet>, Receiver<Packet>) = mpsc::channel(50);
+        let (tx_audio, rx_audio):   (Sender<Packet>, Receiver<Packet>) = mpsc::channel(120);
+        let (tx_video, rx_video):   (Sender<Packet>, Receiver<Packet>) = mpsc::channel(100);
         //TLSProxy>MD
         let (tx_proxy, rx_srv):   (Sender<Packet>, Receiver<Packet>) = mpsc::channel(50);
         // dedicated reading threads:
@@ -604,10 +606,10 @@ pub async fn io_loop_mirror(
 
         //service packet proxy
         let pp= TlsPacketProxy::new(stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested, cfg.clone());
-        tsk_packet_proxy=pp.start(hu_w, rxr_hu, rx_proxy, None, Some(tx_proxy))?;
+        tsk_packet_proxy=pp.start(hu_w, rxr_hu, rx_proxy, Some(rx_audio), Some(rx_video), None, Some(tx_proxy))?;
 
         // main processing threads:
-        let svrmgr=ServiceManager::new(rx_srv,tx_srv.clone(), scrcpy_params_tx.clone(), cfg.clone(), cancel.clone());
+        let svrmgr=ServiceManager::new(rx_srv,tx_srv.clone(), tx_audio.clone(), tx_video.clone(), scrcpy_params_tx.clone(), cfg.clone(), cancel.clone());
         tsk_ch_manager =svrmgr.start(cancel.clone());
 
         // Thread for monitoring transfer
@@ -864,7 +866,7 @@ pub async fn io_loop_aa(
 
         //packet proxy
         let pp= TlsPacketProxy::new(stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested, cfg.clone());
-        let mut tsk_packet_proxy=pp.start(hu_w, rx_hu, rx_md, Some(md_w), None)?;
+        let mut tsk_packet_proxy=pp.start(hu_w, rx_hu, rx_md, None, None, Some(md_w), None)?;
 
         // Thread for monitoring transfer
         let mut tsk_monitor = tokio_uring::spawn(transfer_monitor(

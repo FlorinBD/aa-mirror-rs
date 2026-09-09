@@ -346,6 +346,7 @@ pub struct SrvMediaSinkVideoStreaming {
     pub base: AAService,
     rx: Receiver<Packet>,
     hu_tx: Sender<Packet>,
+    video_tx: Sender<Packet>,
     adb_start_server:Arc<Notify>,
     projection_state:ProjectionStatus,
     video_params:VideoStreamingParams,
@@ -373,6 +374,7 @@ pub struct SrvMediaSinkAudioStreaming {
     pub base: AAService,
     rx: Receiver<Packet>,
     hu_tx: Sender<Packet>,
+    audio_tx: Sender<Packet>,
     adb_start_server:Arc<Notify>,
     acfg:AudioConfig,
     audio_params:AudioStreamingParams,
@@ -421,6 +423,8 @@ pub struct ServiceManager {
     srv_type: ServiceType,
     hu_rx: Receiver<Packet>,
     hu_tx: Sender<Packet>,
+    audio_tx: Sender<Packet>,
+    video_tx: Sender<Packet>,
     start_adb_server:watch::Sender<SCRCPYParams>,
     config: AppConfig,
     cancel:CancellationToken,
@@ -615,7 +619,7 @@ impl SrvSensorSource {
     }
 }
 impl SrvMediaSinkVideoStreaming {
-    pub fn new(sid:i8, hu_tx: Sender<Packet>, start_adb_server:Arc<Notify>, video_params:VideoStreamingParams, cancel:CancellationToken, ignore_ack:bool, enabled:bool) -> Self {
+    pub fn new(sid:i8, hu_tx: Sender<Packet>, video_tx: Sender<Packet>, start_adb_server:Arc<Notify>, video_params:VideoStreamingParams, cancel:CancellationToken, ignore_ack:bool, enabled:bool) -> Self {
         let (tx, rx) = mpsc::channel(50);
         Self {
             base: AAService {
@@ -625,6 +629,7 @@ impl SrvMediaSinkVideoStreaming {
             },
             rx,
             hu_tx:hu_tx.clone(),
+            video_tx:video_tx.clone(),
             adb_start_server: start_adb_server,
             video_params:video_params.clone(),
             cancel: cancel.clone(),
@@ -636,7 +641,7 @@ impl SrvMediaSinkVideoStreaming {
             session_id:0,
             video_streaming_started:false,
             scrcpy_server: Some(VideoServerState::Created(
-                crate::scrcpy::VideoServer::new(sid as u8, hu_tx.clone(), cancel.clone())
+                crate::scrcpy::VideoServer::new(sid as u8, video_tx.clone(), cancel.clone())
             )),
         }
     }
@@ -913,7 +918,7 @@ impl SrvMediaSinkVideoStreaming {
     }
 }
 impl SrvMediaSinkAudioStreaming {
-    pub fn new(sid:i8, hu_tx: Sender<Packet>, start_adb_server:Arc<Notify> ,acfg:AudioConfig,audio_params:AudioStreamingParams, cancel:CancellationToken, ignore_ack:bool, enabled:bool) -> Self {
+    pub fn new(sid:i8, hu_tx: Sender<Packet>, audio_tx: Sender<Packet>, start_adb_server:Arc<Notify> ,acfg:AudioConfig,audio_params:AudioStreamingParams, cancel:CancellationToken, ignore_ack:bool, enabled:bool) -> Self {
         let (tx, rx) = mpsc::channel(50);
         Self {
             base: AAService {
@@ -923,6 +928,7 @@ impl SrvMediaSinkAudioStreaming {
             },
             rx,
             hu_tx:hu_tx.clone(),
+            audio_tx:audio_tx.clone(),
             adb_start_server:start_adb_server,
             acfg,
             audio_params:audio_params.clone(),
@@ -935,7 +941,7 @@ impl SrvMediaSinkAudioStreaming {
             config_recived:false,
             session_id:1,
             scrcpy_server: Some(AudioServerState::Created(
-                crate::scrcpy::AudioServer::new(sid as u8,hu_tx.clone(), cancel.clone()))
+                crate::scrcpy::AudioServer::new(sid as u8,audio_tx.clone(), cancel.clone()))
             ),
         }
     }
@@ -1815,12 +1821,14 @@ impl SrvBluetooth {
 }
 
 impl ServiceManager {
-    pub fn new(hu_rx: Receiver<Packet>, hu_tx: Sender<Packet>, start_adb_server: watch::Sender<SCRCPYParams>, config: AppConfig, cancel:CancellationToken) -> Self {
+    pub fn new(hu_rx: Receiver<Packet>, hu_tx: Sender<Packet>, audio_tx: Sender<Packet>, video_tx: Sender<Packet>, start_adb_server: watch::Sender<SCRCPYParams>, config: AppConfig, cancel:CancellationToken) -> Self {
         //This service is different, we don't own mspc channels, we use those passed by parameters
         Self {
             srv_type: ServiceType::Control,
             hu_rx,
             hu_tx,
+            audio_tx,
+            video_tx,
             start_adb_server,
             config,
             cancel,
@@ -2023,7 +2031,7 @@ impl ServiceManager {
                                     self.sdr_audio_codec_params.sid=ch_id as u8;
                                     self.sdr_audio_codec_params.codec=acd;
 
-                                    let service = SrvMediaSinkAudioStreaming::new(ch_id as i8, self.hu_tx.clone(), self.audio_server_ready.clone(), self.sdr_audio_cfg_streaming.clone(), self.sdr_audio_codec_params.clone(), self.cancel.clone(), self.config.ignore_media_ack,true);
+                                    let service = SrvMediaSinkAudioStreaming::new(ch_id as i8, self.hu_tx.clone(), self.audio_tx.clone(), self.audio_server_ready.clone(), self.sdr_audio_cfg_streaming.clone(), self.sdr_audio_codec_params.clone(), self.cancel.clone(), self.config.ignore_media_ack,true);
                                     let (service_handle, task) = service.start();
                                     self.add_service(service_handle);
                                     self.srv_tsk_handles.push(task);
@@ -2061,7 +2069,7 @@ impl ServiceManager {
                                 self.sdr_video_codec_params.dpi=proto_srv.media_sink_service.video_configs[0].density() as i32;
                                 self.sdr_video_codec_params.sid=ch_id as u8;
 
-                                let service = SrvMediaSinkVideoStreaming::new(ch_id as i8, self.hu_tx.clone(), self.video_server_ready.clone(), self.sdr_video_codec_params.clone(), self.cancel.clone(), self.config.ignore_media_ack, true);
+                                let service = SrvMediaSinkVideoStreaming::new(ch_id as i8, self.hu_tx.clone(), self.video_tx.clone(), self.video_server_ready.clone(), self.sdr_video_codec_params.clone(), self.cancel.clone(), self.config.ignore_media_ack, true);
                                 let (service_handle, task) = service.start();
                                 self.add_service(service_handle);
                                 self.srv_tsk_handles.push(task);

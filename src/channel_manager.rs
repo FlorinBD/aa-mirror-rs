@@ -1,12 +1,12 @@
 use anyhow::{anyhow, Context};
 use log::log_enabled;
-use openssl::ssl::{ErrorCode, Ssl, SslContextBuilder, SslFiletype, SslMethod};
+use openssl::ssl::{ErrorCode, Ssl, SslContextBuilder, SslFiletype, SslMethod, SslStream};
 use simplelog::*;
 use std::collections::{HashMap, VecDeque};
 use std::{fmt, io};
 use std::cmp::PartialEq;
 use std::io::{Read, Write};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -25,7 +25,7 @@ use crate::channel_manager::AudioStreamType::*;
 use crate::channel_manager::MessageStatus;
 use protobuf::text_format::print_to_string_pretty;
 use protobuf::{Enum, Message, MessageDyn};
-use tokio::sync::{mpsc};
+use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 use tokio_uring::net::TcpStream;
 use tokio_util::sync::CancellationToken;
@@ -65,6 +65,13 @@ pub(crate) const RES_PATH: &str = "/etc/aa-mirror-rs/res";
 pub enum DeviceType {
     HeadUnit,
     MobileDevice,
+}
+
+pub enum SslRequest {
+    Decrypt(Packet, oneshot::Sender<Result<Packet>>),
+    Encrypt(Packet, oneshot::Sender<Result<Packet>>),
+    ClientHello(Packet, oneshot::Sender<Result<Packet>>),
+    ClientKeyExchange(Packet, oneshot::Sender<Result<(Packet, bool)>>),
 }
 
 #[derive(Copy, Clone, Debug, Default)]
@@ -225,6 +232,94 @@ pub struct AckChannels {
 pub struct ChannelProxyHandle {
     pub(crate) ch_rx: Option<AckChannels>,
     pub(crate) data: Option<Packet>,
+}
+
+pub struct SslActor {
+    pub(crate) server: SslStream<SslMemBuf>,
+    pub(crate) mem_buf: SslMemBuf,
+}
+
+impl SslActor {
+    async fn run(mut self, mut rx: Receiver<SslRequest>) {
+        while let Some(req) = rx.recv().await {
+            match req {
+                SslRequest::Decrypt(mut msg,tx)=>
+                    {
+                        let r=msg.decrypt_payload(&mut self.mem_buf, &mut self.server).await.map(|_| msg);
+                        let _ = tx.send(r);
+                    }
+                SslRequest::Encrypt(mut msg,tx)=>
+                    {
+                        let r=msg.encrypt_payload(&mut self.mem_buf, &mut self.server).await.map(|_| msg);
+                        let _ = tx.send(r);
+                    }
+                SslRequest::ClientHello(msg,tx)=>
+                    {
+                        let r= self.client_hello(msg).await;
+                        let _ = tx.send(r);
+                    }
+                SslRequest::ClientKeyExchange(msg,tx)=>
+                    {
+                        let r= self.client_key_exchange(msg).await;
+                        let _ = tx.send(r);
+                    }
+            }
+        }
+    }
+
+    async fn client_hello(&mut self, msg: Packet) -> Result<Packet>
+    {
+        msg.ssl_decapsulate_write(&mut self.mem_buf).await?;
+        self.ssl_chech_failure(self.server_accept())?;
+        info!("🔒 stage #1 of 2: SSL handshake: {}", self.server.ssl().state_string_long());
+        self.ssl_encapsulate(self.mem_buf.clone()).await;
+    }
+
+    async fn client_key_exchange(&mut self, msg: Packet) -> Result<(Packet, bool)>
+    {
+        msg.ssl_decapsulate_write(&mut self.mem_buf).await?;
+        self.ssl_check_failure(self.server_accept())?;
+        info!("🔒 stage #2 of 2: SSL handshake: {}", self.server.ssl().state_string_long());
+        let done=self.server.ssl().is_init_finished();
+        if done
+        {
+            info!("🔒 SSL Init complete, cipher: {}", self.server.ssl().current_cipher().unwrap().name());
+        }
+        Ok((self.ssl_encapsulate(self.mem_buf.clone()).await?, done))
+    }
+
+    /// encapsulates SSL data into Packet
+    async fn ssl_encapsulate(&self, mut mem_buf: SslMemBuf) -> Result<Packet> {
+        // read SSL-generated data
+        let mut res: Vec<u8> = Vec::new();
+        mem_buf.read_to(&mut res)?;
+
+        // create MESSAGE_ENCAPSULATED_SSL Packet
+        let message_type = ControlMessageType::MESSAGE_ENCAPSULATED_SSL as u16;
+        res.insert(0, (message_type >> 8) as u8);
+        res.insert(1, (message_type & 0xff) as u8);
+        Ok(Packet {
+            channel: 0x00,
+            flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+            final_length: None,
+            payload: res,
+        })
+    }
+
+    /// checking if there was a true fatal SSL error
+    /// Note that the error may not be fatal. For example if the underlying
+    /// stream is an asynchronous one then `HandshakeError::WouldBlock` may
+    /// just mean to wait for more I/O to happen later.
+    fn ssl_check_failure<T>(&self, res: std::result::Result<T, openssl::ssl::Error>) -> Result<()> {
+        if let Err(err) = res {
+            match err.code() {
+                ErrorCode::WANT_READ | ErrorCode::WANT_WRITE | ErrorCode::SYSCALL => Ok(()),
+                _ => return Err(Box::new(err)),
+            }
+        } else {
+            Ok(())
+        }
+    }
 }
 
 ///Used for AA/Mirror mode as a SSL gateway
@@ -567,6 +662,8 @@ impl TlsPacketProxy
 
     async fn run_mirror<A: Endpoint<A>>(mut self, mut hu_wr: IoDevice<A>,
                                         mut hu_rx: Receiver<Packet>,
+                                        mut audio_rx: Receiver<Packet>,
+                                        mut video_rx: Receiver<Packet>,
                                         mut srv_rx: Receiver<Packet>,
                                         srv_tx: Sender<Packet>,
     ) -> Result<()> {
@@ -575,13 +672,269 @@ impl TlsPacketProxy
             client_stream: Arc::new(Mutex::new(VecDeque::new())),
             server_stream: Arc::new(Mutex::new(VecDeque::new())),
         };
-        let mut ssl_handshake_done=false;
+        //let mut ssl_handshake_done=false;
+        let handshake_done = Arc::new(AtomicBool::new(false));
         let mut server = openssl::ssl::SslStream::new(ssl, mem_buf.clone())?;
-        //Dump all remaining messages
-        /*while srv_rx.try_recv().is_ok() {
-        }*/
+        // ---- SSL actor: sole owner of `server` / `mem_buf` ----
+        let (ssl_tx, ssl_rx) = mpsc::channel::<SslRequest>(64);
+        tokio::spawn(SslActor { server, mem_buf }.run(ssl_rx));
+
         info!( "{}: Starting MIRROR mode message proxy loop...", get_name());
-        loop {
+
+        // ---- HU writer: sole owner of hu_wr ----
+        let (hu_out_tx, mut hu_out_rx) = mpsc::channel::<Packet>(200);
+        let hu_writer = tokio::spawn(async move {
+            while let Some(pkt) = hu_out_rx.recv().await {
+                if let Err(e) = pkt.transmit(&mut hu_wr).await {
+                    error!("{}: HU transmit failed: {:?}", get_name(), e);
+                    break;
+                }
+            }
+        });
+        // ---- snapshot/clone what each task needs off `self` ----
+        let r_statistics = self.r_statistics.clone();      // Arc<AtomicUsize>
+        let w_statistics = self.w_statistics.clone();      // Arc<AtomicUsize>
+        let ignore_media_ack = self.cfg.ignore_media_ack;
+        let dmp_level = self.dmp_level;
+        let (audio_sid, video_sid) = (self.audio_sid, self.video_sid);
+        let mut audio_ack_rx = self.audio_ack_rx.take();
+        let mut video_ack_rx = self.video_ack_rx.take();
+
+        // =====================================================================
+        // HU -> (decrypt) -> SRV
+        // =====================================================================
+        let hu_task = {
+            let ssl_tx = ssl_tx.clone();
+            let handshake_done = handshake_done.clone();
+            let hu_out_tx = hu_out_tx.clone();
+            let srv_tx = srv_tx.clone();
+
+            tokio::spawn(async move {
+                loop {
+                    let Some(mut msg) = hu_rx.recv().await else {
+                        info!("{}: hu_rx closed, HU task exiting", get_name());
+                        break;
+                    };
+
+                    r_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
+
+                    if msg.flags & ENCRYPTED != 0 {
+                        if !handshake_done.load(Ordering::Acquire) {
+                            error!("{}: tls proxy error: received encrypted message from HU before TLS handshake", get_name());
+                            continue;
+                        }
+
+                        let (tx, rx) = oneshot::channel();
+                        if ssl_tx.send(SslRequest::Decrypt(msg, tx)).await.is_err() {
+                            error!("{}: SSL actor gone, aborting HU task", get_name());
+                            break;
+                        }
+
+                        match rx.await {
+                            Ok(Ok(msg)) => {
+                                let is_media = audio_sid > 0 && video_sid > 0 && (msg.channel == audio_sid || msg.channel == video_sid);
+                                if is_media && !ignore_media_ack {
+                                    let message_id: i32 =
+                                        u16::from_be_bytes(msg.payload[0..=1].try_into()?).into();
+                                    if message_id == MediaMessageId::MEDIA_MESSAGE_ACK as i32 {
+                                        if msg.channel == audio_sid {
+                                            if let Some(ref mut ack_rx) = audio_ack_rx {
+                                                let _ = ack_rx.try_recv();
+                                            } else {
+                                                error!("{}: Media ACK error, audio_ack_rx is None", get_name());
+                                            }
+                                        } else if msg.channel == video_sid {
+                                            if let Some(ref mut ack_rx) = video_ack_rx {
+                                                let _ = ack_rx.try_recv();
+                                            } else {
+                                                error!("{}: Media ACK error, video_ack_rx is None", get_name());
+                                            }
+                                        } else {
+                                            error!("{}: Media ACK unmanaged", get_name());
+                                        }
+                                        continue;
+                                    }
+                                }
+
+                                if srv_tx.send(msg).await.is_err() {
+                                    error!("{} tls proxy send to service error", get_name());
+                                }
+                            }
+                            Ok(Err(e)) => error!("{} decrypt_payload error: {:?}", get_name(), e),
+                            Err(_) => {
+                                error!("{}: SSL actor dropped response channel", get_name());
+                                break;
+                            }
+                        }
+                    } else {
+                        let _ = pkt_debug(HexdumpLevel::DecryptedInput, dmp_level, &msg, "HU".parse().unwrap()).await;
+
+                        let message_id: i32 = u16::from_be_bytes(msg.payload[0..=1].try_into()?).into();
+
+                        if !handshake_done.load(Ordering::Acquire)
+                            && message_id == ControlMessageType::MESSAGE_ENCAPSULATED_SSL as i32
+                        {
+                            // ---- Step 1: ClientHello ----
+                            let _ = pkt_debug(HexdumpLevel::RawInput, dmp_level, &msg, "HU".parse().unwrap()).await;
+
+                            let (tx, rx) = oneshot::channel();
+                            if ssl_tx.send(SslRequest::ClientHello(msg, tx)).await.is_err() {
+                                error!("{}: SSL actor gone during handshake", get_name());
+                                break;
+                            }
+                            let pkt = match rx.await {
+                                Ok(Ok(p)) => p,
+                                Ok(Err(e)) => { error!("{}: client_hello failed: {:?}", get_name(), e); continue; }
+                                Err(_) => { error!("{}: SSL actor dropped response", get_name()); break; }
+                            };
+                            let _ = pkt_debug(HexdumpLevel::RawOutput, dmp_level, &pkt, "MD".parse().unwrap()).await;
+                            if hu_out_tx.send(pkt).await.is_err() {
+                                error!("{}: HU writer gone", get_name());
+                                break;
+                            }
+
+                            // ---- Step 3: ClientKeyExchange (extra inline read, safe: HU task owns hu_rx exclusively) ----
+                            let Some(pkt2) = hu_rx.recv().await else {
+                                error!("{}: hu reader channel hung up during handshake", get_name());
+                                break;
+                            };
+                            let _ = pkt_debug(HexdumpLevel::RawInput, dmp_level, &pkt2, "HU".parse().unwrap()).await;
+
+                            let (tx2, rx2) = oneshot::channel();
+                            if ssl_tx.send(SslRequest::ClientKeyExchange(pkt2, tx2)).await.is_err() {
+                                error!("{}: SSL actor gone during handshake", get_name());
+                                break;
+                            }
+                            let (pkt3, done) = match rx2.await {
+                                Ok(Ok(v)) => v,
+                                Ok(Err(e)) => { error!("{}: client_key_exchange failed: {:?}", get_name(), e); continue; }
+                                Err(_) => { error!("{}: SSL actor dropped response", get_name()); break; }
+                            };
+
+                            if done {
+                                handshake_done.store(true, Ordering::Release);
+                                info!("{} 🔒 SSL init complete", get_name());
+                            }
+
+                            // ---- Step 4: Change Cipher spec finished ----
+                            let _ = pkt_debug(HexdumpLevel::RawOutput, dmp_level, &pkt3, "MD".parse().unwrap()).await;
+                            if hu_out_tx.send(pkt3).await.is_err() {
+                                error!("{}: HU writer gone", get_name());
+                                break;
+                            }
+                        } else {
+                            // plain passthrough — version request/response and any other
+                            // unencrypted, non-handshake traffic lands here untouched.
+                            if srv_tx.send(msg).await.is_err() {
+                                error!("{} tls proxy send to service error", get_name());
+                            }
+                        }
+                    }
+                }
+                Ok::<(), Box<dyn std::error::Error + Send + Sync>>(())
+            })
+        };
+
+        // =====================================================================
+        // SRV -> (encrypt) -> HU
+        // =====================================================================
+        let srv_task = {
+            let ssl_tx = ssl_tx.clone();
+            let handshake_done = handshake_done.clone();
+            let hu_out_tx = hu_out_tx.clone();
+
+            tokio::spawn(async move {
+                loop {
+                    tokio::select! {
+                        biased;
+                        Some(mut msg) = srv_rx.recv() =>{
+                            if srv_rx.capacity() < 50 {
+                                info!("{}: scrcpy/srv queue: {}/{}", get_name(), 200 - srv_rx.capacity(), 200);
+                            }
+                            if msg.flags & ENCRYPTED != 0
+                            {
+                                if !handshake_done.load(Ordering::Acquire) {
+                                    error!("{}: tls proxy error: received encrypted message from service before TLS handshake", get_name());
+                                    continue;
+                                }
+                                let (tx, rx) = oneshot::channel();
+                                if ssl_tx.send(SslRequest::Encrypt(msg, tx)).await.is_err() {
+                                    error!("{}: SSL actor gone, aborting SRV task", get_name());
+                                    return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SSL actor gone")) as Box<dyn std::error::Error + Send + Sync>);
+                                }
+
+                                match rx.await {
+                                    Ok(Ok(msg)) => {
+                                        w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
+                                        if msg.payload.len() > MAX_PACKET_LEN {
+                                            error!("tls_proxy SRV>HU packet payload too big, got {}", msg.payload.len());
+                                        }
+                                        if hu_out_tx.send(msg).await.is_err() {
+                                            return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SRV>HU channel closed"))
+                                                as Box<dyn std::error::Error + Send + Sync>);
+                                        }
+                                    }
+                                    Ok(Err(e)) => {
+                                        error!("{} encrypt_payload error: {:?}", get_name(), e);
+                                        return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SRV>HU encrypt_payload error"))
+                                            as Box<dyn std::error::Error + Send + Sync>);
+                                    }
+                                    Err(_) => {
+                                        return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SSL actor gone"))
+                                            as Box<dyn std::error::Error + Send + Sync>);
+                                    }
+                                }
+                            }
+                            else
+                            {
+                                // plain passthrough (e.g. version response) — no SSL involved
+                                w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
+                                if hu_out_tx.send(msg).await.is_err() {
+                                    return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SRV>HU channel closed"))
+                                        as Box<dyn std::error::Error + Send + Sync>);
+                                }
+                            }
+                        }
+                        Some(pkt) = audio_rx.recv() => {
+                            let (tx, rx) = oneshot::channel();
+                            if ssl_tx.send(SslRequest::Encrypt(pkt, tx)).await.is_err() {
+                                    error!("{}: SSL actor gone, aborting SRV task", get_name());
+                                    return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SSL actor gone")) as Box<dyn std::error::Error + Send + Sync>);
+                                }
+                        }
+                        Some(pkt) = video_rx.recv() => {
+                            let (tx, rx) = oneshot::channel();
+                            if ssl_tx.send(SslRequest::Encrypt(pkt, tx)).await.is_err() {
+                                    error!("{}: SSL actor gone, aborting SRV task", get_name());
+                                    return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SSL actor gone")) as Box<dyn std::error::Error + Send + Sync>);
+                                }
+                        }
+                        else =>
+                        {
+                            info!("{}: srv_rx closed, SRV task exiting", get_name());
+                            break;
+                        }
+                    }
+                    let Some(mut msg) = srv_rx.recv().await else {
+                        info!("{}: srv_rx closed, SRV task exiting", get_name());
+                        break;
+                    };
+                }
+                Ok(())
+            })
+        };
+
+        drop(ssl_tx);
+        drop(hu_out_tx);
+
+        let (hu_res, srv_res) = tokio::join!(hu_task, srv_task);
+        hu_res.map_err(|e| Box::new(io::Error::new(io::ErrorKind::Other, format!("HU task panicked: {e:?}"))) as Box<dyn std::error::Error + Send + Sync>)??;
+        srv_res.map_err(|e| Box::new(io::Error::new(io::ErrorKind::Other, format!("SRV task panicked: {e:?}"))) as Box<dyn std::error::Error + Send + Sync>)??;
+
+        let _ = hu_writer.await;
+
+        Ok(())
+        /*loop {
             tokio::select! {
             biased;
             // High priority, HU>Service/SCRCPY
@@ -758,11 +1111,13 @@ impl TlsPacketProxy
             }
         }
 
-        Ok(())
+        Ok(())*/
     }
     pub fn start<A: Endpoint<A> + 'static>(self, hu_wr: IoDevice<A>,
                                            hu_rx: Receiver<Packet>,
                                            md_rx: Receiver<Packet>,
+                                           audio_rx: Option<Receiver<Packet>>,
+                                           video_rx: Option<Receiver<Packet>>,
                                            md_tx: Option<IoDevice<TcpStream>>,
                                            srv_tx: Option<Sender<Packet>>,
     ) -> Result<JoinHandle<Result<()>>> {
@@ -784,8 +1139,10 @@ impl TlsPacketProxy
         }
         else {
             let srv_tx = srv_tx.ok_or_else(|| anyhow!("srv_tx is NONE"))?;
+            let audio_rx = audio_rx.ok_or_else(|| anyhow!("audio_rx is NONE"))?;
+            let video_rx = video_rx.ok_or_else(|| anyhow!("video_rx is NONE"))?;
             Ok(tokio_uring::spawn(async move {
-                self.run_mirror(hu_wr, hu_rx, md_rx, srv_tx).await
+                self.run_mirror(hu_wr, hu_rx, audio_rx, video_rx, md_rx, srv_tx).await
             }))
         }
 
