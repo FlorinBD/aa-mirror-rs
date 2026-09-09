@@ -863,7 +863,7 @@ impl TlsPacketProxy
                             {
                                 if !handshake_done.load(Ordering::Acquire) {
                                     error!("{}: tls proxy error: received encrypted message from service before TLS handshake", get_name());
-                                    break;
+                                    return Err(Box::new(io::Error::new(io::ErrorKind::Other, "received encrypted message from service before TLS handshake")) as Box<dyn std::error::Error + Send + Sync>);
                                 }
                                 match Self::encrypt_and_send(msg, &ssl_tx, &hu_out_tx).await {
                                     Ok(size) => {
@@ -872,7 +872,7 @@ impl TlsPacketProxy
 
                                     Err(e) => {
                                         error!("{}: service encrypt error: {:?}", get_name(), e);
-                                        break;
+                                        return Err(e);
                                     }
                                 }
                             }
@@ -896,7 +896,7 @@ impl TlsPacketProxy
 
                                 Err(e) => {
                                     error!("{}: audio encrypt error: {:?}", get_name(), e);
-                                    break;
+                                    return Err(e);
                                 }
                             }
                         }
@@ -911,14 +911,14 @@ impl TlsPacketProxy
 
                                 Err(e) => {
                                     error!("{}: video encrypt error: {:?}", get_name(), e);
-                                    break;
+                                    return Err(e);
                                 }
                             }
                         }
                         else =>
                         {
                             info!("{}: srv_rx closed, SRV task exiting", get_name());
-                            break;
+                            return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SRV>HU channel closed")) as Box<dyn std::error::Error + Send + Sync>);
                         }
                     }
                 }
