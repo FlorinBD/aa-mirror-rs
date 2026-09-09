@@ -843,43 +843,34 @@ impl TlsPacketProxy
 
             tokio_uring::spawn(async move {
                 loop {
+                    // Audio has priority: drain everything currently queued.
+                    while let Ok(pkt) = audio_rx.try_recv() {
+                        match Self::encrypt_and_send(pkt, &ssl_tx, &hu_out_tx).await {
+                            Ok(size) => {
+                                w_statistics.fetch_add(size, Ordering::Relaxed);
+                            }
+
+                            Err(e) => {
+                                error!("{}: audio encrypt error: {:?}", get_name(), e);
+                            }
+                        }
+                    }
                     tokio::select! {
                         biased;
                         Some(mut msg) = srv_rx.recv() =>{
-                            if srv_rx.capacity() < 50 {
-                                info!("{}: scrcpy/srv queue: {}/{}", get_name(), 200 - srv_rx.capacity(), 200);
-                            }
                             if msg.flags & ENCRYPTED != 0
                             {
                                 if !handshake_done.load(Ordering::Acquire) {
                                     error!("{}: tls proxy error: received encrypted message from service before TLS handshake", get_name());
                                     continue;
                                 }
-                                let (tx, rx) = oneshot::channel();
-                                if ssl_tx.send(SslRequest::Encrypt(msg, tx)).await.is_err() {
-                                    error!("{}: SSL actor gone, aborting SRV task", get_name());
-                                    return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SSL actor gone")) as Box<dyn std::error::Error + Send + Sync>);
-                                }
+                                match Self::encrypt_and_send(msg, &ssl_tx, &hu_out_tx).await {
+                                    Ok(size) => {
+                                        w_statistics.fetch_add(size, Ordering::Relaxed);
+                                    }
 
-                                match rx.await {
-                                    Ok(Ok(msg)) => {
-                                        w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(), Ordering::Relaxed);
-                                        if msg.payload.len() > MAX_PACKET_LEN {
-                                            error!("tls_proxy SRV>HU packet payload too big, got {}", msg.payload.len());
-                                        }
-                                        if hu_out_tx.send(msg).await.is_err() {
-                                            return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SRV>HU channel closed"))
-                                                as Box<dyn std::error::Error + Send + Sync>);
-                                        }
-                                    }
-                                    Ok(Err(e)) => {
-                                        error!("{} encrypt_payload error: {:?}", get_name(), e);
-                                        return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SRV>HU encrypt_payload error"))
-                                            as Box<dyn std::error::Error + Send + Sync>);
-                                    }
-                                    Err(_) => {
-                                        return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SSL actor gone"))
-                                            as Box<dyn std::error::Error + Send + Sync>);
+                                    Err(e) => {
+                                        error!("{}: audio encrypt error: {:?}", get_name(), e);
                                     }
                                 }
                             }
@@ -893,51 +884,30 @@ impl TlsPacketProxy
                             }
                         }
                         Some(pkt) = audio_rx.recv() => {
-                            let (tx, rx) = oneshot::channel();
-                            if ssl_tx.send(SslRequest::Encrypt(pkt, tx)).await.is_err() {
-                                    error!("{}: SSL actor gone, aborting SRV task", get_name());
-                                    return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SSL actor gone")) as Box<dyn std::error::Error + Send + Sync>);
+                            if audio_rx.capacity() < 50 {
+                                info!("{}: audio_rx queue: {}/{}", get_name(), 200 - srv_rx.capacity(), 200);
                             }
-                            match rx.await {
-                                Ok(Ok(msg)) => {
-                                    w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(),Ordering::Relaxed,);
-
-                                    if hu_out_tx.send(msg).await.is_err() {
-                                        return Err(Box::new(io::Error::new(io::ErrorKind::Other,"SRV>HU channel closed",)) as Box<dyn std::error::Error + Send + Sync>);
-                                    }
+                            match Self::encrypt_and_send(pkt, &ssl_tx, &hu_out_tx).await {
+                                Ok(size) => {
+                                    w_statistics.fetch_add(size, Ordering::Relaxed);
                                 }
 
-                                Ok(Err(e)) => {
+                                Err(e) => {
                                     error!("{}: audio encrypt error: {:?}", get_name(), e);
-                                }
-
-                                Err(_) => {
-                                    error!("{}: SSL actor gone", get_name());
-                                    return Err(Box::new(io::Error::new(io::ErrorKind::Other,"SSL actor gone",)) as Box<dyn std::error::Error + Send + Sync>);
                                 }
                             }
                         }
                         Some(pkt) = video_rx.recv() => {
-                            let (tx, rx) = oneshot::channel();
-                            if ssl_tx.send(SslRequest::Encrypt(pkt, tx)).await.is_err() {
-                                    error!("{}: SSL actor gone, aborting SRV task", get_name());
-                                    return Err(Box::new(io::Error::new(io::ErrorKind::Other, "SSL actor gone")) as Box<dyn std::error::Error + Send + Sync>);
+                            if video_rx.capacity() < 50 {
+                                info!("{}: video_rx queue: {}/{}", get_name(), 200 - srv_rx.capacity(), 200);
                             }
-                            match rx.await {
-                                Ok(Ok(msg)) => {
-                                    w_statistics.fetch_add(HEADER_LENGTH + msg.payload.len(),Ordering::Relaxed,);
-                                    if hu_out_tx.send(msg).await.is_err() {
-                                        return Err(Box::new(io::Error::new(io::ErrorKind::Other,"SRV>HU channel closed",)) as Box<dyn std::error::Error + Send + Sync>);
-                                    }
+                            match Self::encrypt_and_send(pkt, &ssl_tx, &hu_out_tx).await {
+                                Ok(size) => {
+                                    w_statistics.fetch_add(size, Ordering::Relaxed);
                                 }
 
-                                Ok(Err(e)) => {
+                                Err(e) => {
                                     error!("{}: video encrypt error: {:?}", get_name(), e);
-                                }
-
-                                Err(_) => {
-                                    error!("{}: SSL actor gone", get_name());
-                                    return Err(Box::new(io::Error::new(io::ErrorKind::Other,"SSL actor gone",)) as Box<dyn std::error::Error + Send + Sync>);
                                 }
                             }
                         }
@@ -962,6 +932,30 @@ impl TlsPacketProxy
         let _ = hu_writer.await;
 
         Ok(())
+    }
+
+    async fn encrypt_and_send(pkt: Packet, ssl_tx: &Sender<SslRequest>, hu_out_tx: &Sender<Packet>,) -> Result<usize> {
+        let (tx, rx) = oneshot::channel();
+        ssl_tx.send(SslRequest::Encrypt(pkt, tx)).await.map_err(|_| io::Error::new(io::ErrorKind::Other, "SSL actor gone"))?;
+        match rx.await {
+            Ok(Ok(msg)) => {
+                if msg.payload.len() > MAX_PACKET_LEN {
+                    error!("tls_proxy SRV>HU packet payload too big, got {}", msg.payload.len());
+                    return Err(io::Error::new(io::ErrorKind::Other, "SSL Packet too big", ).into());
+                }
+                let size = HEADER_LENGTH + msg.payload.len();
+                hu_out_tx.send(msg).await.map_err(|_| io::Error::new(io::ErrorKind::Other, "SRV>HU channel closed"))?;
+                Ok(size)
+            }
+
+            Ok(Err(e)) => {
+                return Err(e);
+            }
+
+            Err(_) => {
+                return Err(io::Error::new(io::ErrorKind::Other, "SSL actor gone", ).into());
+            }
+        }
     }
     pub fn start<A: Endpoint<A> + 'static>(self, hu_wr: IoDevice<A>,
                                            hu_rx: Receiver<Packet>,
