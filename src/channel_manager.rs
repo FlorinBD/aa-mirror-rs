@@ -270,7 +270,7 @@ impl SslActor {
     async fn client_hello(&mut self, msg: Packet) -> Result<Packet>
     {
         msg.ssl_decapsulate_write(&mut self.mem_buf).await?;
-        self.ssl_check_failure(self.server.accept())?;
+        Self::ssl_check_failure(self.server.accept())?;
         info!("🔒 stage #1 of 2: SSL handshake: {}", self.server.ssl().state_string_long());
         self.ssl_encapsulate(self.mem_buf.clone()).await
     }
@@ -278,7 +278,7 @@ impl SslActor {
     async fn client_key_exchange(&mut self, msg: Packet) -> Result<(Packet, bool)>
     {
         msg.ssl_decapsulate_write(&mut self.mem_buf).await?;
-        self.ssl_check_failure(self.server.accept())?;
+        Self::ssl_check_failure(self.server.accept())?;
         info!("🔒 stage #2 of 2: SSL handshake: {}", self.server.ssl().state_string_long());
         let done=self.server.ssl().is_init_finished();
         if done
