@@ -781,8 +781,8 @@ pub async fn io_loop_aa(
             continue;
         }
         // these will be used for cleanup
-        let mut md_tcp_stream = None;
-        let mut hu_tcp_stream = None;
+        //let mut md_tcp_stream = None;
+        //let mut hu_tcp_stream = None;
         // selecting I/O device for reading and writing
         // and creating desired objects for proxy functions
         // MD using TCP stream (wireless)
