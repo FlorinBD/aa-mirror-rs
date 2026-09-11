@@ -165,7 +165,7 @@ impl Packet {
 
 
     /// composes a final frame and transmits it to endpoint device (HU/MD)
-    pub async fn transmit<A: Endpoint<A>>(
+    pub async fn transmit<A: Endpoint<A> + Send>(
         &self,
         device: &mut IoDevice<A>,
     ) -> std::result::Result<usize, std::io::Error> {
@@ -664,7 +664,7 @@ impl TlsPacketProxy
         Ok(())
     }
 
-    async fn run_mirror<A: Endpoint<A> + 'static>(mut self, mut hu_wr: IoDevice<A>,
+    async fn run_mirror<A: Endpoint<A> + Send + 'static>(mut self, mut hu_wr: IoDevice<A>,
                                         mut hu_rx: Receiver<Packet>,
                                         mut audio_rx: Receiver<Packet>,
                                         mut video_rx: Receiver<Packet>,
@@ -1372,7 +1372,7 @@ pub async fn pkt_debug(
 }
 
 /// reads all available data to VecDeque
-async fn read_input_data<A: Endpoint<A>>(
+async fn read_input_data<A: Endpoint<A>+ Send>(
     rbuf: &mut VecDeque<u8>,
     obj: &mut IoDevice<A>,
 ) -> Result<usize> {
@@ -1417,7 +1417,7 @@ async fn read_input_data<A: Endpoint<A>>(
 }
 
 /// main reader thread for a device
-pub async fn endpoint_reader<A: Endpoint<A>>(
+pub async fn endpoint_reader<A: Endpoint<A> + Send>(
     mut device: IoDevice<A>,
     tx: Sender<Packet>,
 ) -> Result<()> {

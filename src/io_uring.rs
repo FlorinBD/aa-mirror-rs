@@ -71,10 +71,10 @@ use crate::usb_stream::{UsbStreamRead, UsbStreamWrite};
 // for this, to be able to use it in a generic copy() function below.
 
 pub trait Endpoint<E> {
-    fn read(&mut self, buf: &mut [u8]) -> impl std::future::Future<Output = io::Result<usize>> + Send;
-    fn write(&mut self, buf: &[u8]) -> impl std::future::Future<Output = io::Result<usize>> + Send;
+    fn read<'a>(&'a mut self, buf: &'a mut [u8]) -> impl std::future::Future<Output = io::Result<usize>> + Send + 'a;
+    fn write<'a>(&'a mut self, buf: &'a [u8]) -> impl std::future::Future<Output = io::Result<usize>> + Send + 'a;
 
-    fn write_all(&mut self, mut buf: &[u8]) -> impl std::future::Future<Output = io::Result<()>> + Send
+    fn write_all<'a>(&'a mut self, mut buf: &'a [u8]) -> impl std::future::Future<Output = io::Result<()>> + Send + 'a
     where
         Self: Send,
     {
@@ -92,19 +92,19 @@ pub trait Endpoint<E> {
 }
 
 impl Endpoint<File> for File {
-    fn read(&mut self, buf: &mut [u8]) -> impl std::future::Future<Output = io::Result<usize>> + Send {
+    fn read<'a>(&'a mut self, buf: &'a mut [u8]) -> impl std::future::Future<Output = io::Result<usize>> + Send + 'a {
         AsyncReadExt::read(self, buf)
     }
-    fn write(&mut self, buf: &[u8]) -> impl std::future::Future<Output = io::Result<usize>> + Send {
+    fn write<'a>(&'a mut self, buf: &'a [u8]) -> impl std::future::Future<Output = io::Result<usize>> + Send + 'a {
         AsyncWriteExt::write(self, buf)
     }
 }
 
 impl Endpoint<TcpStream> for TcpStream {
-    fn read(&mut self, buf: &mut [u8]) -> impl std::future::Future<Output = io::Result<usize>> + Send {
+    fn read<'a>(&'a mut self, buf: &'a mut [u8]) -> impl std::future::Future<Output = io::Result<usize>> + Send + 'a {
         AsyncReadExt::read(self, buf)
     }
-    fn write(&mut self, buf: &[u8]) -> impl std::future::Future<Output = io::Result<usize>> + Send {
+    fn write<'a>(&'a mut self, buf: &'a [u8]) -> impl std::future::Future<Output = io::Result<usize>> + Send + 'a {
         AsyncWriteExt::write(self, buf)
     }
 }
@@ -130,7 +130,7 @@ impl CancelSlot {
     }
 }
 
-pub enum IoDevice<A: Endpoint<A>> {
+pub enum IoDevice<A: Endpoint<A> + Send> {
     UsbReader(Arc<tokio::sync::Mutex<UsbStreamRead>>, PhantomData<A>),
     UsbWriter(Arc<tokio::sync::Mutex<UsbStreamWrite>>, PhantomData<A>),
     EndpointIo(Arc<tokio::sync::Mutex<A>>),
