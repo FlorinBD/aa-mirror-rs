@@ -190,17 +190,17 @@ impl Packet {
                 AsyncWriteExt::write_all(&mut *dev, &frame).await?;
                 Ok(frame_len)
             }
-            IoDevice::EndpointIo(device) => {
+            IoDevice::EndpointWriter(device) => {
                 let mut dev = device.lock().await;
                 dev.write_all(&frame).await?;
                 Ok(frame_len)
             }
-            IoDevice::TcpStreamIo(device) => {
+            IoDevice::TcpStreamWriter(device) => {
                 let mut dev = device.lock().await;
                 AsyncWriteExt::write_all(&mut *dev, &frame).await?;
                 Ok(frame_len)
             }
-            _ => todo!(),
+            _ => todo!(), // read-side variants should never reach transmit
         }
     }
 
@@ -1385,30 +1385,30 @@ async fn read_input_data<A: Endpoint<A>+ Send>(
             len = dev.read(&mut newdata).await
                 .context("read_input_data: UsbReader read error")?;
         }
-        IoDevice::EndpointIo(device) => {
+        IoDevice::EndpointReader(device) => {
             let retval = async {
                 let mut dev = device.lock().await;
                 dev.read(&mut newdata).await
             };
             len = timeout(Duration::from_millis(15000), retval)
                 .await
-                .context("read_input_data: EndpointIo timeout")?
-                .context("read_input_data: EndpointIo read error")?;
+                .context("read_input_data: EndpointReader timeout")?
+                .context("read_input_data: EndpointReader read error")?;
         }
-        IoDevice::TcpStreamIo(device) => {
+        IoDevice::TcpStreamReader(device) => {
             let retval = async {
                 let mut dev = device.lock().await;
                 AsyncReadExt::read(&mut *dev, &mut newdata).await
             };
             len = timeout(Duration::from_millis(15000), retval)
                 .await
-                .context("read_input_data: TcpStreamIo timeout")?
-                .context("read_input_data: TcpStreamIo read error")?;
+                .context("read_input_data: TcpStreamReader timeout")?
+                .context("read_input_data: TcpStreamReader read error")?;
             if len == 0 {
-                return Err("read_input_data: TcpStreamIo EOF".into());
+                return Err("read_input_data: TcpStreamReader EOF".into());
             }
         }
-        _ => todo!(),
+        _ => todo!(), // write-side variants should never reach read_input_data
     }
     if len > 0 {
         rbuf.extend(&newdata[..len]);

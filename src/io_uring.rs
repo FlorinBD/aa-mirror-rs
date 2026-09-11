@@ -27,6 +27,7 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
 use tokio::fs::File;
 use tokio::fs::OpenOptions;
+use tokio::net::tcp::{OwnedReadHalf, OwnedWriteHalf};
 use tokio::net::TcpListener;
 use tokio::net::TcpStream;
 use tokio_uring::BufResult;
@@ -130,11 +131,13 @@ impl CancelSlot {
     }
 }
 
-pub enum IoDevice<A: Endpoint<A> + Send> {
+pub enum IoDevice<A: Endpoint<A>> {
     UsbReader(Arc<tokio::sync::Mutex<UsbStreamRead>>, PhantomData<A>),
     UsbWriter(Arc<tokio::sync::Mutex<UsbStreamWrite>>, PhantomData<A>),
-    EndpointIo(Arc<tokio::sync::Mutex<A>>),
-    TcpStreamIo(Arc<tokio::sync::Mutex<TcpStream>>),
+    EndpointReader(Arc<tokio::sync::Mutex<A>>),
+    EndpointWriter(Arc<tokio::sync::Mutex<A>>),
+    TcpStreamReader(Arc<tokio::sync::Mutex<OwnedReadHalf>>),
+    TcpStreamWriter(Arc<tokio::sync::Mutex<OwnedWriteHalf>>),
 }
 
 
@@ -598,15 +601,21 @@ pub async fn io_loop_mirror(
         // HU transfer device
         if let Some(hu) = hu_usb {
             // HU connected directly via USB
-            let hu = Arc::new(tokio::sync::Mutex::new(hu));
-            hu_r = IoDevice::EndpointIo(hu.clone());
-            hu_w = IoDevice::EndpointIo(hu.clone());
+            //let hu = Arc::new(tokio::sync::Mutex::new(hu));
+            //hu_r = IoDevice::EndpointIo(hu.clone());
+            //hu_w = IoDevice::EndpointIo(hu.clone());
+            let write_file = hu.try_clone().await?; // duplicates the underlying fd
+            hu_r = IoDevice::EndpointReader(Arc::new(tokio::sync::Mutex::new(hu)));
+            hu_w = IoDevice::EndpointWriter(Arc::new(tokio::sync::Mutex::new(write_file)));
         } else {
             // Head Unit Emulator via TCP
-            let hu = Arc::new(tokio::sync::Mutex::new(hu_tcp.unwrap()));
-            hu_r = IoDevice::TcpStreamIo(hu.clone());
-            hu_w = IoDevice::TcpStreamIo(hu.clone());
-            //hu_tcp_stream = Some(hu.clone());
+            //let hu = Arc::new(tokio::sync::Mutex::new(hu_tcp.unwrap()));
+            //hu_r = IoDevice::TcpStreamIo(hu.clone());
+            //hu_w = IoDevice::TcpStreamIo(hu.clone());
+            let hu = hu_tcp.unwrap();
+            let (read_half, write_half) = hu.into_split();
+            hu_r = IoDevice::TcpStreamReader(Arc::new(tokio::sync::Mutex::new(read_half)));
+            hu_w = IoDevice::TcpStreamWriter(Arc::new(tokio::sync::Mutex::new(write_half)));
         }
         //io channels for AA services
         //MD>TLSProxy
