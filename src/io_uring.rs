@@ -71,35 +71,41 @@ use crate::usb_stream::{UsbStreamRead, UsbStreamWrite};
 // for this, to be able to use it in a generic copy() function below.
 
 pub trait Endpoint<E> {
-    async fn read(&mut self, buf: &mut [u8]) -> io::Result<usize>;
-    async fn write(&mut self, buf: &[u8]) -> io::Result<usize>;
-    async fn write_all(&mut self, mut buf: &[u8]) -> io::Result<()> {
-        while !buf.is_empty() {
-            let n = self.write(buf).await?;
-            if n == 0 {
-                return Err(io::Error::new(io::ErrorKind::WriteZero, "write returned 0"));
+    fn read(&mut self, buf: &mut [u8]) -> impl std::future::Future<Output = io::Result<usize>> + Send;
+    fn write(&mut self, buf: &[u8]) -> impl std::future::Future<Output = io::Result<usize>> + Send;
+
+    fn write_all(&mut self, mut buf: &[u8]) -> impl std::future::Future<Output = io::Result<()>> + Send
+    where
+        Self: Send,
+    {
+        async move {
+            while !buf.is_empty() {
+                let n = self.write(buf).await?;
+                if n == 0 {
+                    return Err(io::Error::new(io::ErrorKind::WriteZero, "write returned 0"));
+                }
+                buf = &buf[n..];
             }
-            buf = &buf[n..];
+            Ok(())
         }
-        Ok(())
     }
 }
 
 impl Endpoint<File> for File {
-    async fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        AsyncReadExt::read(self, buf).await
+    fn read(&mut self, buf: &mut [u8]) -> impl std::future::Future<Output = io::Result<usize>> + Send {
+        AsyncReadExt::read(self, buf)
     }
-    async fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        AsyncWriteExt::write(self, buf).await
+    fn write(&mut self, buf: &[u8]) -> impl std::future::Future<Output = io::Result<usize>> + Send {
+        AsyncWriteExt::write(self, buf)
     }
 }
 
 impl Endpoint<TcpStream> for TcpStream {
-    async fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        AsyncReadExt::read(self, buf).await
+    fn read(&mut self, buf: &mut [u8]) -> impl std::future::Future<Output = io::Result<usize>> + Send {
+        AsyncReadExt::read(self, buf)
     }
-    async fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        AsyncWriteExt::write(self, buf).await
+    fn write(&mut self, buf: &[u8]) -> impl std::future::Future<Output = io::Result<usize>> + Send {
+        AsyncWriteExt::write(self, buf)
     }
 }
 
@@ -470,7 +476,7 @@ pub async fn io_loop_mirror(
     //let tk_cancel=CancellationToken::new();
     let cancel_slot = CancelSlot::new();
     let cfg = shared_config.read().await.clone();
-    let cfg_clone=cfg.clone();
+    //let cfg_clone=cfg.clone();
     let hex_requested = cfg.hexdump_level;
     // prepare/bind needed TCP listeners
     let mut dhu_listener=None;
@@ -483,7 +489,7 @@ pub async fn io_loop_mirror(
     //let start_adb_server = Arc::new(Notify::new());
     let (scrcpy_params_tx, mut scrcpy_params_rx) = tokio::sync::watch::channel(SCRCPYParams::default());
 
-    let mut tsk_adb;
+    let tsk_adb;
     tsk_adb = tokio::spawn(scrcpy::tsk_adb_scrcpy(
         scrcpy_params_rx,
         md_connected.clone(),
@@ -695,7 +701,7 @@ pub async fn io_loop_aa(
     info!("{} 🛰️ Starting TCP server for DHU...", NAME);
     dhu_listener = Some(TcpListener::bind(bind_addr).await?);
     info!("{} 🛰️ DHU TCP server bound to: <u>{}</u>", NAME, bind_addr);
-    let bind_addr = format!("0.0.0.0:{}", TCP_MD_SERVER_PORT).parse().unwrap();
+    let bind_addr:SocketAddr = format!("0.0.0.0:{}", TCP_MD_SERVER_PORT).parse()?;
     let mut md_listener = Some(TcpListener::bind(bind_addr).await?);
     let mut client_mac: Option<MacAddress> = None;
     let mut md_tcp = None;

@@ -465,16 +465,11 @@ fn main() -> Result<()> {
         }
 
 
-        generate_usb_strings(UMTPRD_CONF_IN, UMTPRD_CONF_OUT)
-            .expect("error generating config from template");
+        generate_usb_strings(UMTPRD_CONF_IN, UMTPRD_CONF_OUT).expect("error generating config from template");
 
-        generate_usb_strings(GADGET_INIT_IN, GADGET_INIT_OUT)
-            .expect("error generating config from template");
+        generate_usb_strings(GADGET_INIT_IN, GADGET_INIT_OUT).expect("error generating config from template");
         // make a script executable
-        info!(
-            "{} 🚀 Making script executable: <bold><green>{}</>",
-            NAME, GADGET_INIT_OUT
-        );
+        info!("{} 🚀 Making script executable: <bold><green>{}</>",NAME, GADGET_INIT_OUT);
         let mut perms = fs::metadata(GADGET_INIT_OUT)?.permissions();
         perms.set_mode(0o755); // rwxr-xr-x
         fs::set_permissions(GADGET_INIT_OUT, perms)?;
