@@ -14,7 +14,6 @@ use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::time::timeout;
-use tokio_uring::buf::BoundedBuf;
 
 // protobuf stuff:
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
@@ -27,7 +26,7 @@ use protobuf::text_format::print_to_string_pretty;
 use protobuf::{Enum, Message, MessageDyn};
 use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
-use tokio_uring::net::TcpStream;
+use tokio::net::TcpStream;
 use tokio_util::sync::CancellationToken;
 //use protos::ControlMessageType::{self, *};
 use protos::{ControlMessageType, MediaMessageId};
@@ -177,28 +176,30 @@ impl Packet {
         frame.push((len >> 8) as u8);
         frame.push((len & 0xff) as u8);
         if let Some(final_len) = self.final_length {
-            // adding addional 4-bytes of final_len header
             frame.push((final_len >> 24) as u8);
             frame.push((final_len >> 16) as u8);
             frame.push((final_len >> 8) as u8);
             frame.push((final_len & 0xff) as u8);
         }
+        frame.extend_from_slice(&self.payload);
+
         match device {
             IoDevice::UsbWriter(device, _) => {
-                frame.append(&mut self.payload.clone());
-                let mut dev = device.borrow_mut();
-                dev.write(&frame).await
+                let mut dev = device.lock().await;
+                dev.write_all(&frame).await.expect("UsbWriter: write error");
+                Ok(frame.len())
             }
             IoDevice::EndpointIo(device) => {
-                frame.append(&mut self.payload.clone());
-                device.write(frame).submit().await.0
+                let mut dev = device.lock().await;
+                dev.write_all(&frame).await
             }
             IoDevice::TcpStreamIo(device) => {
-                frame.append(&mut self.payload.clone());
-                device.write(frame).submit().await.0
+                let mut dev = device.lock().await;
+                AsyncWriteExt::write_all(&mut *dev, &frame).await
             }
             _ => todo!(),
         }
+
     }
 
     /// decapsulates SSL payload and writes to SslStream
@@ -678,13 +679,13 @@ impl TlsPacketProxy
         let mut server = openssl::ssl::SslStream::new(ssl, mem_buf.clone())?;
         // ---- SSL actor: sole owner of `server` / `mem_buf` ----
         let (ssl_tx, ssl_rx) = mpsc::channel::<SslRequest>(64);
-        tokio_uring::spawn(SslActor { server, mem_buf }.run(ssl_rx));
+        tokio::spawn(SslActor { server, mem_buf }.run(ssl_rx));
 
         info!( "{}: Starting MIRROR mode message proxy loop...", get_name());
 
         // ---- HU writer: sole owner of hu_wr ----
         let (hu_out_tx, mut hu_out_rx) = mpsc::channel::<Packet>(200);
-        let hu_writer = tokio_uring::spawn(async move {
+        let hu_writer = tokio::spawn(async move {
             while let Some(pkt) = hu_out_rx.recv().await {
                 if let Err(e) = pkt.transmit(&mut hu_wr).await {
                     error!("{}: HU transmit failed: {:?}", get_name(), e);
@@ -710,7 +711,7 @@ impl TlsPacketProxy
             let hu_out_tx = hu_out_tx.clone();
             let srv_tx = srv_tx.clone();
 
-            tokio_uring::spawn(async move {
+            tokio::spawn(async move {
                 loop {
                     let Some(mut msg) = hu_rx.recv().await else {
                         info!("{}: hu_rx closed, HU task exiting", get_name());
@@ -841,7 +842,7 @@ impl TlsPacketProxy
             let handshake_done = handshake_done.clone();
             let hu_out_tx = hu_out_tx.clone();
 
-            tokio_uring::spawn(async move {
+            tokio::spawn(async move {
                 loop {
                     // Audio has priority: drain everything currently queued.
                     while let Ok(pkt) = audio_rx.try_recv() {
@@ -950,13 +951,13 @@ impl TlsPacketProxy
             let md_tx = md_tx.ok_or_else(|| anyhow!("md_tx is NONE"))?;
             if self.cfg.mitm
             {
-                Ok(tokio_uring::spawn(async move {
+                Ok(tokio::spawn(async move {
                     self.run_aa_mitm(hu_wr, hu_rx, md_rx, md_tx).await
                 }))
             }
             else
             {
-                Ok(tokio_uring::spawn(async move {
+                Ok(tokio::spawn(async move {
                     self.run_aa_pt(hu_wr, hu_rx, md_rx, md_tx).await
                 }))
             }
@@ -965,7 +966,7 @@ impl TlsPacketProxy
             let srv_tx = srv_tx.ok_or_else(|| anyhow!("srv_tx is NONE"))?;
             let audio_rx = audio_rx.ok_or_else(|| anyhow!("audio_rx is NONE"))?;
             let video_rx = video_rx.ok_or_else(|| anyhow!("video_rx is NONE"))?;
-            Ok(tokio_uring::spawn(async move {
+            Ok(tokio::spawn(async move {
                 self.run_mirror(hu_wr, hu_rx, audio_rx, video_rx, md_rx, srv_tx).await
             }))
         }
@@ -1374,41 +1375,43 @@ async fn read_input_data<A: Endpoint<A>>(
     obj: &mut IoDevice<A>,
 ) -> Result<usize> {
     let mut newdata = vec![0u8; BUFFER_LEN];
-    let n;
     let len;
 
     match obj {
         IoDevice::UsbReader(device, _) => {
-            let mut dev = device.borrow_mut();
-            let retval = dev.read(&mut newdata);
-            len = retval
-                .await
+            let mut dev = device.lock().await;
+            len = dev.read(&mut newdata).await
                 .context("read_input_data: UsbReader read error")?;
         }
         IoDevice::EndpointIo(device) => {
-            let retval = device.read(newdata);
-            (n, newdata) = timeout(Duration::from_millis(15000), retval)
+            let retval = async {
+                let mut dev = device.lock().await;
+                dev.read(&mut newdata).await
+            };
+            len = timeout(Duration::from_millis(15000), retval)
                 .await
-                .context("read_input_data: EndpointIo timeout")?;
-            len = n.context("read_input_data: EndpointIo read error")?;
+                .context("read_input_data: EndpointIo timeout")?
+                .context("read_input_data: EndpointIo read error")?;
         }
         IoDevice::TcpStreamIo(device) => {
-            let retval = device.read(newdata);
-            (n, newdata) = timeout(Duration::from_millis(15000), retval)
+            let retval = async {
+                let mut dev = device.lock().await;
+                AsyncReadExt::read(&mut *dev, &mut newdata).await
+            };
+            len = timeout(Duration::from_millis(15000), retval)
                 .await
-                .context("read_input_data: TcpStreamIo timeout")?;
-            len = n.context("read_input_data: TcpStreamIo read error")?;
+                .context("read_input_data: TcpStreamIo timeout")?
+                .context("read_input_data: TcpStreamIo read error")?;
             if len == 0 {
-                // TCP EOF means the peer closed the connection; propagate as disconnect.
                 return Err("read_input_data: TcpStreamIo EOF".into());
             }
         }
         _ => todo!(),
     }
     if len > 0 {
-        rbuf.write(&newdata.slice(..len))?;
+        rbuf.extend(&newdata[..len]);
     }
-    Ok((len))
+    Ok(len)
 }
 
 /// main reader thread for a device

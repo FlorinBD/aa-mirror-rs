@@ -552,21 +552,14 @@ fn main() -> Result<()> {
         .await
     });
 
-    // start tokio_uring runtime simultaneously
-    if cfg.aa_mode == AAMode::Mirror
-    {
-        let _ = tokio_uring::start(io_loop_mirror(
-            restart_tx.clone(),
-            config_lck,
-        ));
-    }
-    else
-    {
-        let _ = tokio_uring::start(io_loop_aa(
-            restart_tx.clone(),
-            config_lck,
-        ));
-    }
+    let io_loop_handle = if cfg.aa_mode == AAMode::Mirror {
+        runtime.spawn(io_loop_mirror(restart_tx.clone(), config_lck))
+    } else {
+        runtime.spawn(io_loop_aa(restart_tx.clone(), config_lck))
+    };
+
+    // block the main thread on this task so the process stays alive
+    let _ = runtime.block_on(io_loop_handle);
 
 
     info!(

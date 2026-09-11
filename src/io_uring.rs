@@ -23,14 +23,12 @@ use tokio::task::JoinHandle;
 use tokio::time::{sleep, timeout};
 use tokio::fs::File as TokioFile;
 use tokio::io;
-use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Command;
-use tokio_uring::buf::BoundedBuf;
-use tokio_uring::buf::BoundedBufMut;
-use tokio_uring::fs::File;
-use tokio_uring::fs::OpenOptions;
-use tokio_uring::net::TcpListener;
-use tokio_uring::net::TcpStream;
+use tokio::fs::File;
+use tokio::fs::OpenOptions;
+use tokio::net::TcpListener;
+use tokio::net::TcpStream;
 use tokio_uring::BufResult;
 use tokio_uring::UnsubmittedWrite;
 use tokio_util::sync::CancellationToken;
@@ -73,26 +71,25 @@ use crate::usb_stream::{UsbStreamRead, UsbStreamWrite};
 // for this, to be able to use it in a generic copy() function below.
 
 pub trait Endpoint<E> {
-    #[allow(async_fn_in_trait)]
-    async fn read<T: BoundedBufMut>(&self, buf: T) -> BufResult<usize, T>;
-    fn write<T: BoundedBuf>(&self, buf: T) -> UnsubmittedWrite<T>;
+    async fn read(&mut self, buf: &mut [u8]) -> io::Result<usize>;
+    async fn write(&mut self, buf: &[u8]) -> io::Result<usize>;
 }
 
 impl Endpoint<File> for File {
-    async fn read<T: BoundedBufMut>(&self, buf: T) -> BufResult<usize, T> {
-        self.read_at(buf, 0).await
+    async fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        AsyncReadExt::read(self, buf).await
     }
-    fn write<T: BoundedBuf>(&self, buf: T) -> UnsubmittedWrite<T> {
-        self.write_at(buf, 0)
+    async fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        AsyncWriteExt::write(self, buf).await
     }
 }
 
 impl Endpoint<TcpStream> for TcpStream {
-    async fn read<T: BoundedBufMut>(&self, buf: T) -> BufResult<usize, T> {
-        self.read(buf).await
+    async fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        AsyncReadExt::read(self, buf).await
     }
-    fn write<T: BoundedBuf>(&self, buf: T) -> UnsubmittedWrite<T> {
-        self.write(buf)
+    async fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        AsyncWriteExt::write(self, buf).await
     }
 }
 
@@ -118,10 +115,10 @@ impl CancelSlot {
 }
 
 pub enum IoDevice<A: Endpoint<A>> {
-    UsbReader(Rc<RefCell<UsbStreamRead>>, PhantomData<A>),
-    UsbWriter(Rc<RefCell<UsbStreamWrite>>, PhantomData<A>),
-    EndpointIo(Rc<A>),
-    TcpStreamIo(Rc<TcpStream>),
+    UsbReader(Arc<tokio::sync::Mutex<UsbStreamRead>>, PhantomData<A>),
+    UsbWriter(Arc<tokio::sync::Mutex<UsbStreamWrite>>, PhantomData<A>),
+    EndpointIo(Arc<tokio::sync::Mutex<A>>),
+    TcpStreamIo(Arc<tokio::sync::Mutex<TcpStream>>),
 }
 
 
@@ -477,7 +474,7 @@ pub async fn io_loop_mirror(
     let (scrcpy_params_tx, mut scrcpy_params_rx) = tokio::sync::watch::channel(SCRCPYParams::default());
 
     let mut tsk_adb;
-    tsk_adb = tokio_uring::spawn(scrcpy::tsk_adb_scrcpy(
+    tsk_adb = tokio::spawn(scrcpy::tsk_adb_scrcpy(
         scrcpy_params_rx,
         md_connected.clone(),
         cancel_slot.clone(),
@@ -585,12 +582,12 @@ pub async fn io_loop_mirror(
         // HU transfer device
         if let Some(hu) = hu_usb {
             // HU connected directly via USB
-            let hu = Rc::new(hu);
+            let hu = Arc::new(tokio::sync::Mutex::new(hu));
             hu_r = IoDevice::EndpointIo(hu.clone());
             hu_w = IoDevice::EndpointIo(hu.clone());
         } else {
             // Head Unit Emulator via TCP
-            let hu = Rc::new(hu_tcp.unwrap());
+            let hu = Arc::new(tokio::sync::Mutex::new(hu_tcp.unwrap()));
             hu_r = IoDevice::TcpStreamIo(hu.clone());
             hu_w = IoDevice::TcpStreamIo(hu.clone());
             //hu_tcp_stream = Some(hu.clone());
@@ -603,7 +600,7 @@ pub async fn io_loop_mirror(
         //TLSProxy>MD
         let (tx_proxy, rx_srv):   (Sender<Packet>, Receiver<Packet>) = mpsc::channel(50);
         // dedicated reading threads:
-        tsk_hu_read = tokio_uring::spawn(endpoint_reader(hu_r, txr_hu));
+        tsk_hu_read = tokio::spawn(endpoint_reader(hu_r, txr_hu));
 
         //service packet proxy
         let pp= TlsPacketProxy::new(stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested, cfg.clone());
@@ -614,7 +611,7 @@ pub async fn io_loop_mirror(
         tsk_ch_manager =svrmgr.start(cancel.clone());
 
         // Thread for monitoring transfer
-        let mut tsk_monitor = tokio_uring::spawn(transfer_monitor(
+        let mut tsk_monitor = tokio::spawn(transfer_monitor(
             stats_interval,
             stats_w_bytes,
             stats_r_bytes,
@@ -764,7 +761,7 @@ pub async fn io_loop_aa(
         // selecting I/O device for reading and writing
         // and creating desired objects for proxy functions
         // MD using TCP stream (wireless)
-        let md = Rc::new(md_tcp.unwrap());
+        let md = Arc::new(tokio::sync::Mutex::new(md_tcp.unwrap()));
         let md_r = IoDevice::EndpointIo(md.clone());
         let md_w = IoDevice::EndpointIo(md.clone());
         md_tcp_stream = Some(md.clone());
@@ -850,27 +847,27 @@ pub async fn io_loop_aa(
         // HU transfer device
         if let Some(hu) = hu_usb {
             // HU connected directly via USB
-            let hu = Rc::new(hu);
+            let hu = Arc::new(tokio::sync::Mutex::new(hu));
             hu_r = IoDevice::EndpointIo(hu.clone());
             hu_w = IoDevice::EndpointIo(hu.clone());
         } else {
             // Head Unit Emulator via TCP
-            let hu = Rc::new(hu_tcp.unwrap());
+            let hu = Arc::new(tokio::sync::Mutex::new(hu_tcp.unwrap()));
             hu_r = IoDevice::TcpStreamIo(hu.clone());
             hu_w = IoDevice::TcpStreamIo(hu.clone());
             hu_tcp_stream = Some(hu.clone());
         }
 
         // dedicated reading threads:
-        tsk_hu_read = tokio_uring::spawn(endpoint_reader(hu_r, tx_hu));
-        tsk_md_read = tokio_uring::spawn(endpoint_reader(md_r, tx_md));
+        tsk_hu_read = tokio::spawn(endpoint_reader(hu_r, tx_hu));
+        tsk_md_read = tokio::spawn(endpoint_reader(md_r, tx_md));
 
         //packet proxy
         let pp= TlsPacketProxy::new(stats_r_bytes.clone(), stats_w_bytes.clone(), hex_requested, cfg.clone());
         let mut tsk_packet_proxy=pp.start(hu_w, rx_hu, rx_md, None, None, Some(md_w), None)?;
 
         // Thread for monitoring transfer
-        let mut tsk_monitor = tokio_uring::spawn(transfer_monitor(
+        let mut tsk_monitor = tokio::spawn(transfer_monitor(
             stats_interval,
             stats_w_bytes,
             stats_r_bytes,
