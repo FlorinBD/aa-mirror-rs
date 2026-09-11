@@ -474,7 +474,7 @@ pub async fn io_loop_mirror(
     let hex_requested = cfg.hexdump_level;
     // prepare/bind needed TCP listeners
     let mut dhu_listener=None;
-    let bind_addr = format!("0.0.0.0:{}", TCP_DHU_PORT).parse().unwrap();
+    let bind_addr:SocketAddr = format!("0.0.0.0:{}", TCP_DHU_PORT).parse()?;
     info!("{} 🛰️ Starting TCP server for DHU...", NAME);
     dhu_listener = Some(TcpListener::bind(bind_addr).await?);
     info!("{} 🛰️ DHU TCP server bound to: <u>{}</u>", NAME, bind_addr);
@@ -691,7 +691,7 @@ pub async fn io_loop_aa(
     let hex_requested = cfg.hexdump_level;
     // prepare/bind needed TCP listeners
     let mut dhu_listener=None;
-    let bind_addr = format!("0.0.0.0:{}", TCP_DHU_PORT).parse().unwrap();
+    let bind_addr:SocketAddr= format!("0.0.0.0:{}", TCP_DHU_PORT).parse()?;
     info!("{} 🛰️ Starting TCP server for DHU...", NAME);
     dhu_listener = Some(TcpListener::bind(bind_addr).await?);
     info!("{} 🛰️ DHU TCP server bound to: <u>{}</u>", NAME, bind_addr);
