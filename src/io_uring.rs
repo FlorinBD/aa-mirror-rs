@@ -791,8 +791,8 @@ pub async fn io_loop_aa(
         //let md_w = IoDevice::EndpointIo(md.clone());
         let md = md_tcp.unwrap();
         let (read_half, write_half) = md.into_split();
-        let md_r = IoDevice::TcpStreamReader(Arc::new(tokio::sync::Mutex::new(read_half)));
-        let md_w = IoDevice::TcpStreamWriter(Arc::new(tokio::sync::Mutex::new(write_half)));
+        let md_r:IoDevice<TcpStream> = IoDevice::TcpStreamReader(Arc::new(tokio::sync::Mutex::new(read_half)));
+        let md_w:IoDevice<TcpStream> = IoDevice::TcpStreamWriter(Arc::new(tokio::sync::Mutex::new(write_half)));
 
 
         let read_timeout = Duration::from_secs(cfg.timeout_secs.into());
