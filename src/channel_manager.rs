@@ -182,24 +182,26 @@ impl Packet {
             frame.push((final_len & 0xff) as u8);
         }
         frame.extend_from_slice(&self.payload);
+        let frame_len = frame.len();
 
         match device {
             IoDevice::UsbWriter(device, _) => {
                 let mut dev = device.lock().await;
-                dev.write_all(&frame).await.expect("UsbWriter: write error");
-                Ok(frame.len())
+                AsyncWriteExt::write_all(&mut *dev, &frame).await?;
+                Ok(frame_len)
             }
             IoDevice::EndpointIo(device) => {
                 let mut dev = device.lock().await;
-                dev.write_all(&frame).await
+                dev.write_all(&frame).await?;
+                Ok(frame_len)
             }
             IoDevice::TcpStreamIo(device) => {
                 let mut dev = device.lock().await;
-                AsyncWriteExt::write_all(&mut *dev, &frame).await
+                AsyncWriteExt::write_all(&mut *dev, &frame).await?;
+                Ok(frame_len)
             }
             _ => todo!(),
         }
-
     }
 
     /// decapsulates SSL payload and writes to SslStream
@@ -938,7 +940,7 @@ impl TlsPacketProxy
 
         Ok(())
     }
-    pub fn start<A: Endpoint<A> + 'static>(self, hu_wr: IoDevice<A>,
+    pub fn start<A: Endpoint<A> + Send +'static>(self, hu_wr: IoDevice<A>,
                                            hu_rx: Receiver<Packet>,
                                            md_rx: Receiver<Packet>,
                                            audio_rx: Option<Receiver<Packet>>,

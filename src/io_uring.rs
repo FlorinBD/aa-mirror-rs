@@ -73,6 +73,16 @@ use crate::usb_stream::{UsbStreamRead, UsbStreamWrite};
 pub trait Endpoint<E> {
     async fn read(&mut self, buf: &mut [u8]) -> io::Result<usize>;
     async fn write(&mut self, buf: &[u8]) -> io::Result<usize>;
+    async fn write_all(&mut self, mut buf: &[u8]) -> io::Result<()> {
+        while !buf.is_empty() {
+            let n = self.write(buf).await?;
+            if n == 0 {
+                return Err(io::Error::new(io::ErrorKind::WriteZero, "write returned 0"));
+            }
+            buf = &buf[n..];
+        }
+        Ok(())
+    }
 }
 
 impl Endpoint<File> for File {
@@ -466,7 +476,7 @@ pub async fn io_loop_mirror(
     let mut dhu_listener=None;
     let bind_addr = format!("0.0.0.0:{}", TCP_DHU_PORT).parse().unwrap();
     info!("{} 🛰️ Starting TCP server for DHU...", NAME);
-    dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
+    dhu_listener = Some(TcpListener::bind(bind_addr).await?);
     info!("{} 🛰️ DHU TCP server bound to: <u>{}</u>", NAME, bind_addr);
 
     let md_connected = Arc::new(Notify::new());
@@ -683,10 +693,10 @@ pub async fn io_loop_aa(
     let mut dhu_listener=None;
     let bind_addr = format!("0.0.0.0:{}", TCP_DHU_PORT).parse().unwrap();
     info!("{} 🛰️ Starting TCP server for DHU...", NAME);
-    dhu_listener = Some(TcpListener::bind(bind_addr).unwrap());
+    dhu_listener = Some(TcpListener::bind(bind_addr).await?);
     info!("{} 🛰️ DHU TCP server bound to: <u>{}</u>", NAME, bind_addr);
     let bind_addr = format!("0.0.0.0:{}", TCP_MD_SERVER_PORT).parse().unwrap();
-    let mut md_listener = Some(TcpListener::bind(bind_addr).unwrap());
+    let mut md_listener = Some(TcpListener::bind(bind_addr).await?);
     let mut client_mac: Option<MacAddress> = None;
     let mut md_tcp = None;
     let mut bt_stopped=false;
@@ -898,10 +908,12 @@ pub async fn io_loop_aa(
 
         // make sure TCP connections are closed before next connection attempts
         if let Some(stream) = md_tcp_stream {
-            let _ = stream.shutdown(std::net::Shutdown::Both);
+            let mut stream = stream.lock().await;
+            let _ = stream.shutdown();
         }
         if let Some(stream) = hu_tcp_stream {
-            let _ = stream.shutdown(std::net::Shutdown::Both);
+            let mut stream = stream.lock().await;
+            let _ = stream.shutdown();
         }
 
         // Disassociate a client from the WiFi AP.
