@@ -786,10 +786,14 @@ pub async fn io_loop_aa(
         // selecting I/O device for reading and writing
         // and creating desired objects for proxy functions
         // MD using TCP stream (wireless)
-        let md = Arc::new(tokio::sync::Mutex::new(md_tcp.unwrap()));
-        let md_r = IoDevice::EndpointIo(md.clone());
-        let md_w = IoDevice::EndpointIo(md.clone());
-        md_tcp_stream = Some(md.clone());
+        //let md = Arc::new(tokio::sync::Mutex::new(md_tcp.unwrap()));
+        //let md_r = IoDevice::EndpointIo(md.clone());
+        //let md_w = IoDevice::EndpointIo(md.clone());
+        let md = md_tcp.unwrap();
+        let (read_half, write_half) = md.into_split();
+        let md_r = IoDevice::TcpStreamReader(Arc::new(tokio::sync::Mutex::new(read_half)));
+        let md_w = IoDevice::TcpStreamWriter(Arc::new(tokio::sync::Mutex::new(write_half)));
+
 
         let read_timeout = Duration::from_secs(cfg.timeout_secs.into());
 
@@ -872,15 +876,22 @@ pub async fn io_loop_aa(
         // HU transfer device
         if let Some(hu) = hu_usb {
             // HU connected directly via USB
-            let hu = Arc::new(tokio::sync::Mutex::new(hu));
-            hu_r = IoDevice::EndpointIo(hu.clone());
-            hu_w = IoDevice::EndpointIo(hu.clone());
+            //let hu = Arc::new(tokio::sync::Mutex::new(hu));
+            //hu_r = IoDevice::EndpointIo(hu.clone());
+            //hu_w = IoDevice::EndpointIo(hu.clone());
+            let write_file = hu.try_clone().await?; // duplicates the underlying fd
+            hu_r = IoDevice::EndpointReader(Arc::new(tokio::sync::Mutex::new(hu)));
+            hu_w = IoDevice::EndpointWriter(Arc::new(tokio::sync::Mutex::new(write_file)));
         } else {
             // Head Unit Emulator via TCP
-            let hu = Arc::new(tokio::sync::Mutex::new(hu_tcp.unwrap()));
-            hu_r = IoDevice::TcpStreamIo(hu.clone());
-            hu_w = IoDevice::TcpStreamIo(hu.clone());
-            hu_tcp_stream = Some(hu.clone());
+            //let hu = Arc::new(tokio::sync::Mutex::new(hu_tcp.unwrap()));
+            //hu_r = IoDevice::TcpStreamIo(hu.clone());
+            //hu_w = IoDevice::TcpStreamIo(hu.clone());
+            //hu_tcp_stream = Some(hu.clone());
+            let hu = hu_tcp.unwrap();
+            let (read_half, write_half) = hu.into_split();
+            hu_r = IoDevice::TcpStreamReader(Arc::new(tokio::sync::Mutex::new(read_half)));
+            hu_w = IoDevice::TcpStreamWriter(Arc::new(tokio::sync::Mutex::new(write_half)));
         }
 
         // dedicated reading threads:
@@ -921,15 +932,7 @@ pub async fn io_loop_aa(
         // cancellation of the remaining tasks before we drop the handles and
         // shut down the TCP streams below.
 
-        // make sure TCP connections are closed before next connection attempts
-        if let Some(stream) = md_tcp_stream {
-            let mut stream = stream.lock().await;
-            let _ = stream.shutdown();
-        }
-        if let Some(stream) = hu_tcp_stream {
-            let mut stream = stream.lock().await;
-            let _ = stream.shutdown();
-        }
+
 
         // Disassociate a client from the WiFi AP.
         // Mainly needed when a button was used to switch to the next device,
