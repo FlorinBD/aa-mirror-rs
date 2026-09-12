@@ -860,7 +860,7 @@ impl TlsPacketProxy
                         }
                     }
                     tokio::select! {
-                        biased;
+                        //biased;
                         Some(mut msg) = srv_rx.recv() =>{
                             if msg.flags & ENCRYPTED != 0
                             {
