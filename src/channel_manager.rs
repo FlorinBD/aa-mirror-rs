@@ -890,7 +890,7 @@ impl TlsPacketProxy
                         }
                         Some(pkt) = audio_rx.recv() => {
                             if audio_rx.capacity() < 50 {
-                                info!("{}: audio_rx queue: {}/{}", get_name(), 200 - srv_rx.capacity(), 200);
+                                error!("{}: audio_rx queue: {}/{}", get_name(), 200 - srv_rx.capacity(), 200);
                             }
                             match Self::encrypt_and_send(pkt, &ssl_tx, &hu_out_tx).await {
                                 Ok(size) => {
@@ -905,7 +905,7 @@ impl TlsPacketProxy
                         }
                         Some(pkt) = video_rx.recv() => {
                             if video_rx.capacity() < 50 {
-                                info!("{}: video_rx queue: {}/{}", get_name(), 200 - srv_rx.capacity(), 200);
+                                error!("{}: video_rx queue: {}/{}", get_name(), 200 - srv_rx.capacity(), 200);
                             }
                             match Self::encrypt_and_send(pkt, &ssl_tx, &hu_out_tx).await {
                                 Ok(size) => {
