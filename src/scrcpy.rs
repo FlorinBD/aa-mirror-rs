@@ -477,18 +477,30 @@ impl VideoServer {
                                     {
                                         continue;
                                     }
+                                    if !media_header.config
+                                    {
+                                        //wait for ACK
+                                        if !ignore_ack
+                                        {
+                                            if let Err(e) = ack_tx.send(()).await {
+												error!("scrcpy video ack send failed: {:?}", e);
+												return;
+											}
+                                        }
+
+                                    }
                                     let pk_header_size = if media_header.config {
                                         2
                                     } else {
                                         2 + 8
                                     };
-                                    let wait_ack = !media_header.config && !ignore_ack;
                                     //send all chunks
                                     if chunks.len() > 1
                                     {
                                         //fragmented packet
                                         for (i,chunk) in chunks.iter().enumerate()
                                         {
+
                                             let mut flags:u8;
                                             let mut total_len = None;
                                             let mut payload;
@@ -527,9 +539,10 @@ impl VideoServer {
                                                 final_length: total_len,
                                                 payload,
                                             };
-                                            if !self.send_chunk(pkt_rsp, wait_ack, &ack_tx).await {
-                                                return;
-                                            }
+                                            if let Err(e) = self.hu_tx.send(pkt_rsp).await {
+												error!("Error sending video chunk: {:?}", e);
+												return;
+											}
                                         }
                                     }
                                     else {
@@ -552,9 +565,10 @@ impl VideoServer {
                                             final_length: None,
                                             payload,
                                         };
-                                        if !self.send_chunk(pkt_rsp, wait_ack, &ack_tx).await {
-                                            return;
-                                        }
+                                        if let Err(e) = self.hu_tx.send(pkt_rsp).await {
+											error!("Error sending video chunk: {:?}", e);
+											return;
+										}
                                     }
 
                                 }
@@ -588,30 +602,6 @@ impl VideoServer {
             return;
         });
         VideoServerHandle { ack_rx, paused }
-    }
-
-    async fn send_chunk(
-        &self,
-        pkt: Packet,
-        wait_ack: bool,
-        ack_tx: &mpsc::Sender<()>,
-    ) -> bool {
-        if wait_ack
-        {
-            if let Err(e) = ack_tx.send(()).await {
-                error!("scrcpy video ack send failed: {:?}", e);
-                return true;//we don't want to kill the server, maybe next one will be ok
-            }
-        }
-
-        if let Err(e) = self.hu_tx.send(pkt).await
-        {
-            error!("Error sending video chunk: {:?}", e);
-            self.cancel.cancel();
-            return false;
-        }
-
-        true
     }
 }
 
@@ -707,13 +697,23 @@ impl AudioServer {
                                     {
                                         continue;
                                     }
+                                    if !media_header.config
+                                    {
+                                        //wait for ACK
+                                        if !ignore_ack
+                                        {
+                                            if let Err(e) = ack_tx.send(()).await {
+												error!("scrcpy audio ack send failed: {:?}", e);
+												return;
+											}
+                                        }
 
+                                    }
                                     let pk_header_size = if media_header.config {
                                         2
                                     } else {
                                         2 + 8
                                     };
-                                    let wait_ack = !media_header.config && !ignore_ack;
                                     //send all chunks
                                     if chunks.len() > 1
                                     {
@@ -759,9 +759,11 @@ impl AudioServer {
                                                 final_length: total_len,
                                                 payload,
                                             };
-                                            if !self.send_chunk(pkt_rsp, wait_ack, &ack_tx).await {
-                                                return;
-                                            }
+                                            if let Err(e) = self.hu_tx.send(pkt_rsp).await {
+												error!("Error sending audio chunk: {:?}", e);
+                                                self.cancel.cancel();
+												return;
+											}
                                         }
                                     }
                                     else {
@@ -784,9 +786,11 @@ impl AudioServer {
                                             final_length: None,
                                             payload,
                                         };
-                                        if !self.send_chunk(pkt_rsp, wait_ack, &ack_tx).await {
-                                            return;
-                                        }
+                                        if let Err(e) = self.hu_tx.send(pkt_rsp).await {
+											error!("Error sending audio chunk: {:?}", e);
+                                            self.cancel.cancel();
+											return;
+										}
                                     }
 
                                 }
@@ -820,30 +824,6 @@ impl AudioServer {
             return;
         });
         AudioServerHandle { ack_rx, paused }
-    }
-
-    async fn send_chunk(
-        &self,
-        pkt: Packet,
-        wait_ack: bool,
-        ack_tx: &mpsc::Sender<()>,
-    ) -> bool {
-        if wait_ack
-        {
-            if let Err(e) = ack_tx.send(()).await {
-                error!("scrcpy audio ack send failed: {:?}", e);
-                return true;//we don't want to kill the server, maybe next one will be ok
-            }
-        }
-
-        if let Err(e) = self.hu_tx.send(pkt).await
-        {
-            error!("Error sending audio chunk: {:?}", e);
-            self.cancel.cancel();
-            return false;
-        }
-
-        true
     }
 }
 
