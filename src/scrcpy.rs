@@ -382,6 +382,7 @@ pub struct VideoServer {
 }
 pub struct VideoServerHandle {
     ack_rx: Receiver<()>,
+    ack_disabled: bool,
     paused: Arc<AtomicBool>, // shared with the task
 }
 pub enum VideoServerState {
@@ -390,11 +391,13 @@ pub enum VideoServerState {
 }
 impl VideoServerHandle {
     pub fn ack(&mut self) {
-        match self.ack_rx.try_recv() {
-            Ok(_) => {}
-            Err(mpsc::error::TryRecvError::Empty) => {}
-            Err(mpsc::error::TryRecvError::Disconnected) => {
-                error!("ACK channel dropped");
+        if !self.ack_disabled {
+            match self.ack_rx.try_recv() {
+                Ok(_) => {}
+                Err(mpsc::error::TryRecvError::Empty) => {}
+                Err(mpsc::error::TryRecvError::Disconnected) => {
+                    error!("ACK channel dropped");
+                }
             }
         }
     }
@@ -601,7 +604,7 @@ impl VideoServer {
             };
             return;
         });
-        VideoServerHandle { ack_rx, paused }
+        VideoServerHandle { ack_rx, ack_disabled:ignore_ack, paused }
     }
 }
 
@@ -614,6 +617,7 @@ pub struct AudioServer {
 }
 pub struct AudioServerHandle {
     ack_rx: Receiver<()>,
+    ack_disabled: bool,
     paused: Arc<AtomicBool>, // shared with the task
 }
 pub enum AudioServerState {
@@ -622,11 +626,13 @@ pub enum AudioServerState {
 }
 impl AudioServerHandle {
     pub fn ack(&mut self) {
-        match self.ack_rx.try_recv() {
-            Ok(_) => {}
-            Err(mpsc::error::TryRecvError::Empty) => {}
-            Err(mpsc::error::TryRecvError::Disconnected) => {
-                error!("ACK channel dropped");
+        if !self.ack_disabled {
+            match self.ack_rx.try_recv() {
+                Ok(_) => {}
+                Err(mpsc::error::TryRecvError::Empty) => {}
+                Err(mpsc::error::TryRecvError::Disconnected) => {
+                    error!("ACK channel dropped");
+                }
             }
         }
     }
@@ -823,7 +829,7 @@ impl AudioServer {
             };
             return;
         });
-        AudioServerHandle { ack_rx, paused }
+        AudioServerHandle { ack_rx, ack_disabled:ignore_ack, paused }
     }
 }
 
