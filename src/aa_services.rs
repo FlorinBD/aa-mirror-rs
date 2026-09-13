@@ -1912,20 +1912,11 @@ impl ServiceManager {
             //info!("{:?} Received message id {}", self.srv_type, message_id);
             if message_id == ControlMessageType::MESSAGE_VERSION_REQUEST as i32
             {
+                //VersionRequest  can't be parsed because is not a ProtoBuf structure
                 let data = &pkt.payload[2..]; // start of message data, without message_id
-                match VersionRequest::parse_from_bytes(&data) {
-                    Ok(msg) => {
-                        let version = msg.Version();
-                        let major = (version >> 16) as u16;
-                        let minor = (version & 0xFFFF) as u16;
-                        info!("{:?} HU VersionRequest: Version=0x{:08X}, Major={}, Minor={} received, sending VersionResponse back...",self.srv_type,version,major,minor);
-                    }
-
-                    Err(e) => {
-                        info!("{:?} HU VersionRequest protobuf parse failed: {:?}, data={:02X?}",self.srv_type,e,data);
-                    }
-                }
-                //info!("{:?} HU version request received, sending VersionResponse back...",self.srv_type);
+                let major = u16::from_be_bytes([data[0], data[1]]);
+                let minor = u16::from_be_bytes([data[2], data[3]]);
+                info!("{:?} HU VersionRequest: Major={}, Minor={} received, sending VersionResponse back...",self.srv_type,major,minor);
                 // build version response for HU
                 //let mut response = VersionResponse::new();
                 //let mut payload: Vec<u8> = response.write_to_bytes()?;
