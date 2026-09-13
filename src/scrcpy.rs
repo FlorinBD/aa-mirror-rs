@@ -480,7 +480,7 @@ impl VideoServer {
                                     {
                                         continue;
                                     }
-                                    if !media_header.config
+                                    if media_header.keyframe
                                     {
                                         //wait for ACK
                                         if !ignore_ack
@@ -703,7 +703,7 @@ impl AudioServer {
                                     {
                                         continue;
                                     }
-                                    if !media_header.config
+                                    if media_header.keyframe
                                     {
                                         //wait for ACK
                                         if !ignore_ack
