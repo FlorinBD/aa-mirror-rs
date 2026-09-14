@@ -905,7 +905,6 @@ impl TlsPacketProxy
                                 if act_ts < last_ts
                                 {
                                     //pause video
-                                    audio_enabled=true;
                                     video_enabled=false;
                                 }
                                 else
@@ -939,7 +938,6 @@ impl TlsPacketProxy
                                 {
                                     //pause audio
                                     audio_enabled=false;
-                                    video_enabled=true;
                                 }
                                 else
                                 {
