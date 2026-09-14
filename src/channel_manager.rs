@@ -902,16 +902,8 @@ impl TlsPacketProxy
                             );
                             if msg_id == MediaMessageId::MEDIA_MESSAGE_DATA as u16 {
                                 act_ts = u64::from_be_bytes(pkt.payload[2..10].try_into().unwrap());
-                                if act_ts < last_ts
-                                {
-                                    //pause video
-                                    video_enabled=false;
-                                }
-                                else
-                                {
-                                    //enable all
-                                    video_enabled=true;
-                                }
+                                //disable video if audio is left behind
+                                video_enabled = act_ts >= last_ts;
                                 last_ts = act_ts;
                             }
                             match Self::encrypt_and_send(pkt, &ssl_tx, &hu_out_tx).await {
@@ -934,16 +926,8 @@ impl TlsPacketProxy
                             );
                             if msg_id == MediaMessageId::MEDIA_MESSAGE_DATA as u16 {
                                 act_ts = u64::from_be_bytes(pkt.payload[2..10].try_into().unwrap());
-                                if act_ts < last_ts
-                                {
-                                    //pause audio
-                                    audio_enabled=false;
-                                }
-                                else
-                                {
-                                    //enable all
-                                    audio_enabled=true;
-                                }
+                                //disable audio if video is left behind
+                                audio_enabled = act_ts >= last_ts;
                                 last_ts = act_ts;
                             }
                             match Self::encrypt_and_send(pkt, &ssl_tx, &hu_out_tx).await {
