@@ -10,6 +10,7 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
+use libc::sigdelset;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc::{Receiver, Sender};
@@ -859,6 +860,10 @@ impl TlsPacketProxy
                             }
                         }
                     }
+                    let mut video_enabled = true;
+                    let mut audio_enabled = true;
+                    let mut last_ts:u64 = 0;
+                    let mut act_ts:u64 = 0;
                     tokio::select! {
                         //biased;
                         Some(mut msg) = srv_rx.recv() =>{
@@ -888,9 +893,27 @@ impl TlsPacketProxy
                                 }
                             }
                         }
-                        Some(pkt) = audio_rx.recv() => {
+                        Some(pkt) = audio_rx.recv(), if audio_enabled => {
                             if audio_rx.capacity() < 50 {
                                 error!("{}: audio_rx queue: {}/{}", get_name(), 200 - srv_rx.capacity(), 200);
+                            }
+                            let msg_id = u16::from_be_bytes(
+                                pkt.payload[0..2].try_into().unwrap()
+                            );
+                            if msg_id == MediaMessageId::MEDIA_MESSAGE_DATA as u16 {
+                                act_ts = u64::from_be_bytes(pkt.payload[2..10].try_into().unwrap());
+                                if act_ts < last_ts
+                                {
+                                    //pause video
+                                    audio_enabled=true;
+                                    video_enabled=false;
+                                }
+                                else
+                                {
+                                    //enable all
+                                    video_enabled=true;
+                                }
+                                last_ts = act_ts;
                             }
                             match Self::encrypt_and_send(pkt, &ssl_tx, &hu_out_tx).await {
                                 Ok(size) => {
@@ -903,9 +926,27 @@ impl TlsPacketProxy
                                 }
                             }
                         }
-                        Some(pkt) = video_rx.recv() => {
+                        Some(pkt) = video_rx.recv(), if video_enabled => {
                             if video_rx.capacity() < 50 {
                                 error!("{}: video_rx queue: {}/{}", get_name(), 200 - srv_rx.capacity(), 200);
+                            }
+                            let msg_id = u16::from_be_bytes(
+                                pkt.payload[0..2].try_into().unwrap()
+                            );
+                            if msg_id == MediaMessageId::MEDIA_MESSAGE_DATA as u16 {
+                                act_ts = u64::from_be_bytes(pkt.payload[2..10].try_into().unwrap());
+                                if act_ts < last_ts
+                                {
+                                    //pause audio
+                                    audio_enabled=false;
+                                    video_enabled=true;
+                                }
+                                else
+                                {
+                                    //enable all
+                                    audio_enabled=true;
+                                }
+                                last_ts = act_ts;
                             }
                             match Self::encrypt_and_send(pkt, &ssl_tx, &hu_out_tx).await {
                                 Ok(size) => {
