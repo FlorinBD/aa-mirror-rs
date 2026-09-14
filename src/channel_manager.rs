@@ -925,7 +925,14 @@ impl TlsPacketProxy
                                     }
                                 }
                                 //disable video if audio is left behind
-                                video_enabled = act_ts + audio_offset>= last_ts;
+                                if first_audio_ts >  first_video_ts
+                                {
+                                    video_enabled = act_ts >= last_ts;
+                                }
+                                else
+                                {
+                                    video_enabled = act_ts + audio_offset>= last_ts;
+                                }
                                 last_ts = act_ts + audio_offset;
                             }
                             match Self::encrypt_and_send(pkt, &ssl_tx, &hu_out_tx).await {
@@ -967,7 +974,14 @@ impl TlsPacketProxy
                                     }
                                 }
                                 //disable audio if video is left behind
-                                audio_enabled = act_ts + video_offset>= last_ts;
+                                if first_audio_ts >  first_video_ts
+                                {
+                                    audio_enabled = act_ts + video_offset>= last_ts;
+                                }
+                                else
+                                {
+                                    audio_enabled = act_ts >= last_ts;
+                                }
                                 last_ts = act_ts + video_offset;
                             }
                             match Self::encrypt_and_send(pkt, &ssl_tx, &hu_out_tx).await {
