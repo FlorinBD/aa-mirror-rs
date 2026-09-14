@@ -876,18 +876,11 @@ pub async fn io_loop_aa(
         // HU transfer device
         if let Some(hu) = hu_usb {
             // HU connected directly via USB
-            //let hu = Arc::new(tokio::sync::Mutex::new(hu));
-            //hu_r = IoDevice::EndpointIo(hu.clone());
-            //hu_w = IoDevice::EndpointIo(hu.clone());
             let write_file = hu.try_clone().await?; // duplicates the underlying fd
             hu_r = IoDevice::EndpointReader(Arc::new(tokio::sync::Mutex::new(hu)));
             hu_w = IoDevice::EndpointWriter(Arc::new(tokio::sync::Mutex::new(write_file)));
         } else {
             // Head Unit Emulator via TCP
-            //let hu = Arc::new(tokio::sync::Mutex::new(hu_tcp.unwrap()));
-            //hu_r = IoDevice::TcpStreamIo(hu.clone());
-            //hu_w = IoDevice::TcpStreamIo(hu.clone());
-            //hu_tcp_stream = Some(hu.clone());
             let hu = hu_tcp.unwrap();
             let (read_half, write_half) = hu.into_split();
             hu_r = IoDevice::TcpStreamReader(Arc::new(tokio::sync::Mutex::new(read_half)));
