@@ -852,7 +852,7 @@ impl TlsPacketProxy
                 let mut act_ts:u64 = 0;
                 loop {
                     // Audio has priority: drain everything currently queued.
-                    /*while let Ok(pkt) = audio_rx.try_recv() {
+                    while let Ok(pkt) = audio_rx.try_recv() {
                         match Self::encrypt_and_send(pkt, &ssl_tx, &hu_out_tx).await {
                             Ok(size) => {
                                 w_statistics.fetch_add(size, Ordering::Relaxed);
@@ -863,7 +863,7 @@ impl TlsPacketProxy
                                 return Err(e);
                             }
                         }
-                    }*/
+                    }
 
                     tokio::select! {
                         Some(mut msg) = srv_rx.recv() =>{
