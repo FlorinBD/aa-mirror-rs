@@ -846,14 +846,6 @@ impl TlsPacketProxy
             let hu_out_tx = hu_out_tx.clone();
 
             tokio::spawn(async move {
-                let mut video_enabled = true;
-                let mut audio_enabled = true;
-                let mut last_ts:u64 = 0;
-                let mut act_ts:u64 = 0;
-                let mut first_video_ts:u64 = 0;
-                let mut first_audio_ts:u64 = 0;
-                let mut audio_offset:u64 = 0;
-                let mut video_offset:u64 = 0;
                 loop {
                     // Audio has priority: drain everything currently queued.
                     /*while let Ok(pkt) = audio_rx.try_recv() {
@@ -897,43 +889,9 @@ impl TlsPacketProxy
                                 }
                             }
                         }
-                        Some(pkt) = audio_rx.recv(), if audio_enabled => {
+                        Some(pkt) = audio_rx.recv() => {
                             if audio_rx.capacity() < 50 {
                                 error!("{}: audio_rx queue: {}/{}", get_name(), 200 - srv_rx.capacity(), 200);
-                            }
-                            let msg_id = u16::from_be_bytes(
-                                pkt.payload[0..2].try_into().unwrap()
-                            );
-                            if msg_id == MediaMessageId::MEDIA_MESSAGE_DATA as u16 {
-                                act_ts = u64::from_be_bytes(pkt.payload[2..10].try_into().unwrap());
-                                if first_audio_ts == 0
-                                {
-                                    first_audio_ts=act_ts;
-                                    if first_audio_ts > 0 && first_video_ts > 0
-                                    {
-                                        if first_audio_ts >  first_video_ts
-                                        {
-                                            audio_offset=0;
-                                            video_offset = first_audio_ts - first_video_ts;
-                                        }
-                                        else
-                                        {
-                                            video_offset=0;
-                                            audio_offset= first_video_ts - first_audio_ts;
-                                        }
-                                        info!("{}: Audio offset: {}, Video offset: {}", get_name(), audio_offset, video_offset);
-                                    }
-                                }
-                                //disable video if audio is left behind
-                                if first_audio_ts >  first_video_ts
-                                {
-                                    video_enabled = act_ts >= last_ts;
-                                }
-                                else
-                                {
-                                    video_enabled = act_ts + audio_offset>= last_ts;
-                                }
-                                last_ts = act_ts + audio_offset;
                             }
                             match Self::encrypt_and_send(pkt, &ssl_tx, &hu_out_tx).await {
                                 Ok(size) => {
@@ -945,44 +903,23 @@ impl TlsPacketProxy
                                     return Err(e);
                                 }
                             }
-                        }
-                        Some(pkt) = video_rx.recv(), if video_enabled => {
-                            if video_rx.capacity() < 50 {
-                                error!("{}: video_rx queue: {}/{}", get_name(), 200 - srv_rx.capacity(), 200);
-                            }
-                            let msg_id = u16::from_be_bytes(
-                                pkt.payload[0..2].try_into().unwrap()
-                            );
-                            if msg_id == MediaMessageId::MEDIA_MESSAGE_DATA as u16 {
-                                act_ts = u64::from_be_bytes(pkt.payload[2..10].try_into().unwrap());
-                                if first_video_ts == 0
-                                {
-                                    first_video_ts=act_ts;
-                                    if first_audio_ts > 0 && first_video_ts > 0
-                                    {
-                                        if first_audio_ts >  first_video_ts
-                                        {
-                                            audio_offset=0;
-                                            video_offset = first_audio_ts - first_video_ts;
-                                        }
-                                        else
-                                        {
-                                            video_offset=0;
-                                            audio_offset= first_video_ts - first_audio_ts;
-                                        }
-                                        info!("{}: Audio offset: {}, Video offset: {}", get_name(), audio_offset, video_offset);
+                            // Audio has priority: drain everything currently queued.
+                            while let Ok(pkt) = audio_rx.try_recv() {
+                                match Self::encrypt_and_send(pkt, &ssl_tx, &hu_out_tx).await {
+                                    Ok(size) => {
+                                        w_statistics.fetch_add(size, Ordering::Relaxed);
+                                    }
+
+                                    Err(e) => {
+                                        error!("{}: audio encrypt error: {:?}", get_name(), e);
+                                        return Err(e);
                                     }
                                 }
-                                //disable audio if video is left behind
-                                if first_audio_ts >  first_video_ts
-                                {
-                                    audio_enabled = act_ts + video_offset>= last_ts;
-                                }
-                                else
-                                {
-                                    audio_enabled = act_ts >= last_ts;
-                                }
-                                last_ts = act_ts + video_offset;
+                            }
+                        }
+                        Some(pkt) = video_rx.recv() => {
+                            if video_rx.capacity() < 50 {
+                                error!("{}: video_rx queue: {}/{}", get_name(), 200 - srv_rx.capacity(), 200);
                             }
                             match Self::encrypt_and_send(pkt, &ssl_tx, &hu_out_tx).await {
                                 Ok(size) => {
