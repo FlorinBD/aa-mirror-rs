@@ -850,7 +850,7 @@ impl TlsPacketProxy
                 let mut video_enabled=true;
                 loop {
                     // Audio has priority: drain everything currently queued.
-                    /*while let Ok(pkt) = audio_rx.try_recv() {
+                    while let Ok(pkt) = audio_rx.try_recv() {
                         match Self::encrypt_and_send(pkt, &ssl_tx, &hu_out_tx).await {
                             Ok(size) => {
                                 w_statistics.fetch_add(size, Ordering::Relaxed);
@@ -861,9 +861,10 @@ impl TlsPacketProxy
                                 return Err(e);
                             }
                         }
-                    }*/
+                    }
 
                     tokio::select! {
+                        biased;
                         Some(mut msg) = srv_rx.recv() =>{
                             if msg.flags & ENCRYPTED != 0
                             {
@@ -891,9 +892,7 @@ impl TlsPacketProxy
                                 }
                             }
                         }
-                        Some(pkt) = audio_rx.recv(), if audio_enabled => {
-                            audio_enabled=false;
-                            video_enabled=true;
+                        Some(pkt) = audio_rx.recv() => {
                             if audio_rx.capacity() < 50 {
                                 error!("{}: audio_rx queue: {}/{}", get_name(), 200 - srv_rx.capacity(), 200);
                             }
@@ -908,7 +907,7 @@ impl TlsPacketProxy
                                 }
                             }
                             // Audio has priority: drain everything currently queued.
-                            while let Ok(pkt) = audio_rx.try_recv() {
+                            /*while let Ok(pkt) = audio_rx.try_recv() {
                                 match Self::encrypt_and_send(pkt, &ssl_tx, &hu_out_tx).await {
                                     Ok(size) => {
                                         w_statistics.fetch_add(size, Ordering::Relaxed);
@@ -919,11 +918,9 @@ impl TlsPacketProxy
                                         return Err(e);
                                     }
                                 }
-                            }
+                            }*/
                         }
-                        Some(pkt) = video_rx.recv(), if video_enabled => {
-                            audio_enabled=true;
-                            video_enabled=false;
+                        Some(pkt) = video_rx.recv() => {
                             if video_rx.capacity() < 50 {
                                 error!("{}: video_rx queue: {}/{}", get_name(), 200 - srv_rx.capacity(), 200);
                             }
