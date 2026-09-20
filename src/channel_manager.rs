@@ -14,7 +14,7 @@ use libc::sigdelset;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::mpsc::{Receiver, Sender};
-use tokio::time::timeout;
+use tokio::time::{sleep, timeout};
 
 // protobuf stuff:
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
@@ -846,8 +846,6 @@ impl TlsPacketProxy
             let hu_out_tx = hu_out_tx.clone();
 
             tokio::spawn(async move {
-                let mut audio_enabled=true;
-                let mut video_enabled=true;
                 loop {
                     // Audio has priority: drain everything currently queued.
                     while let Ok(pkt) = audio_rx.try_recv() {
@@ -906,19 +904,6 @@ impl TlsPacketProxy
                                     return Err(e);
                                 }
                             }
-                            // Audio has priority: drain everything currently queued.
-                            /*while let Ok(pkt) = audio_rx.try_recv() {
-                                match Self::encrypt_and_send(pkt, &ssl_tx, &hu_out_tx).await {
-                                    Ok(size) => {
-                                        w_statistics.fetch_add(size, Ordering::Relaxed);
-                                    }
-
-                                    Err(e) => {
-                                        error!("{}: audio encrypt error: {:?}", get_name(), e);
-                                        return Err(e);
-                                    }
-                                }
-                            }*/
                         }
                         Some(pkt) = video_rx.recv() => {
                             if video_rx.capacity() < 50 {
@@ -927,6 +912,7 @@ impl TlsPacketProxy
                             match Self::encrypt_and_send(pkt, &ssl_tx, &hu_out_tx).await {
                                 Ok(size) => {
                                     w_statistics.fetch_add(size, Ordering::Relaxed);
+                                    sleep(Duration::from_millis(8)).await;//wait for audio frames to buffer in mpsc channel
                                 }
 
                                 Err(e) => {
