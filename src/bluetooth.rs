@@ -89,6 +89,69 @@ fn build_report_descriptor(width: u16, height: u16) -> Vec<u8> {
         0x09, 0x04,             // Usage (Touch Screen)
         0xA1, 0x01,             // Collection (Application)
 
+        // Report ID 1
+        0x85, 0x01,
+
+        // Finger
+        0x09, 0x22,             // Usage (Finger)
+        0xA1, 0x02,             // Collection (Logical)
+
+        // Tip Switch
+        0x09, 0x42,             // Usage (Tip Switch)
+        0x15, 0x00,             // Logical Min 0
+        0x25, 0x01,             // Logical Max 1
+        0x75, 0x01,             // Report Size 1
+        0x95, 0x01,             // Report Count 1
+        0x81, 0x02,             // Input (Data,Var,Abs)
+
+        // Padding
+        0x75, 0x07,
+        0x95, 0x01,
+        0x81, 0x03,             // Input (Constant)
+
+        // X
+        0x05, 0x01,             // Generic Desktop
+        0x09, 0x30,             // Usage (X)
+        0x15, 0x00,
+        0x26,
+    ];
+
+    d.extend_from_slice(&x_max.to_le_bytes());
+
+    d.extend_from_slice(&[
+        0x75, 0x10,
+        0x95, 0x01,
+        0x81, 0x02,             // Input X
+
+        // Y
+        0x09, 0x31,
+        0x15, 0x00,
+        0x26,
+    ]);
+
+    d.extend_from_slice(&y_max.to_le_bytes());
+
+    d.extend_from_slice(&[
+        0x75, 0x10,
+        0x95, 0x01,
+        0x81, 0x02,             // Input Y
+
+        0xC0,                   // End Finger
+        0xC0,                   // End Touch Screen
+    ]);
+
+    d
+}
+fn build_report_descriptor_v2(width: u16, height: u16) -> Vec<u8> {
+    let x_max = width.saturating_sub(1);
+    let y_max = height.saturating_sub(1);
+
+    let mut d = vec![
+        // Digitizer / Touch Screen
+        0x05, 0x0D,             // Usage Page (Digitizer)
+        0x09, 0x04,             // Usage (Touch Screen)
+        0xA1, 0x01,             // Collection (Application)
+
         0x85, 0x01,             // Report ID (1)
 
         // Finger
@@ -254,7 +317,27 @@ impl HidPeripheral {
 
     /// Send a touch event. `x`/`y` must be within `0..width`/`0..height` as configured
     /// at startup (values are clamped defensively).
-    pub async fn send_touch(&self, down: bool,
+    pub async fn send_touch(
+        &self,
+        down: bool,
+        x: u16,
+        y: u16,
+    ) -> std::io::Result<()> {
+        let x = x.min(self.width.saturating_sub(1));
+        let y = y.min(self.height.saturating_sub(1));
+
+        let report = [
+            0x01,                       // Report ID
+            if down { 0x01 } else { 0x00 },
+            (x & 0xFF) as u8,
+            (x >> 8) as u8,
+            (y & 0xFF) as u8,
+            (y >> 8) as u8,
+        ];
+
+        self.write_report(&report).await
+    }
+    pub async fn send_touch_v2(&self, down: bool,
         x: u16,
         y: u16,
     ) -> std::io::Result<()> {
