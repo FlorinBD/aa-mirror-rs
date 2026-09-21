@@ -119,6 +119,7 @@ pub struct AppConfig {
     #[serde(default, deserialize_with = "empty_string_as_none")]
     pub btalias: Option<String>,
     pub bt_poweroff: bool,
+    pub bt_hid_control: bool,
     pub timeout_secs: u16,
     pub hu_detect_timeout_secs: u16,
     #[serde(
@@ -260,6 +261,7 @@ impl Default for AppConfig {
             webserver: webserver_default_bind(),
             bt_timeout_secs: 30,
             bt_poweroff:false,
+            bt_hid_control:true,
             action_requested: None,
             res_multiplier: 1.0,
             wired: None,
@@ -321,6 +323,7 @@ impl AppConfig {
 
         doc["advertise"] = value(self.advertise);
         doc["dongle_mode"] = value(self.dongle_mode);
+        doc["bt_hid_control"]= value(self.bt_hid_control);
         doc["ignore_media_ack"] = value(self.ignore_media_ack);
         doc["debug"] = value(self.debug);
         doc["hexdump_level"] = value(format!("{:?}", self.hexdump_level));

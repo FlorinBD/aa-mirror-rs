@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use crate::btle;
 use crate::config::Action;
 use crate::config::WifiConfig;
@@ -13,11 +14,14 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use bluer::adv::Advertisement;
+use bluer::gatt::CharacteristicWriter;
+use bluer::gatt::local::{characteristic_control, Application, Characteristic, CharacteristicControlEvent, CharacteristicNotify, CharacteristicNotifyMethod, CharacteristicRead, CharacteristicWrite, CharacteristicWriteMethod, Service};
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::broadcast::Receiver as BroadcastReceiver;
 use tokio::sync::broadcast::Sender as BroadcastSender;
-use tokio::sync::Notify;
+use tokio::sync::{Mutex, Notify};
 use tokio::time::timeout;
 
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
@@ -43,6 +47,14 @@ const AV_REMOTE_CONTROL_TARGET_UUID: Uuid = Uuid::from_u128(0x0000110c0000100080
 const AV_REMOTE_CONTROL_UUID: Uuid = Uuid::from_u128(0x00110e00001000800000805f9b34fb);
 const AIS_PRIMARY_UUID: Uuid = Uuid::from_u128(0xe73e0001ef1b4e7482912e4f3164f3b5);
 
+//used by HID controller
+const HID_SERVICE: Uuid = Uuid::from_u128(0x0000181200001000800000805f9b34fb);
+const HID_INFO_CHAR: Uuid = Uuid::from_u128(0x00002a4a00001000800000805f9b34fb);
+const REPORT_MAP_CHAR: Uuid = Uuid::from_u128(0x00002a4b00001000800000805f9b34fb);
+const REPORT_CHAR: Uuid = Uuid::from_u128(0x00002a4d00001000800000805f9b34fb);
+const HID_CONTROL_POINT_CHAR: Uuid = Uuid::from_u128(0x00002a4c00001000800000805f9b34fb);
+const PROTOCOL_MODE_CHAR: Uuid = Uuid::from_u128(0x00002a4e00001000800000805f9b34fb);
+
 #[derive(Debug, Clone, PartialEq)]
 #[repr(u16)]
 #[allow(unused)]
@@ -62,6 +74,215 @@ pub struct Bluetooth {
     btle_handle: Option<bluer::gatt::local::ApplicationHandle>,
     adv_handle: Option<bluer::adv::AdvertisementHandle>,
     current_index: usize,
+}
+
+/// Builds the HID Report Descriptor with the touchscreen's logical X/Y max set to
+/// `width - 1` / `height - 1`. Coordinates reported via `send_touch` must stay
+/// within these bounds for the host to interpret them correctly.
+fn build_report_descriptor(width: u16, height: u16) -> Vec<u8> {
+    let x_max = width.saturating_sub(1);
+    let y_max = height.saturating_sub(1);
+
+    let mut d = vec![
+        // ---- Touchscreen (Digitizer, single touch), Report ID 1 ----
+        0x05, 0x0D, 0x09, 0x04, 0xA1, 0x01,
+        0x85, 0x01,
+        0x09, 0x22, 0xA1, 0x00,
+        0x09, 0x42, 0x15, 0x00, 0x25, 0x01, 0x75, 0x01, 0x95, 0x01, 0x81, 0x02,
+        0x95, 0x07, 0x81, 0x03,
+        0x05, 0x01, 0x09, 0x30, 0x75, 0x10, 0x95, 0x01,
+        0x15, 0x00, 0x26, // Logical Maximum (X) — 2-byte value follows
+    ];
+    d.extend_from_slice(&x_max.to_le_bytes());
+    d.extend_from_slice(&[0x81, 0x02, 0x09, 0x31, 0x75, 0x10, 0x95, 0x01, 0x15, 0x00, 0x26]);
+    d.extend_from_slice(&y_max.to_le_bytes());
+    d.extend_from_slice(&[
+        0x81, 0x02,
+        0xC0, 0xC0,
+        // ---- Keypad, Report ID 2 ----
+        0x05, 0x01, 0x09, 0x06, 0xA1, 0x01,
+        0x85, 0x02,
+        0x05, 0x07, 0x19, 0xE0, 0x29, 0xE7, 0x15, 0x00, 0x25, 0x01, 0x75, 0x01, 0x95, 0x08, 0x81, 0x02,
+        0x95, 0x01, 0x75, 0x08, 0x81, 0x03,
+        0x95, 0x06, 0x75, 0x08, 0x15, 0x00, 0x25, 0x65,
+        0x05, 0x07, 0x19, 0x00, 0x29, 0x65, 0x81, 0x00,
+        0xC0,
+    ]);
+    d
+}
+
+/// Shared handle for sending HID input reports once a client is connected & subscribed.
+#[derive(Clone)]
+pub struct HidPeripheral {
+    writer: Arc<Mutex<Option<CharacteristicWriter>>>,
+    width: u16,
+    height: u16,
+}
+
+impl HidPeripheral {
+    pub fn width(&self) -> u16 {
+        self.width
+    }
+
+    pub fn height(&self) -> u16 {
+        self.height
+    }
+
+    /// Send a touch event. `x`/`y` must be within `0..width`/`0..height` as configured
+    /// at startup (values are clamped defensively).
+    pub async fn send_touch(&self, down: bool, x: u16, y: u16) -> std::io::Result<()> {
+        let x = x.min(self.width.saturating_sub(1));
+        let y = y.min(self.height.saturating_sub(1));
+        let mut report = Vec::with_capacity(6);
+        report.push(0x01); // Report ID 1
+        report.push(if down { 0x01 } else { 0x00 });
+        report.extend_from_slice(&x.to_le_bytes());
+        report.extend_from_slice(&y.to_le_bytes());
+        self.write_report(&report).await
+    }
+
+    /// Send a key event. `modifier` is the standard HID modifier bitmask.
+    /// `keys` is up to 6 simultaneously-pressed HID usage IDs (0 = empty slot).
+    /// Call again with all-zero `keys` to send "key released".
+    pub async fn send_key(&self, modifier: u8, keys: [u8; 6]) -> std::io::Result<()> {
+        let mut report = Vec::with_capacity(9);
+        report.push(0x02); // Report ID 2
+        report.push(modifier);
+        report.push(0x00); // reserved
+        report.extend_from_slice(&keys);
+        self.write_report(&report).await
+    }
+
+    async fn write_report(&self, report: &[u8]) -> std::io::Result<()> {
+        let mut guard = self.writer.lock().await;
+        let Some(writer) = guard.as_mut() else {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::NotConnected,
+                "no HID client subscribed for notifications",
+            ));
+        };
+        match writer.write_all(report).await {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                // stale/disconnected writer — clear it so the next subscribe event replaces it
+                *guard = None;
+                Err(e)
+            }
+        }
+    }
+}
+
+pub async fn start_hid_peripheral(adapter: &Adapter, width: u16, height: u16) -> bluer::Result<HidPeripheral> {
+    let (char_control, char_handle) = characteristic_control();
+    let report_descriptor = build_report_descriptor(width, height);
+
+    let app = Application {
+        services: vec![Service {
+            uuid: HID_SERVICE,
+            primary: true,
+            characteristics: vec![
+                Characteristic {
+                    uuid: HID_INFO_CHAR,
+                    read: Some(CharacteristicRead {
+                        read: true,
+                        fun: Box::new(|_req| Box::pin(async move { Ok(vec![0x11, 0x01, 0x00, 0x02]) })),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+                Characteristic {
+                    uuid: REPORT_MAP_CHAR,
+                    read: Some(CharacteristicRead {
+                        read: true,
+                        fun: Box::new(move |_req| {
+                            let d = report_descriptor.clone();
+                            Box::pin(async move { Ok(d) })
+                        }),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+                Characteristic {
+                    uuid: REPORT_CHAR,
+                    notify: Some(CharacteristicNotify {
+                        notify: true,
+                        method: CharacteristicNotifyMethod::Io,
+                        ..Default::default()
+                    }),
+                    control_handle: char_handle,
+                    ..Default::default()
+                },
+                Characteristic {
+                    uuid: HID_CONTROL_POINT_CHAR,
+                    write: Some(CharacteristicWrite {
+                        write_without_response: true,
+                        method: CharacteristicWriteMethod::Fun(Box::new(|_val, _req| {
+                            Box::pin(async move { Ok(()) })
+                        })),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+                Characteristic {
+                    uuid: PROTOCOL_MODE_CHAR,
+                    read: Some(CharacteristicRead {
+                        read: true,
+                        fun: Box::new(|_req| Box::pin(async move { Ok(vec![1u8]) })),
+                        ..Default::default()
+                    }),
+                    write: Some(CharacteristicWrite {
+                        write_without_response: true,
+                        method: CharacteristicWriteMethod::Fun(Box::new(|_val, _req| {
+                            Box::pin(async move { Ok(()) })
+                        })),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+            ],
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let app_handle = adapter.serve_gatt_application(app).await?;
+
+    let mut service_uuids = BTreeSet::new();
+    service_uuids.insert(HID_SERVICE);
+    let le_advertisement = Advertisement {
+        advertisement_type: bluer::adv::Type::Peripheral,
+        service_uuids,
+        appearance: Some(0x03C0),
+        local_name: Some("aa-mirror-rs HID".to_string()),
+        discoverable: Some(true),
+        ..Default::default()
+    };
+    let adv_handle = adapter.advertise(le_advertisement).await?;
+
+    let writer_slot: Arc<Mutex<Option<CharacteristicWriter>>> = Arc::new(Mutex::new(None));
+    let writer_slot_task = writer_slot.clone();
+
+    tokio::spawn(async move {
+        let mut char_control = char_control;
+        loop {
+            match char_control.next().await {
+                Some(CharacteristicControlEvent::Notify(writer)) => {
+                    log::info!("HID client subscribed for notifications, MTU={}", writer.mtu());
+                    *writer_slot_task.lock().await = Some(writer);
+                }
+                Some(CharacteristicControlEvent::Write(_)) => {}
+                None => {
+                    log::warn!("HID characteristic control stream ended");
+                    break;
+                }
+            }
+        }
+    });
+
+    std::mem::forget(app_handle);
+    std::mem::forget(adv_handle);
+
+    Ok(HidPeripheral { writer: writer_slot, width, height })
 }
 
 // Create and configure the Bluetooth adapter

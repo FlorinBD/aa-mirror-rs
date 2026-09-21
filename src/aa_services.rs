@@ -36,6 +36,7 @@ use crate::aa_services::MediaCodec::{AUDIO_AAC_LC, AUDIO_AAC_LC_ADTS, AUDIO_PCM,
 use crate::aa_services::VideoCodecResolution::{Video_1080x1920, Video_720x1280, Video_800x480};
 use crate::aa_services::VideoFPS::{FPS_30, FPS_60};
 use crate::adb;
+use crate::bluetooth::start_hid_peripheral;
 use crate::channel_manager::{pkt_debug, Packet, TlsPacketProxy, ENCRYPTED, FRAME_TYPE_CONTROL, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
 use crate::config::{AppConfig, HU_CONFIG_DELAY_MS, SCRCPY_PORT};
 use crate::config_types::HexdumpLevel;
@@ -402,6 +403,7 @@ pub struct SrvInputSource {
     adb_start_server:Arc<Notify>,
     keys:Vec<i32>,
     cfg_screen_off:bool,
+    bt_hid:bool,
     cancel:CancellationToken,
     //private
     scrcpy_server:Option<ControlServerState>,
@@ -1491,7 +1493,7 @@ impl SrvMediaSource {
     }
 }
 impl SrvInputSource {
-    pub fn new(sid:i8, hu_tx: Sender<Packet>, start_adb_server:Arc<Notify>, keys:Vec<i32>,screen_size:ScrcpySize,cfg_screen_off:bool, cancel: CancellationToken) -> Self {
+    pub fn new(sid:i8, hu_tx: Sender<Packet>, start_adb_server:Arc<Notify>, keys:Vec<i32>,screen_size:ScrcpySize,cfg_screen_off:bool, bt_hid:bool,cancel: CancellationToken) -> Self {
         let (tx, rx) = mpsc::channel(5);
         Self {
             base: AAService {
@@ -1504,6 +1506,7 @@ impl SrvInputSource {
             adb_start_server: start_adb_server,
             keys,
             cfg_screen_off,
+            bt_hid,
             cancel:cancel.clone(),
             scrcpy_server: Some(ControlServerState::Created(
                 crate::scrcpy::ControlServer::new(sid as u8,hu_tx.clone(), screen_size, cfg_screen_off,cancel.clone()))
@@ -1515,6 +1518,8 @@ impl SrvInputSource {
         let handle = self.base.clone();
         let task =tokio::spawn(async move {
             let mut service = self;
+            let bt_adapter;
+            let hid = start_hid_peripheral(&bt_adapter, 800, 480).await?;
             loop {
                 tokio::select! {
                     _ = service.cancel.cancelled() => {
@@ -2111,7 +2116,7 @@ impl ServiceManager {
                             let screen_size=ScrcpySize{ width: self.sdr_video_codec_params.res_w as u16, height: self.sdr_video_codec_params.res_h as u16 };
                             self.sdr_keys=proto_srv.input_source_service.keycodes_supported.iter().cloned().collect();
                             self.sdr_control_server_sid= ch_id as u8;
-                            let service = SrvInputSource::new(ch_id as i8, self.hu_tx.clone(),self.control_server_ready.clone(), self.sdr_keys.clone(), screen_size, self.config.scrcpy_screen_off, self.cancel.clone());
+                            let service = SrvInputSource::new(ch_id as i8, self.hu_tx.clone(),self.control_server_ready.clone(), self.sdr_keys.clone(), screen_size, self.config.scrcpy_screen_off, self.config.bt_hid_control, self.cancel.clone());
                             let (service_handle, task) = service.start();
                             self.add_service(service_handle);
                             self.srv_tsk_handles.push(task);

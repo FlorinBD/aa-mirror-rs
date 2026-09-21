@@ -155,6 +155,10 @@
           "typ": "boolean",
           "description": "Dongle mode"
         },
+        "bt_hid_control": {
+          "typ": "boolean",
+          "description": "BT HID controller emulation (Keypad and touchscreen)"
+        },
         "btalias": {
           "typ": "string",
           "description": "Bluetooth device name/alias (how your bluetooth device is visible)\nby default it is `aa-mirror-CPUSERIAL`\nfor dongle mode you need to set it to: `AndroidAuto-xxxxx`"
