@@ -258,7 +258,31 @@ pub async fn start_hid_peripheral(adapter: &Adapter, width: u16, height: u16) ->
         discoverable: Some(true),
         ..Default::default()
     };
-    let adv_handle = adapter.advertise(le_advertisement).await?;
+    //let adv_handle = adapter.advertise(le_advertisement).await?;
+    let adv_handle;
+    for attempt in 0..3 {
+        match adapter.advertise(le_advertisement.clone()).await {
+            Ok(handle) => {
+                info!(
+                            "{} 📣 BLE advertisement started with UUIDs (attempt {})",
+                            NAME,
+                            attempt + 1
+                        );
+                adv_handle = Some(handle);
+
+                break;
+            }
+            Err(e) => {
+                warn!(
+                            "{} 🥏 Advertising attempt {} failed: {}",
+                            NAME,
+                            attempt + 1,
+                            e
+                        );
+                tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+            }
+        }
+    }
 
     let writer_slot: Arc<Mutex<Option<CharacteristicWriter>>> = Arc::new(Mutex::new(None));
     let writer_slot_task = writer_slot.clone();
