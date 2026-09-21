@@ -1539,6 +1539,7 @@ impl SrvInputSource {
                     {
                         Ok(result) => {
                             info!("{:?}: Started hid peripheral",service.base.sid);
+                            break;
                         }
                         Err(e) => {
                             error!("{:?}: Failed to start hid peripheral: {:?}", service.base.sid, e);
