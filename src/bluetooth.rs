@@ -334,7 +334,7 @@ impl HidPeripheral {
             (y & 0xFF) as u8,
             (y >> 8) as u8,
         ];
-
+        debug!("BT HID send_touch report {:?}", report);
         self.write_report(&report).await
     }
     pub async fn send_touch_v2(&self, down: bool,
@@ -352,7 +352,7 @@ impl HidPeripheral {
         report.extend_from_slice(&x.to_le_bytes());
         report.extend_from_slice(&y.to_le_bytes());
         report.push(if down { 1 } else { 0 });       // Contact Count
-
+        debug!("BT HID send_touch report {:?}", report);
         self.write_report(&report).await
     }
     pub async fn send_touch_old(&self, down: bool, x: u16, y: u16) -> std::io::Result<()> {
