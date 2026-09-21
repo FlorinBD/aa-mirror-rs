@@ -244,7 +244,8 @@ pub async fn start_hid_peripheral(adapter: &Adapter, width: u16, height: u16) ->
         }],
         ..Default::default()
     };
-
+    adapter.set_powered(true).await?;
+    adapter.set_pairable(true).await?;
     let app_handle = adapter.serve_gatt_application(app).await?;
 
     let mut service_uuids = BTreeSet::new();
