@@ -263,22 +263,12 @@ pub async fn start_hid_peripheral(adapter: &Adapter, width: u16, height: u16) ->
     for attempt in 0..3 {
         match adapter.advertise(le_advertisement.clone()).await {
             Ok(handle) => {
-                info!(
-                            "{} 📣 BLE advertisement started with UUIDs (attempt {})",
-                            NAME,
-                            attempt + 1
-                        );
+                info!("{} 📣 BLE advertisement started with UUIDs (attempt {})", NAME, attempt + 1);
                 adv_handle = Some(handle);
-
                 break;
             }
             Err(e) => {
-                warn!(
-                            "{} 🥏 Advertising attempt {} failed: {}",
-                            NAME,
-                            attempt + 1,
-                            e
-                        );
+                warn!("{} 🥏 Advertising attempt {} failed: {}", NAME, attempt + 1, e);
                 tokio::time::sleep(std::time::Duration::from_millis(200)).await;
             }
         }
