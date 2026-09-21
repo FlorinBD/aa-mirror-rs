@@ -1543,8 +1543,8 @@ impl SrvInputSource {
                         }
                         Err(e) => {
                             error!("{:?}: Failed to start hid peripheral: {:?}", service.base.sid, e);
-                            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                            continue;
+                            service.cancel.cancel();
+                            break;
                         }
                     }
                 }
