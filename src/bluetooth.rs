@@ -84,6 +84,130 @@ fn build_report_descriptor(width: u16, height: u16) -> Vec<u8> {
     let y_max = height.saturating_sub(1);
 
     let mut d = vec![
+        // Digitizer / Touch Screen
+        0x05, 0x0D,             // Usage Page (Digitizer)
+        0x09, 0x04,             // Usage (Touch Screen)
+        0xA1, 0x01,             // Collection (Application)
+
+        0x85, 0x01,             // Report ID (1)
+
+        // Finger
+        0x09, 0x22,             // Usage (Finger)
+        0xA1, 0x02,             // Collection (Logical)
+
+        // Tip Switch
+        0x09, 0x42,             // Usage (Tip Switch)
+        0x15, 0x00,             // Logical Min 0
+        0x25, 0x01,             // Logical Max 1
+        0x75, 0x01,             // Report Size 1
+        0x95, 0x01,             // Report Count 1
+        0x81, 0x02,             // Input (Data,Var,Abs)
+
+        // In Range
+        0x09, 0x32,
+        0x75, 0x01,
+        0x95, 0x01,
+        0x81, 0x02,
+
+        // Confidence
+        0x09, 0x47,
+        0x75, 0x01,
+        0x95, 0x01,
+        0x81, 0x02,
+
+        // Padding
+        0x75, 0x05,
+        0x95, 0x01,
+        0x81, 0x03,
+
+        // Contact ID
+        0x09, 0x51,
+        0x75, 0x08,
+        0x95, 0x01,
+        0x15, 0x00,
+        0x25, 0xFF,
+        0x81, 0x02,
+
+        // X
+        0x05, 0x01,
+        0x09, 0x30,
+        0x75, 0x10,
+        0x95, 0x01,
+        0x15, 0x00,
+        0x26,
+    ];
+
+    d.extend_from_slice(&x_max.to_le_bytes());
+
+    d.extend_from_slice(&[
+        0x81, 0x02,             // Input X
+
+        // Y
+        0x09, 0x31,
+        0x75, 0x10,
+        0x95, 0x01,
+        0x15, 0x00,
+        0x26,
+    ]);
+
+    d.extend_from_slice(&y_max.to_le_bytes());
+
+    d.extend_from_slice(&[
+        0x81, 0x02,             // Input Y
+
+        0xC0,                   // End Finger
+
+        // Contact Count
+        0x05, 0x0D,
+        0x09, 0x54,             // Usage (Contact Count)
+        0x15, 0x00,
+        0x25, 0x01,
+        0x75, 0x08,
+        0x95, 0x01,
+        0x81, 0x02,
+
+        0xC0,                   // End Application
+
+        // Keyboard, Report ID 2
+        0x05, 0x01,
+        0x09, 0x06,
+        0xA1, 0x01,
+
+        0x85, 0x02,
+
+        0x05, 0x07,
+        0x19, 0xE0,
+        0x29, 0xE7,
+        0x15, 0x00,
+        0x25, 0x01,
+        0x75, 0x01,
+        0x95, 0x08,
+        0x81, 0x02,
+
+        0x95, 0x01,
+        0x75, 0x08,
+        0x81, 0x03,
+
+        0x95, 0x06,
+        0x75, 0x08,
+        0x15, 0x00,
+        0x25, 0x65,
+
+        0x05, 0x07,
+        0x19, 0x00,
+        0x29, 0x65,
+        0x81, 0x00,
+
+        0xC0,
+    ]);
+
+    d
+}
+fn build_report_descriptor_old(width: u16, height: u16) -> Vec<u8> {
+    let x_max = width.saturating_sub(1);
+    let y_max = height.saturating_sub(1);
+
+    let mut d = vec![
         // ---- Touchscreen (Digitizer, single touch), Report ID 1 ----
         0x05, 0x0D, 0x09, 0x04, 0xA1, 0x01,
         0x85, 0x01,
@@ -130,7 +254,25 @@ impl HidPeripheral {
 
     /// Send a touch event. `x`/`y` must be within `0..width`/`0..height` as configured
     /// at startup (values are clamped defensively).
-    pub async fn send_touch(&self, down: bool, x: u16, y: u16) -> std::io::Result<()> {
+    pub async fn send_touch(&self, down: bool,
+        x: u16,
+        y: u16,
+    ) -> std::io::Result<()> {
+        let x = x.min(self.width.saturating_sub(1));
+        let y = y.min(self.height.saturating_sub(1));
+
+        let mut report = Vec::with_capacity(8);
+
+        report.push(0x01);                 // Report ID
+        report.push(if down { 0x03 } else { 0x00 }); // Tip + In Range
+        report.push(0x00);                 // Contact ID
+        report.extend_from_slice(&x.to_le_bytes());
+        report.extend_from_slice(&y.to_le_bytes());
+        report.push(if down { 1 } else { 0 });       // Contact Count
+
+        self.write_report(&report).await
+    }
+    pub async fn send_touch_old(&self, down: bool, x: u16, y: u16) -> std::io::Result<()> {
         let x = x.min(self.width.saturating_sub(1));
         let y = y.min(self.height.saturating_sub(1));
         let mut report = Vec::with_capacity(6);
