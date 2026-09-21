@@ -1739,6 +1739,9 @@ impl SrvInputSource {
                     }
 
                 }
+                else {
+                    error!( "tsk_scrcpy_control: BT HID is None");
+                }
             }
             else if let Some(ControlServerState::Running(server)) = &self.scrcpy_server {
                 server.enque_msg(pkt).await;
