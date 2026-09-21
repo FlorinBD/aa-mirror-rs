@@ -1642,7 +1642,7 @@ impl SrvInputSource {
         {
             if self.bt_hid
             {
-                if let Some(ref hid)=self.hid_adapter
+                if let Some(hid)=&self.hid_adapter
                 {
                     let data = &pkt.payload[2..]; // start of message data, without message_id
                     if  let Ok(rsp) = InputReport::parse_from_bytes(&data) {
