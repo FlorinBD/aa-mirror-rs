@@ -1659,12 +1659,8 @@ impl SrvInputSource {
                                 let _down= (touch_action == PointerAction::ACTION_DOWN) || (touch_action == PointerAction::ACTION_MOVED);
 
                                 //hid.send_touch(_down,touch_x as u16,touch_y as u16).await;
-                                match hid.send_touch(_down,touch_x as u16,touch_y as u16).await{
-                                    Ok(()) => Ok(()),
-
-                                    Err(_) => {
-                                        error!("{:?}: touch_event.send_touch({}, {}, {})", self.base.srv_type, _down, touch_x, touch_y);
-                                    }
+                                if let Err(e)= hid.send_touch(_down,touch_x as u16,touch_y as u16).await{
+                                    error!("{:?}: touch_event.send_touch({}, {}, {})", self.base.srv_type, _down, touch_x, touch_y);
                                 }
                             }
                         }
@@ -1677,12 +1673,8 @@ impl SrvInputSource {
                                 let pointer_id = touch_ev.pointer_id();
                                 let _down= (touch_action == PointerAction::ACTION_DOWN) || (touch_action == PointerAction::ACTION_MOVED);
 
-                                match hid.send_touch(_down,touch_x as u16,touch_y as u16).await{
-                                    Ok(()) => Ok(()),
-
-                                    Err(_) => {
-                                        error!("{:?}: touchpad_event.send_touch({}, {}, {})", self.base.srv_type, _down, touch_x, touch_y);
-                                    }
+                                if let Err(e)=  hid.send_touch(_down,touch_x as u16,touch_y as u16).await{
+                                    error!("{:?}: touchpad_event.send_touch({}, {}, {})", self.base.srv_type, _down, touch_x, touch_y);
                                 }
                             }
                         }
@@ -1696,24 +1688,14 @@ impl SrvInputSource {
 
                                 if key_down
                                 {
-                                    match hid.send_key(0,[key_code as u8]).await{
-                                        Ok(()) => Ok(()),
-
-                                        Err(_) => {
-                                            error!("{:?}: key_event.send_key(0, {})", self.base.srv_type, key_code);
-                                        }
+                                    if let Err(e)= hid.send_key(0,[key_code as u8, 0, 0, 0, 0, 0]).await{
+                                        error!("{:?}: key_event.send_key(0, {}) error: {:?}", self.base.srv_type, key_code, e);
                                     }
                                 } else {
-                                    match hid.send_key(0,[0]).await{
-                                        Ok(()) => Ok(()),
-
-                                        Err(_) => {
-                                            error!("{:?}: key_event.send_key(0, 0)", self.base.srv_type);
-                                        }
+                                    if let Err(e)=  hid.send_key(0,[0, 0, 0, 0, 0, 0]).await{
+                                        error!("{:?}: key_event.send_key(0, 0) error: {:?}", self.base.srv_type, e);
                                     }
                                 }
-
-
                             }
                         }
                         else if let Some(abs_event) = rsp.absolute_event.as_ref()
