@@ -7,7 +7,7 @@ use crate::config_types::MACAddressList;
 use crate::web::AppState;
 use anyhow::anyhow;
 use backon::{ExponentialBuilder, Retryable};
-use bluer::{rfcomm::{Profile, ProfileHandle, Role, Stream}, Adapter, Address, Device, Session, Uuid};
+use bluer::{rfcomm::{Profile, ProfileHandle, Role, Stream}, Adapter, Address, Device, Session, Uuid, UuidExt};
 use futures::StreamExt;
 use simplelog::*;
 use std::sync::atomic::AtomicBool;
@@ -16,7 +16,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use bluer::adv::Advertisement;
 use bluer::gatt::CharacteristicWriter;
-use bluer::gatt::local::{characteristic_control, Application, Characteristic, CharacteristicControlEvent, CharacteristicNotify, CharacteristicNotifyMethod, CharacteristicRead, CharacteristicWrite, CharacteristicWriteMethod, Service};
+use bluer::gatt::local::{characteristic_control, Application, Characteristic, CharacteristicControlEvent, CharacteristicNotify, CharacteristicNotifyMethod, CharacteristicRead, CharacteristicWrite, CharacteristicWriteMethod, Descriptor, DescriptorRead, Service};
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::broadcast::Receiver as BroadcastReceiver;
@@ -172,6 +172,22 @@ impl HidPeripheral {
     }
 }
 
+fn report_reference_descriptor(report_id: u8) -> Descriptor {
+    Descriptor {
+        uuid: Uuid::from_u16(0x2908),
+        read: Some(DescriptorRead {
+            read: true,
+            fun: Box::new(move |_req| {
+                Box::pin(async move {
+                    Ok(vec![report_id, 0x01]) // ID, Input Report
+                })
+            }),
+            ..Default::default()
+        }),
+        ..Default::default()
+    }
+}
+
 pub async fn start_hid_peripheral(adapter: &Adapter, width: u16, height: u16) -> bluer::Result<HidPeripheral> {
     let (char_control, char_handle) = characteristic_control();
     let report_descriptor = build_report_descriptor(width, height);
@@ -209,6 +225,9 @@ pub async fn start_hid_peripheral(adapter: &Adapter, width: u16, height: u16) ->
                         method: CharacteristicNotifyMethod::Io,
                         ..Default::default()
                     }),
+                    descriptors: vec![
+                        report_reference_descriptor(1),
+                    ],
                     control_handle: char_handle,
                     ..Default::default()
                 },
