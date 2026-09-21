@@ -407,7 +407,6 @@ pub struct SrvInputSource {
     cancel:CancellationToken,
     //private
     scrcpy_server:Option<ControlServerState>,
-    hid_adapter:Option<HidPeripheral>,
 }
 
 pub struct SrvVendorExtension {
@@ -1508,7 +1507,6 @@ impl SrvInputSource {
             keys,
             cfg_screen_off,
             bt_hid,
-            hid_adapter: None,
             cancel:cancel.clone(),
             scrcpy_server: if bt_hid {
                 None
@@ -1528,6 +1526,7 @@ impl SrvInputSource {
 
     pub fn start(self,) -> (AAService, JoinHandle<Result<()>>) {
         let handle = self.base.clone();
+        let mut hid =None;
         let task =tokio::spawn(async move {
             let mut service = self;
             if service.bt_hid
@@ -1539,6 +1538,7 @@ impl SrvInputSource {
                     {
                         Ok(result) => {
                             info!("{:?}: Started hid peripheral",service.base.sid);
+                            hid=Some(result);
                             break;
                         }
                         Err(e) => {
@@ -1560,7 +1560,7 @@ impl SrvInputSource {
                     msg = service.rx.recv() => {
                         match msg {
                             Some(msg) => {
-                                service.handle_message( msg).await?;
+                                service.handle_message( msg, hid.as_ref()).await?;
                             }
 
                             None => {
@@ -1578,7 +1578,7 @@ impl SrvInputSource {
         (handle, task)
     }
 
-    async fn handle_message(&mut self, pkt: Packet) -> Result<()> {
+    async fn handle_message(&mut self, pkt: Packet, hid:Option<&HidPeripheral>) -> Result<()> {
 
         let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
         //info!("{:?} Received message id {}", self.base.srv_type, message_id);
@@ -1655,7 +1655,7 @@ impl SrvInputSource {
         {
             if self.bt_hid
             {
-                if let Some(hid)=&self.hid_adapter
+                if let Some(hid)=hid
                 {
                     let data = &pkt.payload[2..]; // start of message data, without message_id
                     if  let Ok(rsp) = InputReport::parse_from_bytes(&data) {
