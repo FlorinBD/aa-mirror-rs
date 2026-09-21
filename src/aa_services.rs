@@ -1967,6 +1967,7 @@ impl ServiceManager {
             let mut audio_srv_ready=false;
             let mut video_srv_ready=false;
             let mut control_srv_ready=false;
+            let scrcpy_ctrl_disabled= self.config.bt_hid_control.clone();
             loop {
                 tokio::select! {
                     _ = cancel.cancelled() => {
@@ -1976,7 +1977,7 @@ impl ServiceManager {
                     _ = service.audio_server_ready.notified() => {
                         // Notification received
                         audio_srv_ready=true;
-                        if audio_srv_ready && video_srv_ready && (control_srv_ready || self.config.bt_hid_control.clone())
+                        if audio_srv_ready && video_srv_ready && (control_srv_ready || scrcpy_ctrl_disabled)
                         {
                             service.start_adb_servers().await?;
                         }
@@ -1984,7 +1985,7 @@ impl ServiceManager {
                     _ = service.video_server_ready.notified() => {
                         // Notification received
                         video_srv_ready=true;
-                        if audio_srv_ready && video_srv_ready && (control_srv_ready || self.config.bt_hid_control.clone())
+                        if audio_srv_ready && video_srv_ready && (control_srv_ready || scrcpy_ctrl_disabled)
                         {
                             service.start_adb_servers().await?;
                         }
