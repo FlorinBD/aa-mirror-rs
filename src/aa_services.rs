@@ -1741,8 +1741,9 @@ impl SrvInputSource {
                 debug!("{:?} Decoded KeyBindingResponse status: {:?}",self.base.srv_type, rsp.status());
                 if matches!(self.scrcpy_server, Some(ControlServerState::Created(_))) {
                     debug!("{:?} Notify control server ready", self.base.srv_type);
-                    self.adb_start_server.notify_one();
                 }
+                //notify anyway because we need it for BT HID as well to start SCRCPY server
+                self.adb_start_server.notify_one();
             }
         }
         else {
@@ -1967,7 +1968,6 @@ impl ServiceManager {
             let mut audio_srv_ready=false;
             let mut video_srv_ready=false;
             let mut control_srv_ready=false;
-            let scrcpy_ctrl_disabled= self.config.bt_hid_control.clone();
             loop {
                 tokio::select! {
                     _ = cancel.cancelled() => {
@@ -1977,7 +1977,7 @@ impl ServiceManager {
                     _ = service.audio_server_ready.notified() => {
                         // Notification received
                         audio_srv_ready=true;
-                        if audio_srv_ready && video_srv_ready && (control_srv_ready || scrcpy_ctrl_disabled)
+                        if audio_srv_ready && video_srv_ready && control_srv_ready
                         {
                             service.start_adb_servers().await?;
                         }
@@ -1985,7 +1985,7 @@ impl ServiceManager {
                     _ = service.video_server_ready.notified() => {
                         // Notification received
                         video_srv_ready=true;
-                        if audio_srv_ready && video_srv_ready && (control_srv_ready || scrcpy_ctrl_disabled)
+                        if audio_srv_ready && video_srv_ready && control_srv_ready
                         {
                             service.start_adb_servers().await?;
                         }
