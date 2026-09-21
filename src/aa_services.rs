@@ -36,7 +36,7 @@ use crate::aa_services::MediaCodec::{AUDIO_AAC_LC, AUDIO_AAC_LC_ADTS, AUDIO_PCM,
 use crate::aa_services::VideoCodecResolution::{Video_1080x1920, Video_720x1280, Video_800x480};
 use crate::aa_services::VideoFPS::{FPS_30, FPS_60};
 use crate::adb;
-use crate::bluetooth::start_hid_peripheral;
+use crate::bluetooth::{start_hid_peripheral, HidPeripheral};
 use crate::channel_manager::{pkt_debug, Packet, TlsPacketProxy, ENCRYPTED, FRAME_TYPE_CONTROL, FRAME_TYPE_FIRST, FRAME_TYPE_LAST};
 use crate::config::{AppConfig, HU_CONFIG_DELAY_MS, SCRCPY_PORT};
 use crate::config_types::HexdumpLevel;
@@ -407,6 +407,7 @@ pub struct SrvInputSource {
     cancel:CancellationToken,
     //private
     scrcpy_server:Option<ControlServerState>,
+    hid_adapter:Option<HidPeripheral>,
 }
 
 pub struct SrvVendorExtension {
@@ -1507,6 +1508,7 @@ impl SrvInputSource {
             keys,
             cfg_screen_off,
             bt_hid,
+            hid_adapter: None,
             cancel:cancel.clone(),
             scrcpy_server: Some(ControlServerState::Created(
                 crate::scrcpy::ControlServer::new(sid as u8,hu_tx.clone(), screen_size, cfg_screen_off,cancel.clone()))
@@ -1518,8 +1520,13 @@ impl SrvInputSource {
         let handle = self.base.clone();
         let task =tokio::spawn(async move {
             let mut service = self;
-            let bt_adapter;
-            let hid = start_hid_peripheral(&bt_adapter, 800, 480).await?;
+            if service.bt_hid
+            {
+                let session = bluer::Session::new().await?;
+                let bt_adapter = session.default_adapter().await?;
+                service.hid_adapter = Some(start_hid_peripheral(&bt_adapter, 800, 480).await?);
+            }
+
             loop {
                 tokio::select! {
                     _ = service.cancel.cancelled() => {
