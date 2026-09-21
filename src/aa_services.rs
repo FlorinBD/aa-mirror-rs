@@ -41,7 +41,7 @@ use crate::channel_manager::{pkt_debug, Packet, TlsPacketProxy, ENCRYPTED, FRAME
 use crate::config::{AppConfig, HU_CONFIG_DELAY_MS, SCRCPY_PORT};
 use crate::config_types::HexdumpLevel;
 use crate::io_uring::{Endpoint, IoDevice};
-use crate::scrcpy::{AudioServerState, ControlServerState, ScrcpyControlMessageType, ScrcpySize, VideoServerState};
+use crate::scrcpy::{AndroidKeyEvent, AndroidTouchEvent, AudioServerState, ControlServerState, ScrcpyControlMessageType, ScrcpyKeyEvent, ScrcpyPoint, ScrcpyPosition, ScrcpyScrollEvent, ScrcpySize, ScrcpyTouchEvent, VideoServerState};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
@@ -1510,9 +1510,19 @@ impl SrvInputSource {
             bt_hid,
             hid_adapter: None,
             cancel:cancel.clone(),
-            scrcpy_server: Some(ControlServerState::Created(
-                crate::scrcpy::ControlServer::new(sid as u8,hu_tx.clone(), screen_size, cfg_screen_off,cancel.clone()))
-            ),
+            scrcpy_server: if bt_hid {
+                None
+            } else {
+                Some(ControlServerState::Created(
+                    crate::scrcpy::ControlServer::new(
+                        sid as u8,
+                        hu_tx.clone(),
+                        screen_size,
+                        cfg_screen_off,
+                        cancel.clone(),
+                    ),
+                ))
+            },
         }
     }
 
@@ -1615,18 +1625,127 @@ impl SrvInputSource {
             }
             else if cmd == CustomCommand::CMD_START_CONTROL_SERVER as i32
             {
-                if let Some(ControlServerState::Created(server)) = self.scrcpy_server.take() {
-                    self.scrcpy_server = Some(ControlServerState::Running(server.start()));
+                if !self.bt_hid
+                {
+                    if let Some(ControlServerState::Created(server)) = self.scrcpy_server.take() {
+                        self.scrcpy_server = Some(ControlServerState::Running(server.start()));
+                    }
+                    else {
+                        error!( "{:?} Unable to start control server",self.base.srv_type);
+                        self.cancel.cancel();
+                    }
                 }
-                else {
-                    error!( "{:?} Unable to start control server",self.base.srv_type);
-                    self.cancel.cancel();
-                }
+
             }
         }
         else if message_id == InputMessageId::INPUT_MESSAGE_INPUT_REPORT  as i32
         {
-            if let Some(ControlServerState::Running(server)) = &self.scrcpy_server {
+            if self.bt_hid
+            {
+                if let Some(hid)=self.hid_adapter
+                {
+                    let data = &pkt.payload[2..]; // start of message data, without message_id
+                    if  let Ok(rsp) = InputReport::parse_from_bytes(&data) {
+                        //info!( "tsk_scrcpy_control InputReport received: {:?}", rsp);
+                        if rsp.touch_event.is_some()
+                        {
+                            let touch_action = rsp.touch_event.action();
+                            for (_,touch_ev) in rsp.touch_event.pointer_data.iter().enumerate() {
+                                let touch_x = touch_ev.x();
+                                let touch_y = touch_ev.y();
+                                let pointer_id = touch_ev.pointer_id();
+
+
+                                let _down= (touch_action == PointerAction::ACTION_DOWN) || (touch_action == PointerAction::ACTION_MOVED);
+
+                                //hid.send_touch(_down,touch_x as u16,touch_y as u16).await;
+                                match hid.send_touch(_down,touch_x as u16,touch_y as u16).await{
+                                    Ok(()) => Ok(()),
+
+                                    Err(_) => {
+                                        error!("{:?}: touch_event.send_touch({}, {}, {})", self.base.srv_type, _down, touch_x, touch_y);
+                                    }
+                                }
+                            }
+                        }
+                        else if rsp.touchpad_event.is_some()
+                        {
+                            let touch_action = rsp.touchpad_event.action();
+                            for (_,touch_ev) in rsp.touchpad_event.pointer_data.iter().enumerate() {
+                                let touch_x = touch_ev.x();
+                                let touch_y = touch_ev.y();
+                                let pointer_id = touch_ev.pointer_id();
+                                let _down= (touch_action == PointerAction::ACTION_DOWN) || (touch_action == PointerAction::ACTION_MOVED);
+
+                                match hid.send_touch(_down,touch_x as u16,touch_y as u16).await{
+                                    Ok(()) => Ok(()),
+
+                                    Err(_) => {
+                                        error!("{:?}: touchpad_event.send_touch({}, {}, {})", self.base.srv_type, _down, touch_x, touch_y);
+                                    }
+                                }
+                            }
+                        }
+                        else if rsp.key_event.is_some()
+                        {
+                            let mut key_code=0i32;
+                            for (_,key_ev) in rsp.key_event.keys.iter().enumerate() {
+                                log::debug!("scrcpy_control received key_event: keycode={:?}, down={:?}",key_ev.keycode(), key_ev.down());
+                                let key_down = key_ev.down();
+                                key_code=key_ev.keycode() as i32;
+
+                                if key_down
+                                {
+                                    match hid.send_key(0,[key_code as u8]).await{
+                                        Ok(()) => Ok(()),
+
+                                        Err(_) => {
+                                            error!("{:?}: key_event.send_key(0, {})", self.base.srv_type, key_code);
+                                        }
+                                    }
+                                } else {
+                                    match hid.send_key(0,[0]).await{
+                                        Ok(()) => Ok(()),
+
+                                        Err(_) => {
+                                            error!("{:?}: key_event.send_key(0, 0)", self.base.srv_type);
+                                        }
+                                    }
+                                }
+
+
+                            }
+                        }
+                        else if let Some(abs_event) = rsp.absolute_event.as_ref()
+                        {
+                            for (key_ev) in &abs_event.data{
+                                log::debug!("scrcpy_control received ABS event: keycode={:?}, value={:?}",key_ev.keycode(),key_ev.value())
+                            }
+                        }
+                        else if let Some(rel_event) = rsp.relative_event.as_ref()
+                        {
+                            for (key_ev) in &rel_event.data {
+                                log::debug!("scrcpy_control received REL event: keycode={:?}, delta={:?}",key_ev.keycode(),key_ev.delta());
+                                if key_ev.keycode() == KeyCode::KEYCODE_ROTARY_CONTROLLER as u32
+                                {
+                                    //FIXME
+                                }
+
+                            }
+                        }
+                        else
+                        {
+                            error!( "tsk_scrcpy_control unmanaged key action");
+                        }
+                    }
+                    else
+                    {
+                        error!( "tsk_scrcpy_control: Unable to parse received message");
+                    }
+
+                }
+            }
+            else if let Some(ControlServerState::Running(server)) = &self.scrcpy_server {
                 server.enque_msg(pkt).await;
             }
             else {
