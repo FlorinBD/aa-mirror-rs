@@ -1976,7 +1976,7 @@ impl ServiceManager {
                     _ = service.audio_server_ready.notified() => {
                         // Notification received
                         audio_srv_ready=true;
-                        if(audio_srv_ready && video_srv_ready && control_srv_ready)
+                        if audio_srv_ready && video_srv_ready && (control_srv_ready || self.config.bt_hid_control)
                         {
                             service.start_adb_servers().await?;
                         }
@@ -1984,7 +1984,7 @@ impl ServiceManager {
                     _ = service.video_server_ready.notified() => {
                         // Notification received
                         video_srv_ready=true;
-                        if(audio_srv_ready && video_srv_ready && control_srv_ready)
+                        if audio_srv_ready && video_srv_ready && (control_srv_ready || self.config.bt_hid_control)
                         {
                             service.start_adb_servers().await?;
                         }
@@ -1992,7 +1992,7 @@ impl ServiceManager {
                     _ = service.control_server_ready.notified() => {
                         // Notification received
                         control_srv_ready=true;
-                        if(audio_srv_ready && video_srv_ready && control_srv_ready)
+                        if audio_srv_ready && video_srv_ready && control_srv_ready
                         {
                             service.start_adb_servers().await?;
                         }
