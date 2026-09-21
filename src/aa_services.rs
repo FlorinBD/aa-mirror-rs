@@ -1534,7 +1534,19 @@ impl SrvInputSource {
             {
                 let session = bluer::Session::new().await?;
                 let bt_adapter = session.default_adapter().await?;
-                service.hid_adapter = Some(start_hid_peripheral(&bt_adapter, 800, 480).await?);
+                loop {
+                    match start_hid_peripheral(&bt_adapter, 800, 480).await
+                    {
+                        Ok(result) => {
+                            info!("{:?}: Started hid peripheral",service.base.sid);
+                        }
+                        Err(e) => {
+                            error!("{:?}: Failed to start hid peripheral: {:?}", service.base.sid, e);
+                            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                            continue;
+                        }
+                    }
+                }
             }
 
             loop {
