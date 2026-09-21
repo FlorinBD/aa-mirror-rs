@@ -259,7 +259,7 @@ pub async fn start_hid_peripheral(adapter: &Adapter, width: u16, height: u16) ->
         ..Default::default()
     };
     //let adv_handle = adapter.advertise(le_advertisement).await?;
-    let adv_handle;
+    let mut adv_handle=None;
     for attempt in 0..3 {
         match adapter.advertise(le_advertisement.clone()).await {
             Ok(handle) => {
@@ -273,6 +273,12 @@ pub async fn start_hid_peripheral(adapter: &Adapter, width: u16, height: u16) ->
             }
         }
     }
+    let adv_handle = match adv_handle {
+        Some(handle) => handle,
+        None => {
+            return Err(bluer::Error::from(std::io::Error::new(std::io::ErrorKind::Other, "Failed to register BLE advertisement after 3 attempts", )));
+        }
+    };
 
     let writer_slot: Arc<Mutex<Option<CharacteristicWriter>>> = Arc::new(Mutex::new(None));
     let writer_slot_task = writer_slot.clone();
