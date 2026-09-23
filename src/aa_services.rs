@@ -1673,7 +1673,7 @@ impl SrvInputSource {
 
                                 //hid.send_touch(_down,touch_x as u16,touch_y as u16).await;
                                 if let Err(e)= hid.send_touch(_down,touch_x as u16,touch_y as u16).await{
-                                    error!("{:?}: touch_event.send_touch({}, {}, {})", self.base.srv_type, _down, touch_x, touch_y);
+                                    error!("{:?}: touch_event.send_touch({}, {}, {}) error: {:?}", self.base.srv_type, _down, touch_x, touch_y, e);
                                 }
                             }
                         }
@@ -1687,7 +1687,7 @@ impl SrvInputSource {
                                 let _down= (touch_action == PointerAction::ACTION_DOWN) || (touch_action == PointerAction::ACTION_MOVED);
 
                                 if let Err(e)=  hid.send_touch(_down,touch_x as u16,touch_y as u16).await{
-                                    error!("{:?}: touchpad_event.send_touch({}, {}, {})", self.base.srv_type, _down, touch_x, touch_y);
+                                    error!("{:?}: touchpad_event.send_touch({}, {}, {}), error: {:?}", self.base.srv_type, _down, touch_x, touch_y, e);
                                 }
                             }
                         }
