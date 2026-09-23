@@ -1534,7 +1534,8 @@ impl SrvInputSource {
                 let session = bluer::Session::new().await?;
                 let bt_adapter = session.default_adapter().await?;
                 loop {
-                    match start_hid_peripheral(&bt_adapter, 800, 480).await
+                    //match start_hid_peripheral(&bt_adapter, 800, 480).await
+                    match start_hid_peripheral(&bt_adapter, 1080, 2316).await
                     {
                         Ok(result) => {
                             info!("{:?}: Started hid peripheral",service.base.sid);
