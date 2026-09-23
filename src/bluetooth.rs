@@ -84,60 +84,67 @@ fn build_report_descriptor(width: u16, height: u16) -> Vec<u8> {
     let y_max = height.saturating_sub(1);
 
     let mut d = vec![
-        // Digitizer / Touch Screen
         0x05, 0x0D,             // Usage Page (Digitizer)
         0x09, 0x04,             // Usage (Touch Screen)
         0xA1, 0x01,             // Collection (Application)
 
-        // Report ID 1
-        0x85, 0x01,
+        0x85, 0x01,             //   Report ID (1)
+        0x09, 0x22,             //   Usage (Finger)
+        0xA1, 0x00,             //   Collection (Physical)
 
-        // Finger
-        0x09, 0x22,             // Usage (Finger)
-        0xA1, 0x02,             // Collection (Logical)
+        // Tip Switch + In Range (2 bits) + 6 bits padding
+        0x09, 0x42,             //     Usage (Tip Switch)
+        0x09, 0x32,             //     Usage (In Range)
+        0x15, 0x00,             //     Logical Min 0
+        0x25, 0x01,             //     Logical Max 1
+        0x75, 0x01,             //     Report Size 1
+        0x95, 0x02,             //     Report Count 2
+        0x81, 0x02,             //     Input (Data,Var,Abs)
+        0x75, 0x06,             //     Report Size 6 (padding)
+        0x95, 0x01,             //     Report Count 1
+        0x81, 0x03,             //     Input (Const,Var,Abs)
 
-        // Tip Switch
-        0x09, 0x42,             // Usage (Tip Switch)
-        0x15, 0x00,             // Logical Min 0
-        0x25, 0x01,             // Logical Max 1
-        0x75, 0x01,             // Report Size 1
-        0x95, 0x01,             // Report Count 1
-        0x81, 0x02,             // Input (Data,Var,Abs)
-
-        // Padding
-        0x75, 0x07,
-        0x95, 0x01,
-        0x81, 0x03,             // Input (Constant)
+        // Contact Identifier
+        0x75, 0x08,             //     Report Size 8
+        0x95, 0x01,             //     Report Count 1
+        0x09, 0x51,             //     Usage (Contact Identifier)
+        0x81, 0x02,             //     Input (Data,Var,Abs)
 
         // X
-        0x05, 0x01,             // Generic Desktop
-        0x09, 0x30,             // Usage (X)
-        0x15, 0x00,
-        0x26,
+        0x05, 0x01,             //     Usage Page (Generic Desktop)
+        0x09, 0x30,             //     Usage (X)
+        0x75, 0x10,             //     Report Size 16
+        0x95, 0x01,             //     Report Count 1
+        0x15, 0x00,             //     Logical Min 0
+        0x26,                   //     Logical Max (X)
     ];
-
     d.extend_from_slice(&x_max.to_le_bytes());
-
     d.extend_from_slice(&[
-        0x75, 0x10,
-        0x95, 0x01,
-        0x81, 0x02,             // Input X
+        0x81, 0x02,             //     Input (Data,Var,Abs)
 
         // Y
-        0x09, 0x31,
-        0x15, 0x00,
-        0x26,
+        0x09, 0x31,             //     Usage (Y)
+        0x15, 0x00,             //     Logical Min 0
+        0x26,                   //     Logical Max (Y)
     ]);
-
     d.extend_from_slice(&y_max.to_le_bytes());
-
     d.extend_from_slice(&[
-        0x75, 0x10,
-        0x95, 0x01,
-        0x81, 0x02,             // Input Y
+        0x75, 0x10,             //     Report Size 16
+        0x95, 0x01,             //     Report Count 1
+        0x81, 0x02,             //     Input (Data,Var,Abs)
 
-        0xC0,                   // End Finger
-        0xC0,                   // End Touch Screen
+        0xC0,                   //   End Collection (Physical - Finger)
+
+        // Contact Count (outside the finger collection, per spec)
+        0x05, 0x0D,             //   Usage Page (Digitizer)
+        0x09, 0x54,             //   Usage (Contact Count)
+        0x15, 0x00,             //   Logical Min 0
+        0x25, 0x01,             //   Logical Max 1 (single touch)
+        0x75, 0x08,             //   Report Size 8
+        0x95, 0x01,             //   Report Count 1
+        0x81, 0x02,             //   Input (Data,Var,Abs)
+
+        0xC0,                   // End Collection (Application)
     ]);
 
     d
@@ -317,22 +324,20 @@ impl HidPeripheral {
 
     /// Send a touch event. `x`/`y` must be within `0..width`/`0..height` as configured
     /// at startup (values are clamped defensively).
-    pub async fn send_touch(
-        &self,
-        down: bool,
-        x: u16,
-        y: u16,
-    ) -> std::io::Result<()> {
+    pub async fn send_touch(&self, down: bool, x: u16, y: u16) -> std::io::Result<()> {
         let x = x.min(self.width.saturating_sub(1));
         let y = y.min(self.height.saturating_sub(1));
 
+        let flags: u8 = if down { 0x03 } else { 0x00 }; // bit0 tip switch, bit1 in range
         let report = [
             0x01,                       // Report ID
-            if down { 0x01 } else { 0x00 },
+            flags,
+            0x00,                       // Contact Identifier (fixed, single touch)
             (x & 0xFF) as u8,
             (x >> 8) as u8,
             (y & 0xFF) as u8,
             (y >> 8) as u8,
+            if down { 0x01 } else { 0x00 }, // Contact Count
         ];
         debug!("BT HID send_touch report {:?}", report);
         self.write_report(&report).await
