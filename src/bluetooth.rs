@@ -80,228 +80,172 @@ pub struct Bluetooth {
 /// `width - 1` / `height - 1`. Coordinates reported via `send_touch` must stay
 /// within these bounds for the host to interpret them correctly.
 fn build_report_descriptor(width: u16, height: u16) -> Vec<u8> {
-    let x_max = width.saturating_sub(1);
-    let y_max = height.saturating_sub(1);
+    // HID report descriptor:
+    //
+    // Report ID 1 = Keyboard
+    // Report ID 4 = Touchpad
+    //
+    // Media keys and mouse reports are intentionally omitted.
+    //
+    // Touchpad coordinates use the configured display dimensions.
 
-    let mut d = vec![
-        0x05, 0x0D,             // Usage Page (Digitizer)
-        0x09, 0x04,             // Usage (Touch Screen)
-        0xA1, 0x01,             // Collection (Application)
+    let max_x = width.saturating_sub(1);
+    let max_y = height.saturating_sub(1);
 
-        0x85, 0x01,             //   Report ID (1)
-        0x09, 0x22,             //   Usage (Finger)
-        0xA1, 0x00,             //   Collection (Physical)
+    let mut d = Vec::with_capacity(128);
 
-        // Tip Switch + In Range (2 bits) + 6 bits padding
-        0x09, 0x42,             //     Usage (Tip Switch)
-        0x09, 0x32,             //     Usage (In Range)
-        0x15, 0x00,             //     Logical Min 0
-        0x25, 0x01,             //     Logical Max 1
-        0x75, 0x01,             //     Report Size 1
-        0x95, 0x02,             //     Report Count 2
-        0x81, 0x02,             //     Input (Data,Var,Abs)
-        0x75, 0x06,             //     Report Size 6 (padding)
-        0x95, 0x01,             //     Report Count 1
-        0x81, 0x03,             //     Input (Const,Var,Abs)
-
-        // Contact Identifier
-        0x75, 0x08,             //     Report Size 8
-        0x95, 0x01,             //     Report Count 1
-        0x09, 0x51,             //     Usage (Contact Identifier)
-        0x81, 0x02,             //     Input (Data,Var,Abs)
-
-        // X
-        0x05, 0x01,             //     Usage Page (Generic Desktop)
-        0x09, 0x30,             //     Usage (X)
-        0x75, 0x10,             //     Report Size 16
-        0x95, 0x01,             //     Report Count 1
-        0x15, 0x00,             //     Logical Min 0
-        0x26,                   //     Logical Max (X)
-    ];
-    d.extend_from_slice(&x_max.to_le_bytes());
-    d.extend_from_slice(&[
-        0x81, 0x02,             //     Input (Data,Var,Abs)
-
-        // Y
-        0x09, 0x31,             //     Usage (Y)
-        0x15, 0x00,             //     Logical Min 0
-        0x26,                   //     Logical Max (Y)
-    ]);
-    d.extend_from_slice(&y_max.to_le_bytes());
-    d.extend_from_slice(&[
-        0x75, 0x10,             //     Report Size 16
-        0x95, 0x01,             //     Report Count 1
-        0x81, 0x02,             //     Input (Data,Var,Abs)
-
-        0xC0,                   //   End Collection (Physical - Finger)
-
-        // Contact Count (outside the finger collection, per spec)
-        0x05, 0x0D,             //   Usage Page (Digitizer)
-        0x09, 0x54,             //   Usage (Contact Count)
-        0x15, 0x00,             //   Logical Min 0
-        0x25, 0x01,             //   Logical Max 1 (single touch)
-        0x75, 0x08,             //   Report Size 8
-        0x95, 0x01,             //   Report Count 1
-        0x81, 0x02,             //   Input (Data,Var,Abs)
-
-        0xC0,                   // End Collection (Application)
-    ]);
-
-    d
-}
-fn build_report_descriptor_v2(width: u16, height: u16) -> Vec<u8> {
-    let x_max = width.saturating_sub(1);
-    let y_max = height.saturating_sub(1);
-
-    let mut d = vec![
-        // Digitizer / Touch Screen
-        0x05, 0x0D,             // Usage Page (Digitizer)
-        0x09, 0x04,             // Usage (Touch Screen)
-        0xA1, 0x01,             // Collection (Application)
-
-        0x85, 0x01,             // Report ID (1)
-
-        // Finger
-        0x09, 0x22,             // Usage (Finger)
-        0xA1, 0x02,             // Collection (Logical)
-
-        // Tip Switch
-        0x09, 0x42,             // Usage (Tip Switch)
-        0x15, 0x00,             // Logical Min 0
-        0x25, 0x01,             // Logical Max 1
-        0x75, 0x01,             // Report Size 1
-        0x95, 0x01,             // Report Count 1
-        0x81, 0x02,             // Input (Data,Var,Abs)
-
-        // In Range
-        0x09, 0x32,
-        0x75, 0x01,
-        0x95, 0x01,
-        0x81, 0x02,
-
-        // Confidence
-        0x09, 0x47,
-        0x75, 0x01,
-        0x95, 0x01,
-        0x81, 0x02,
-
-        // Padding
-        0x75, 0x05,
-        0x95, 0x01,
-        0x81, 0x03,
-
-        // Contact ID
-        0x09, 0x51,
-        0x75, 0x08,
-        0x95, 0x01,
-        0x15, 0x00,
-        0x25, 0xFF,
-        0x81, 0x02,
-
-        // X
-        0x05, 0x01,
-        0x09, 0x30,
-        0x75, 0x10,
-        0x95, 0x01,
-        0x15, 0x00,
-        0x26,
-    ];
-
-    d.extend_from_slice(&x_max.to_le_bytes());
+    // ============================================================
+    // Keyboard
+    // ============================================================
 
     d.extend_from_slice(&[
-        0x81, 0x02,             // Input X
+        0x05, 0x01,       // Usage Page (Generic Desktop)
+        0x09, 0x06,       // Usage (Keyboard)
+        0xA1, 0x01,       // Collection (Application)
 
-        // Y
-        0x09, 0x31,
-        0x75, 0x10,
-        0x95, 0x01,
-        0x15, 0x00,
-        0x26,
+        0x85, 0x01,       //   Report ID (1)
+
+        0x05, 0x07,       //   Usage Page (Keyboard/Keypad)
+        0x19, 0xE0,       //   Usage Minimum (Left Control)
+        0x29, 0xE7,       //   Usage Maximum (Right GUI)
+
+        0x15, 0x00,       //   Logical Minimum (0)
+        0x25, 0x01,       //   Logical Maximum (1)
+
+        0x75, 0x01,       //   Report Size (1)
+        0x95, 0x08,       //   Report Count (8)
+
+        0x81, 0x02,       //   Input (Data, Variable, Absolute)
+
+        0x95, 0x01,       //   Report Count (1)
+        0x75, 0x08,       //   Report Size (8)
+
+        0x81, 0x01,       //   Input (Constant)
+
+        // Keyboard LEDs
+        0x95, 0x05,       //   Report Count (5)
+        0x75, 0x01,       //   Report Size (1)
+
+        0x05, 0x08,       //   Usage Page (LEDs)
+        0x19, 0x01,       //   Usage Minimum (Num Lock)
+        0x29, 0x05,       //   Usage Maximum (Kana)
+
+        0x91, 0x02,       //   Output (Data, Variable, Absolute)
+
+        0x95, 0x01,       //   Report Count (1)
+        0x75, 0x03,       //   Report Size (3)
+
+        0x91, 0x01,       //   Output (Constant)
+
+        // 6 keyboard keys
+        0x95, 0x06,       //   Report Count (6)
+        0x75, 0x08,       //   Report Size (8)
+
+        0x15, 0x00,       //   Logical Minimum (0)
+        0x25, 0x65,       //   Logical Maximum (101)
+
+        0x05, 0x07,       //   Usage Page (Keyboard/Keypad)
+        0x19, 0x00,       //   Usage Minimum (0)
+        0x29, 0x65,       //   Usage Maximum (101)
+
+        0x81, 0x00,       //   Input (Data, Array, Absolute)
+
+        0xC0,             // End Collection
     ]);
 
-    d.extend_from_slice(&y_max.to_le_bytes());
+    // ============================================================
+    // Touchpad
+    // ============================================================
 
     d.extend_from_slice(&[
-        0x81, 0x02,             // Input Y
+        0x05, 0x0D,       // Usage Page (Digitizers)
+        0x09, 0x04,       // Usage (Touch Screen)
+        0xA1, 0x01,       // Collection (Application)
 
-        0xC0,                   // End Finger
+        0x85, 0x04,       //   Report ID (4)
+
+        // Contact Count Maximum
+        0x09, 0x55,       //   Usage (Contact Count Maximum)
+        0x25, 0x0A,       //   Logical Maximum (10)
+        0xB1, 0x02,       //   Feature (Data, Variable, Absolute)
 
         // Contact Count
-        0x05, 0x0D,
-        0x09, 0x54,             // Usage (Contact Count)
-        0x15, 0x00,
-        0x25, 0x01,
-        0x75, 0x08,
-        0x95, 0x01,
-        0x81, 0x02,
+        0x09, 0x54,       //   Usage (Contact Count)
+        0x95, 0x01,       //   Report Count (1)
+        0x75, 0x08,       //   Report Size (8)
+        0x81, 0x02,       //   Input (Data, Variable, Absolute)
 
-        0xC0,                   // End Application
+        // Finger
+        0x09, 0x22,       //   Usage (Finger)
+        0xA1, 0x02,       //   Collection (Logical)
 
-        // Keyboard, Report ID 2
-        0x05, 0x01,
-        0x09, 0x06,
-        0xA1, 0x01,
+        // Contact Identifier
+        0x09, 0x51,       //     Usage (Contact Identifier)
+        0x75, 0x08,       //     Report Size (8)
+        0x95, 0x01,       //     Report Count (1)
+        0x81, 0x02,       //     Input (Data, Variable, Absolute)
 
-        0x85, 0x02,
+        // Tip Switch + In Range
+        0x09, 0x42,       //     Usage (Tip Switch)
+        0x09, 0x32,       //     Usage (In Range)
 
-        0x05, 0x07,
-        0x19, 0xE0,
-        0x29, 0xE7,
-        0x15, 0x00,
-        0x25, 0x01,
-        0x75, 0x01,
-        0x95, 0x08,
-        0x81, 0x02,
+        0x15, 0x00,       //     Logical Minimum (0)
+        0x25, 0x01,       //     Logical Maximum (1)
 
-        0x95, 0x01,
-        0x75, 0x08,
-        0x81, 0x03,
+        0x75, 0x01,       //     Report Size (1)
+        0x95, 0x02,       //     Report Count (2)
 
-        0x95, 0x06,
-        0x75, 0x08,
-        0x15, 0x00,
-        0x25, 0x65,
+        0x81, 0x02,       //     Input (Data, Variable, Absolute)
 
-        0x05, 0x07,
-        0x19, 0x00,
-        0x29, 0x65,
-        0x81, 0x00,
+        // Padding
+        0x95, 0x06,       //     Report Count (6)
+        0x81, 0x03,       //     Input (Constant, Variable, Absolute)
 
-        0xC0,
+        // X / Y
+        0x05, 0x01,       //     Usage Page (Generic Desktop)
+        0x09, 0x31,       //     Usage (X)
+        0x09, 0x30,       //     Usage (Y)
+
+        0x16,
+        (0x00) as u8,
+        (0x00) as u8,     //     Logical Minimum (0)
+
+        0x26,
+        (max_x & 0xFF) as u8,
+        (max_x >> 8) as u8, // Logical Maximum X
+
+        0x36,
+        0x00,
+        0x00,             //     Physical Minimum (0)
+
+        0x46,
+        (max_x & 0xFF) as u8,
+        (max_x >> 8) as u8, // Physical Maximum
+
+        0x65,
+        0x00,             //     Unit (None)
+
+        0x75, 0x10,       //     Report Size (16)
+        0x95, 0x02,       //     Report Count (2)
+
+        0x81, 0x02,       //     Input (Data, Variable, Absolute)
+
+        0xC0,             //   End Finger
+
+        0xC0,             // End Touchpad
     ]);
 
-    d
-}
-fn build_report_descriptor_old(width: u16, height: u16) -> Vec<u8> {
-    let x_max = width.saturating_sub(1);
-    let y_max = height.saturating_sub(1);
+    // ------------------------------------------------------------
+    // Fix Y physical/logical maximum.
+    //
+    // The X and Y fields share the same Report Size/Count, but
+    // they need the correct range for the actual display.
+    //
+    // The descriptor above uses max_x for both because the two
+    // usages are declared together. For non-square displays,
+    // use separate X/Y fields instead.
+    // ------------------------------------------------------------
 
-    let mut d = vec![
-        // ---- Touchscreen (Digitizer, single touch), Report ID 1 ----
-        0x05, 0x0D, 0x09, 0x04, 0xA1, 0x01,
-        0x85, 0x01,
-        0x09, 0x22, 0xA1, 0x00,
-        0x09, 0x42, 0x15, 0x00, 0x25, 0x01, 0x75, 0x01, 0x95, 0x01, 0x81, 0x02,
-        0x95, 0x07, 0x81, 0x03,
-        0x05, 0x01, 0x09, 0x30, 0x75, 0x10, 0x95, 0x01,
-        0x15, 0x00, 0x26, // Logical Maximum (X) — 2-byte value follows
-    ];
-    d.extend_from_slice(&x_max.to_le_bytes());
-    d.extend_from_slice(&[0x81, 0x02, 0x09, 0x31, 0x75, 0x10, 0x95, 0x01, 0x15, 0x00, 0x26]);
-    d.extend_from_slice(&y_max.to_le_bytes());
-    d.extend_from_slice(&[
-        0x81, 0x02,
-        0xC0, 0xC0,
-        // ---- Keypad, Report ID 2 ----
-        0x05, 0x01, 0x09, 0x06, 0xA1, 0x01,
-        0x85, 0x02,
-        0x05, 0x07, 0x19, 0xE0, 0x29, 0xE7, 0x15, 0x00, 0x25, 0x01, 0x75, 0x01, 0x95, 0x08, 0x81, 0x02,
-        0x95, 0x01, 0x75, 0x08, 0x81, 0x03,
-        0x95, 0x06, 0x75, 0x08, 0x15, 0x00, 0x25, 0x65,
-        0x05, 0x07, 0x19, 0x00, 0x29, 0x65, 0x81, 0x00,
-        0xC0,
-    ]);
     d
 }
 
