@@ -496,6 +496,7 @@ pub async fn io_loop_mirror(
                 }
                 Err(e) => {
                     error!("{:?}: Failed to start HID peripheral: {:?}", NAME, e);
+                    tokio::time::sleep(Duration::from_secs(1)).await;
                     break;
                 }
             }
