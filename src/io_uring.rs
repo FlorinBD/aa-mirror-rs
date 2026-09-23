@@ -38,7 +38,7 @@ use crate::channel_manager::{ChannelProxyHandle, TlsPacketProxy, SslMemBuf, HEAD
 use crate::aa_services::{VideoStreamingParams, AudioStreamingParams, ServiceManager, SCRCPYParams};
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use protos::*;
-use crate::bluetooth::start_hid_peripheral;
+use crate::bluetooth::{start_hid_peripheral, HidPeripheral};
 
 // module name for logging engine
 const NAME: &str = "<i><bright-black> io_uring: </>";
@@ -655,7 +655,7 @@ pub async fn io_loop_mirror(
         tsk_packet_proxy=pp.start(hu_w, rxr_hu, rx_proxy, Some(rx_audio), Some(rx_video), None, Some(tx_proxy))?;
 
         // main processing threads:
-        let svrmgr=ServiceManager::new(rx_srv,tx_srv.clone(), tx_audio.clone(), tx_video.clone(), scrcpy_params_tx.clone(), cfg.clone(), hid, cancel.clone());
+        let svrmgr=ServiceManager::new(rx_srv,tx_srv.clone(), tx_audio.clone(), tx_video.clone(), scrcpy_params_tx.clone(), cfg.clone(), hid.clone(), cancel.clone());
         tsk_ch_manager =svrmgr.start(cancel.clone());
 
         // Thread for monitoring transfer

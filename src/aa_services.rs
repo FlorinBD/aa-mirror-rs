@@ -1529,7 +1529,6 @@ impl SrvInputSource {
 
     pub fn start(self,) -> (AAService, JoinHandle<Result<()>>) {
         let handle = self.base.clone();
-        let mut hid =None;
         let task =tokio::spawn(async move {
             let mut service = self;
             loop {
@@ -2224,7 +2223,7 @@ impl ServiceManager {
                             let screen_size=ScrcpySize{ width: self.sdr_video_codec_params.res_w as u16, height: self.sdr_video_codec_params.res_h as u16 };
                             self.sdr_keys=proto_srv.input_source_service.keycodes_supported.iter().cloned().collect();
                             self.sdr_control_server_sid= ch_id as u8;
-                            let service = SrvInputSource::new(ch_id as i8, self.hu_tx.clone(),self.control_server_ready.clone(), self.sdr_keys.clone(), screen_size, self.config.scrcpy_screen_off, self.bt_hid, self.cancel.clone());
+                            let service = SrvInputSource::new(ch_id as i8, self.hu_tx.clone(),self.control_server_ready.clone(), self.sdr_keys.clone(), screen_size, self.config.scrcpy_screen_off, self.bt_hid.clone(), self.cancel.clone());
                             let (service_handle, task) = service.start();
                             self.add_service(service_handle);
                             self.srv_tsk_handles.push(task);
