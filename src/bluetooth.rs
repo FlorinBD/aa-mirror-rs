@@ -308,7 +308,8 @@ fn build_report_descriptor_old(width: u16, height: u16) -> Vec<u8> {
 /// Shared handle for sending HID input reports once a client is connected & subscribed.
 #[derive(Clone)]
 pub struct HidPeripheral {
-    writer: Arc<Mutex<Option<CharacteristicWriter>>>,
+    keyboard_writer: Arc<Mutex<Option<CharacteristicWriter>>>,
+    touchpad_writer: Arc<Mutex<Option<CharacteristicWriter>>>,
     width: u16,
     height: u16,
 }
@@ -322,183 +323,437 @@ impl HidPeripheral {
         self.height
     }
 
-    /// Send a touch event. `x`/`y` must be within `0..width`/`0..height` as configured
-    /// at startup (values are clamped defensively).
-    pub async fn send_touch(&self, down: bool, x: u16, y: u16) -> std::io::Result<()> {
-        let x = x.min(self.width.saturating_sub(1));
-        let y = y.min(self.height.saturating_sub(1));
-
-        let flags: u8 = if down { 0x03 } else { 0x00 }; // bit0 tip switch, bit1 in range
-        let report = [
-            0x01,                       // Report ID
-            flags,
-            0x00,                       // Contact Identifier (fixed, single touch)
-            (x & 0xFF) as u8,
-            (x >> 8) as u8,
-            (y & 0xFF) as u8,
-            (y >> 8) as u8,
-            if down { 0x01 } else { 0x00 }, // Contact Count
-        ];
-        debug!("BT HID send_touch report {:?}", report);
-        self.write_report(&report).await
-    }
-    pub async fn send_touch_v2(&self, down: bool,
+    /// Send a touch event.
+    ///
+    /// HID Report ID 4:
+    ///
+    ///     04 contact_count contact_id flags Xlo Xhi Ylo Yhi
+    ///
+    /// flags:
+    ///     bit 0 = Tip Switch
+    ///     bit 1 = In Range
+    pub async fn send_touch(
+        &self,
+        down: bool,
         x: u16,
         y: u16,
     ) -> std::io::Result<()> {
         let x = x.min(self.width.saturating_sub(1));
         let y = y.min(self.height.saturating_sub(1));
 
-        let mut report = Vec::with_capacity(8);
+        let contact_count = if down { 1 } else { 0 };
+        let flags = if down { 0x03 } else { 0x00 };
 
-        report.push(0x01);                 // Report ID
-        report.push(if down { 0x03 } else { 0x00 }); // Tip + In Range
-        report.push(0x00);                 // Contact ID
-        report.extend_from_slice(&x.to_le_bytes());
-        report.extend_from_slice(&y.to_le_bytes());
-        report.push(if down { 1 } else { 0 });       // Contact Count
-        debug!("BT HID send_touch report {:?}", report);
-        self.write_report(&report).await
-    }
-    pub async fn send_touch_old(&self, down: bool, x: u16, y: u16) -> std::io::Result<()> {
-        let x = x.min(self.width.saturating_sub(1));
-        let y = y.min(self.height.saturating_sub(1));
-        let mut report = Vec::with_capacity(6);
-        report.push(0x01); // Report ID 1
-        report.push(if down { 0x01 } else { 0x00 });
-        report.extend_from_slice(&x.to_le_bytes());
-        report.extend_from_slice(&y.to_le_bytes());
-        self.write_report(&report).await
+        let report = [
+            0x04, // Report ID = TOUCHPAD_ID
+            contact_count,
+            0x00, // Contact Identifier
+            flags, // Tip Switch + In Range
+            (x & 0xFF) as u8,
+            (x >> 8) as u8,
+            (y & 0xFF) as u8,
+            (y >> 8) as u8,
+        ];
+
+        debug!("BT HID touch report: {:02X?}", report);
+
+        self.write_touchpad_report(&report).await
     }
 
-    /// Send a key event. `modifier` is the standard HID modifier bitmask.
-    /// `keys` is up to 6 simultaneously-pressed HID usage IDs (0 = empty slot).
-    /// Call again with all-zero `keys` to send "key released".
-    pub async fn send_key(&self, modifier: u8, keys: [u8; 6]) -> std::io::Result<()> {
-        let mut report = Vec::with_capacity(9);
-        report.push(0x02); // Report ID 2
-        report.push(modifier);
-        report.push(0x00); // reserved
-        report.extend_from_slice(&keys);
-        self.write_report(&report).await
+    /// Send a keyboard report.
+    ///
+    /// HID Report ID 1:
+    ///
+    ///     01 modifier reserved key1 key2 key3 key4 key5 key6
+    ///
+    /// `modifier`:
+    ///     bit 0 = Left Ctrl
+    ///     bit 1 = Left Shift
+    ///     bit 2 = Left Alt
+    ///     bit 3 = Left GUI
+    ///     bit 4 = Right Ctrl
+    ///     bit 5 = Right Shift
+    ///     bit 6 = Right Alt
+    ///     bit 7 = Right GUI
+    ///
+    /// `keys` contains up to six simultaneously pressed HID usage IDs.
+    ///
+    /// To release all keys:
+    ///
+    ///     send_key(0, [0; 6])
+    pub async fn send_key(
+        &self,
+        modifier: u8,
+        keys: [u8; 6],
+    ) -> std::io::Result<()> {
+        let mut report = [0u8; 9];
+
+        report[0] = 0x01; // Report ID = KEYBOARD_ID
+        report[1] = modifier;
+        report[2] = 0x00; // Reserved
+
+        report[3..9].copy_from_slice(&keys);
+
+        debug!("BT HID keyboard report: {:02X?}", report);
+
+        self.write_keyboard_report(&report).await
     }
 
-    async fn write_report(&self, report: &[u8]) -> std::io::Result<()> {
-        let mut guard = self.writer.lock().await;
-        let Some(writer) = guard.as_mut() else {
+    async fn write_keyboard_report(
+        &self,
+        report: &[u8],
+    ) -> std::io::Result<()> {
+        let mut guard = self.keyboard_writer.lock().await;
+
+        let Some(writer) = guard.as_ref() else {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::NotConnected,
-                "no HID client subscribed for notifications",
+                "no HID keyboard client subscribed for notifications",
             ));
         };
-        match writer.write_all(report).await {
+
+        match writer.send(report).await {
             Ok(()) => Ok(()),
+
             Err(e) => {
-                // stale/disconnected writer — clear it so the next subscribe event replaces it
                 *guard = None;
-                Err(e)
+
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("HID keyboard notification failed: {}", e),
+                ))
+            }
+        }
+    }
+
+    async fn write_touchpad_report(
+        &self,
+        report: &[u8],
+    ) -> std::io::Result<()> {
+        let mut guard = self.touchpad_writer.lock().await;
+
+        let Some(writer) = guard.as_ref() else {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::NotConnected,
+                "no HID touchpad client subscribed for notifications",
+            ));
+        };
+
+        match writer.send(report).await {
+            Ok(()) => Ok(()),
+
+            Err(e) => {
+                *guard = None;
+
+                Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("HID touchpad notification failed: {}", e),
+                ))
             }
         }
     }
 }
 
-fn report_reference_descriptor(report_id: u8) -> Descriptor {
+fn report_reference_descriptor(report_id: u8, report_type: u8, ) -> Descriptor {
     Descriptor {
         uuid: Uuid::from_u16(0x2908),
+
         read: Some(DescriptorRead {
             read: true,
+
             fun: Box::new(move |_req| {
+                let value = vec![report_id, report_type];
+
                 Box::pin(async move {
-                    Ok(vec![report_id, 0x01]) // ID, Input Report
+                    Ok(value)
                 })
             }),
+
             ..Default::default()
         }),
+
         ..Default::default()
     }
 }
 
-pub async fn start_hid_peripheral(adapter: &Adapter, width: u16, height: u16) -> bluer::Result<HidPeripheral> {
-    let (char_control, char_handle) = characteristic_control();
+pub async fn start_hid_peripheral(
+    adapter: &Adapter,
+    width: u16,
+    height: u16,
+) -> bluer::Result<HidPeripheral> {
+    // ------------------------------------------------------------
+    // Build HID report descriptor
+    // ------------------------------------------------------------
+
     let report_descriptor = build_report_descriptor(width, height);
 
+    // ------------------------------------------------------------
+    // Keyboard Input Report - ID 1
+    // ------------------------------------------------------------
+
+    let (keyboard_control, keyboard_handle) = characteristic_control();
+
+    // ------------------------------------------------------------
+    // Keyboard Output Report - ID 1
+    // ------------------------------------------------------------
+
+    let (keyboard_output_control, keyboard_output_handle) = characteristic_control();
+
+    // ------------------------------------------------------------
+    // Touchpad Input Report - ID 4
+    // ------------------------------------------------------------
+
+    let (touchpad_control, touchpad_handle) = characteristic_control();
+
+    // ------------------------------------------------------------
+    // GATT application
+    // ------------------------------------------------------------
+
     let app = Application {
-        services: vec![Service {
-            uuid: HID_SERVICE,
-            primary: true,
-            characteristics: vec![
-                Characteristic {
-                    uuid: HID_INFO_CHAR,
-                    read: Some(CharacteristicRead {
-                        read: true,
-                        fun: Box::new(|_req| Box::pin(async move { Ok(vec![0x11, 0x01, 0x00, 0x02]) })),
-                        ..Default::default()
-                    }),
-                    ..Default::default()
-                },
-                Characteristic {
-                    uuid: REPORT_MAP_CHAR,
-                    read: Some(CharacteristicRead {
-                        read: true,
-                        fun: Box::new(move |_req| {
-                            let d = report_descriptor.clone();
-                            Box::pin(async move { Ok(d) })
+        services: vec![
+            Service {
+                uuid: HID_SERVICE,
+                primary: true,
+
+                characteristics: vec![
+                    // ------------------------------------------------
+                    // HID Information - 0x2A4A
+                    // ------------------------------------------------
+                    Characteristic {
+                        uuid: HID_INFO_CHAR,
+
+                        read: Some(CharacteristicRead {
+                            read: true,
+
+                            fun: Box::new(|_req| {
+                                Box::pin(async move {
+                                    Ok(vec![
+                                        0x11, 0x01, // HID version 1.11
+                                        0x00,       // Country code
+                                        0x01,       // Flags=Normally connectable
+                                    ])
+                                })
+                            }),
+
+                            ..Default::default()
                         }),
+
                         ..Default::default()
-                    }),
-                    ..Default::default()
-                },
-                Characteristic {
-                    uuid: REPORT_CHAR,
-                    notify: Some(CharacteristicNotify {
-                        notify: true,
-                        method: CharacteristicNotifyMethod::Io,
+                    },
+
+                    // ------------------------------------------------
+                    // Report Map - 0x2A4B
+                    // ------------------------------------------------
+                    Characteristic {
+                        uuid: REPORT_MAP_CHAR,
+
+                        read: Some(CharacteristicRead {
+                            read: true,
+
+                            fun: Box::new(move |_req| {
+                                let descriptor = report_descriptor.clone();
+
+                                Box::pin(async move {
+                                    Ok(descriptor)
+                                })
+                            }),
+
+                            ..Default::default()
+                        }),
+
                         ..Default::default()
-                    }),
-                    descriptors: vec![
-                        report_reference_descriptor(1),
-                    ],
-                    control_handle: char_handle,
-                    ..Default::default()
-                },
-                Characteristic {
-                    uuid: HID_CONTROL_POINT_CHAR,
-                    write: Some(CharacteristicWrite {
-                        write_without_response: true,
-                        method: CharacteristicWriteMethod::Fun(Box::new(|_val, _req| {
-                            Box::pin(async move { Ok(()) })
-                        })),
+                    },
+
+                    // ------------------------------------------------
+                    // Keyboard Input Report - 0x2A4D
+                    //
+                    // Report Reference:
+                    //     01 01
+                    //
+                    //     0x01 = Report ID
+                    //     0x01 = Input
+                    // ------------------------------------------------
+                    Characteristic {
+                        uuid: REPORT_CHAR,
+
+                        notify: Some(CharacteristicNotify {
+                            notify: true,
+                            method: CharacteristicNotifyMethod::Io,
+                            ..Default::default()
+                        }),
+
+                        descriptors: vec![
+                            report_reference_descriptor(1, 0x01),
+                        ],
+
+                        control_handle: keyboard_handle,
+
                         ..Default::default()
-                    }),
-                    ..Default::default()
-                },
-                Characteristic {
-                    uuid: PROTOCOL_MODE_CHAR,
-                    read: Some(CharacteristicRead {
-                        read: true,
-                        fun: Box::new(|_req| Box::pin(async move { Ok(vec![1u8]) })),
+                    },
+
+                    // ------------------------------------------------
+                    // Keyboard Output Report - 0x2A4D
+                    //
+                    // Report Reference:
+                    //     01 02
+                    //
+                    //     0x01 = Report ID
+                    //     0x02 = Output
+                    //
+                    // Used by Android for keyboard LEDs, etc.
+                    // ------------------------------------------------
+                    Characteristic {
+                        uuid: REPORT_CHAR,
+
+                        write: Some(CharacteristicWrite {
+                            write: true,
+                            write_without_response: true,
+
+                            method: CharacteristicWriteMethod::Fun(
+                                Box::new(|value, _req| {
+                                    Box::pin(async move {
+                                        log::debug!(
+                                            "BT HID keyboard output: {:02X?}",
+                                            value
+                                        );
+
+                                        Ok(())
+                                    })
+                                }),
+                            ),
+
+                            ..Default::default()
+                        }),
+
+                        descriptors: vec![
+                            report_reference_descriptor(1, 0x02),
+                        ],
+
+                        control_handle: keyboard_output_handle,
+
                         ..Default::default()
-                    }),
-                    write: Some(CharacteristicWrite {
-                        write_without_response: true,
-                        method: CharacteristicWriteMethod::Fun(Box::new(|_val, _req| {
-                            Box::pin(async move { Ok(()) })
-                        })),
+                    },
+
+                    // ------------------------------------------------
+                    // Touchpad Input Report - 0x2A4D
+                    //
+                    // Report Reference:
+                    //     04 01
+                    //
+                    //     0x04 = Report ID
+                    //     0x01 = Input
+                    // ------------------------------------------------
+                    Characteristic {
+                        uuid: REPORT_CHAR,
+
+                        notify: Some(CharacteristicNotify {
+                            notify: true,
+                            method: CharacteristicNotifyMethod::Io,
+                            ..Default::default()
+                        }),
+
+                        descriptors: vec![
+                            report_reference_descriptor(4, 0x01),
+                        ],
+
+                        control_handle: touchpad_handle,
+
                         ..Default::default()
-                    }),
-                    ..Default::default()
-                },
-            ],
-            ..Default::default()
-        }],
+                    },
+
+                    // ------------------------------------------------
+                    // HID Control Point - 0x2A4C
+                    // ------------------------------------------------
+                    Characteristic {
+                        uuid: HID_CONTROL_POINT_CHAR,
+
+                        write: Some(CharacteristicWrite {
+                            write_without_response: true,
+
+                            method: CharacteristicWriteMethod::Fun(
+                                Box::new(|value, _req| {
+                                    Box::pin(async move {
+                                        log::debug!("BT HID control point: {:02X?}",value);
+                                        Ok(())
+                                    })
+                                }),
+                            ),
+
+                            ..Default::default()
+                        }),
+
+                        ..Default::default()
+                    },
+
+                    // ------------------------------------------------
+                    // Protocol Mode - 0x2A4E
+                    //
+                    // 0x01 = Report Protocol
+                    // ------------------------------------------------
+                    Characteristic {
+                        uuid: PROTOCOL_MODE_CHAR,
+
+                        read: Some(CharacteristicRead {
+                            read: true,
+
+                            fun: Box::new(|_req| {
+                                Box::pin(async move {
+                                    Ok(vec![0x01])
+                                })
+                            }),
+
+                            ..Default::default()
+                        }),
+
+                        write: Some(CharacteristicWrite {
+                            write: true,
+                            write_without_response: true,
+
+                            method: CharacteristicWriteMethod::Fun(
+                                Box::new(|value, _req| {
+                                    Box::pin(async move {
+                                        log::debug!("BT HID protocol mode: {:02X?}",value);
+                                        Ok(())
+                                    })
+                                }),
+                            ),
+
+                            ..Default::default()
+                        }),
+
+                        ..Default::default()
+                    },
+                ],
+
+                ..Default::default()
+            },
+        ],
+
         ..Default::default()
     };
+
+    // ------------------------------------------------------------
+    // Bluetooth adapter
+    // ------------------------------------------------------------
+
     adapter.set_powered(true).await?;
     adapter.set_pairable(true).await?;
-    let app_handle = adapter.serve_gatt_application(app).await?;
+
+    // ------------------------------------------------------------
+    // Register GATT application
+    // ------------------------------------------------------------
+
+    let app_handle = adapter
+        .serve_gatt_application(app)
+        .await?;
+
+    // ------------------------------------------------------------
+    // Advertisement
+    // ------------------------------------------------------------
 
     let mut service_uuids = BTreeSet::new();
     service_uuids.insert(HID_SERVICE);
+
     let le_advertisement = Advertisement {
         advertisement_type: bluer::adv::Type::Peripheral,
         service_uuids,
@@ -507,52 +762,183 @@ pub async fn start_hid_peripheral(adapter: &Adapter, width: u16, height: u16) ->
         discoverable: Some(true),
         ..Default::default()
     };
-    //let adv_handle = adapter.advertise(le_advertisement).await?;
-    let mut adv_handle=None;
+
+    let mut adv_handle = None;
+
     for attempt in 0..3 {
-        match adapter.advertise(le_advertisement.clone()).await {
+        match adapter
+            .advertise(le_advertisement.clone())
+            .await
+        {
             Ok(handle) => {
-                info!("{} 📣 BLE advertisement started with UUIDs (attempt {})", NAME, attempt + 1);
+                info!("{} 📣 BLE advertisement started with UUIDs (attempt {})",NAME, attempt + 1);
                 adv_handle = Some(handle);
                 break;
             }
+
             Err(e) => {
-                warn!("{} 🥏 Advertising attempt {} failed: {}", NAME, attempt + 1, e);
+                warn!(
+                    "{} 🥏 Advertising attempt {} failed: {}",
+                    NAME,
+                    attempt + 1,
+                    e
+                );
+
                 tokio::time::sleep(std::time::Duration::from_millis(200)).await;
             }
         }
     }
+
     let adv_handle = match adv_handle {
         Some(handle) => handle,
+
         None => {
-            return Err(bluer::Error::from(std::io::Error::new(std::io::ErrorKind::Other, "Failed to register BLE advertisement after 3 attempts", )));
+            return Err(
+                bluer::Error::from(
+                    std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "Failed to register BLE advertisement \
+                         after 3 attempts",
+                    ),
+                )
+            );
         }
     };
 
-    let writer_slot: Arc<Mutex<Option<CharacteristicWriter>>> = Arc::new(Mutex::new(None));
-    let writer_slot_task = writer_slot.clone();
+    // ------------------------------------------------------------
+    // Keyboard notification writer
+    // ------------------------------------------------------------
+
+    let keyboard_writer:
+        Arc<Mutex<Option<CharacteristicWriter>>> =
+        Arc::new(Mutex::new(None));
+
+    let keyboard_writer_task =
+        keyboard_writer.clone();
 
     tokio::spawn(async move {
-        let mut char_control = char_control;
+        let mut control = keyboard_control;
+
         loop {
-            match char_control.next().await {
+            match control.next().await {
                 Some(CharacteristicControlEvent::Notify(writer)) => {
-                    log::info!("HID client subscribed for notifications, MTU={}", writer.mtu());
-                    *writer_slot_task.lock().await = Some(writer);
+                    info!(
+                        "BT HID keyboard subscribed, MTU={}",
+                        writer.mtu()
+                    );
+
+                    *keyboard_writer_task.lock().await =
+                        Some(writer);
                 }
-                Some(CharacteristicControlEvent::Write(_)) => {}
+
+                Some(CharacteristicControlEvent::Write(_)) => {
+                    // Keyboard input characteristic isn't writable.
+                }
+
                 None => {
-                    log::warn!("HID characteristic control stream ended");
+                    warn!(
+                        "BT HID keyboard control stream ended"
+                    );
+
+                    *keyboard_writer_task.lock().await =
+                        None;
+
                     break;
                 }
             }
         }
     });
 
+    // ------------------------------------------------------------
+    // Keyboard output control stream NOT NEEDED
+    // ------------------------------------------------------------
+
+    /*tokio::spawn(async move {
+        let mut control = keyboard_output_control;
+
+        loop {
+            match control.next().await {
+                Some(CharacteristicControlEvent::Write(_)) => {
+                    // Actual keyboard LED data is handled by the
+                    // CharacteristicWrite callback above.
+                }
+
+                Some(CharacteristicControlEvent::Notify(_)) => {
+                    // This characteristic isn't a notify characteristic.
+                }
+
+                None => {
+                    debug!(
+                        "BT HID keyboard output control stream ended"
+                    );
+
+                    break;
+                }
+            }
+        }
+    });*/
+
+    // ------------------------------------------------------------
+    // Touchpad notification writer
+    // ------------------------------------------------------------
+
+    let touchpad_writer:
+        Arc<Mutex<Option<CharacteristicWriter>>> =
+        Arc::new(Mutex::new(None));
+
+    let touchpad_writer_task =
+        touchpad_writer.clone();
+
+    tokio::spawn(async move {
+        let mut control = touchpad_control;
+
+        loop {
+            match control.next().await {
+                Some(CharacteristicControlEvent::Notify(writer)) => {
+                    info!(
+                        "BT HID touchpad subscribed, MTU={}",
+                        writer.mtu()
+                    );
+
+                    *touchpad_writer_task.lock().await =
+                        Some(writer);
+                }
+
+                Some(CharacteristicControlEvent::Write(_)) => {
+                    // Touchpad input characteristic isn't writable.
+                }
+
+                None => {
+                    warn!(
+                        "BT HID touchpad control stream ended"
+                    );
+
+                    *touchpad_writer_task.lock().await =
+                        None;
+
+                    break;
+                }
+            }
+        }
+    });
+
+    // ------------------------------------------------------------
+    // Keep the GATT application and advertisement alive.
+    // ------------------------------------------------------------
+
     std::mem::forget(app_handle);
     std::mem::forget(adv_handle);
 
-    Ok(HidPeripheral { writer: writer_slot, width, height })
+    // ------------------------------------------------------------
+    // Return peripheral
+    // ------------------------------------------------------------
+
+    Ok(HidPeripheral {
+        keyboard_writer,
+        touchpad_writer,
+        width,
+        height,
+    })
 }
 
 // Create and configure the Bluetooth adapter
