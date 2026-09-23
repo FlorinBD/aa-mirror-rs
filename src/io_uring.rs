@@ -38,6 +38,7 @@ use crate::channel_manager::{ChannelProxyHandle, TlsPacketProxy, SslMemBuf, HEAD
 use crate::aa_services::{VideoStreamingParams, AudioStreamingParams, ServiceManager, SCRCPYParams};
 include!(concat!(env!("OUT_DIR"), "/protos/mod.rs"));
 use protos::*;
+use crate::bluetooth::start_hid_peripheral;
 
 // module name for logging engine
 const NAME: &str = "<i><bright-black> io_uring: </>";
@@ -479,6 +480,27 @@ pub async fn io_loop_mirror(
     //let tk_cancel=CancellationToken::new();
     let cancel_slot = CancelSlot::new();
     let cfg = shared_config.read().await.clone();
+    let mut hid: Option<Arc<HidPeripheral>> = None;
+    if cfg.bt_hid_control
+    {
+        let session = bluer::Session::new().await?;
+        let bt_adapter = session.default_adapter().await?;
+        loop {
+            match start_hid_peripheral(&bt_adapter, 800, 480).await
+            //match start_hid_peripheral(&bt_adapter, 1080, 2316).await
+            {
+                Ok(result) => {
+                    info!("{:?}: Started HID peripheral",NAME);
+                    hid = Some(Arc::new(result));
+                    break;
+                }
+                Err(e) => {
+                    error!("{:?}: Failed to start HID peripheral: {:?}", NAME, e);
+                    break;
+                }
+            }
+        }
+    }
     //let cfg_clone=cfg.clone();
     let hex_requested = cfg.hexdump_level;
     // prepare/bind needed TCP listeners
@@ -632,7 +654,7 @@ pub async fn io_loop_mirror(
         tsk_packet_proxy=pp.start(hu_w, rxr_hu, rx_proxy, Some(rx_audio), Some(rx_video), None, Some(tx_proxy))?;
 
         // main processing threads:
-        let svrmgr=ServiceManager::new(rx_srv,tx_srv.clone(), tx_audio.clone(), tx_video.clone(), scrcpy_params_tx.clone(), cfg.clone(), cancel.clone());
+        let svrmgr=ServiceManager::new(rx_srv,tx_srv.clone(), tx_audio.clone(), tx_video.clone(), scrcpy_params_tx.clone(), cfg.clone(), hid, cancel.clone());
         tsk_ch_manager =svrmgr.start(cancel.clone());
 
         // Thread for monitoring transfer

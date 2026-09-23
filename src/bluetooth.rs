@@ -14,9 +14,9 @@ use std::sync::atomic::AtomicBool;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use bluer::adv::Advertisement;
+use bluer::adv::{Advertisement, AdvertisementHandle};
 use bluer::gatt::CharacteristicWriter;
-use bluer::gatt::local::{characteristic_control, Application, Characteristic, CharacteristicControlEvent, CharacteristicNotify, CharacteristicNotifyMethod, CharacteristicRead, CharacteristicWrite, CharacteristicWriteMethod, Descriptor, DescriptorRead, Service};
+use bluer::gatt::local::{characteristic_control, Application, ApplicationHandle, Characteristic, CharacteristicControlEvent, CharacteristicNotify, CharacteristicNotifyMethod, CharacteristicRead, CharacteristicWrite, CharacteristicWriteMethod, Descriptor, DescriptorRead, Service};
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::sync::broadcast::Receiver as BroadcastReceiver;
@@ -216,12 +216,15 @@ fn build_report_descriptor(width: u16, height: u16) -> Vec<u8> {
 }
 
 /// Shared handle for sending HID input reports once a client is connected & subscribed.
-#[derive(Clone)]
+//#[derive(Clone)]
 pub struct HidPeripheral {
     keyboard_writer: Arc<Mutex<Option<CharacteristicWriter>>>,
     touchpad_writer: Arc<Mutex<Option<CharacteristicWriter>>>,
     width: u16,
     height: u16,
+    // Keep these alive for the lifetime of the HID peripheral.
+    _app_handle: ApplicationHandle,
+    _adv_handle: AdvertisementHandle,
 }
 
 impl HidPeripheral {
@@ -832,12 +835,7 @@ pub async fn start_hid_peripheral(
         }
     });
 
-    // ------------------------------------------------------------
-    // Keep the GATT application and advertisement alive.
-    // ------------------------------------------------------------
 
-    std::mem::forget(app_handle);
-    std::mem::forget(adv_handle);
 
     // ------------------------------------------------------------
     // Return peripheral
@@ -848,6 +846,8 @@ pub async fn start_hid_peripheral(
         touchpad_writer,
         width,
         height,
+        _app_handle: app_handle,
+        _adv_handle: adv_handle,
     })
 }
 

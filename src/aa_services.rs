@@ -403,7 +403,7 @@ pub struct SrvInputSource {
     adb_start_server:Arc<Notify>,
     keys:Vec<i32>,
     cfg_screen_off:bool,
-    bt_hid:bool,
+    bt_hid:Option<Arc<HidPeripheral>>,
     cancel:CancellationToken,
     //private
     scrcpy_server:Option<ControlServerState>,
@@ -430,6 +430,7 @@ pub struct ServiceManager {
     start_adb_server:watch::Sender<SCRCPYParams>,
     config: AppConfig,
     cancel:CancellationToken,
+    bt_hid:Option<Arc<HidPeripheral>>,
     //private fields
     audio_server_ready:Arc<Notify>,
     video_server_ready:Arc<Notify>,
@@ -1493,8 +1494,22 @@ impl SrvMediaSource {
     }
 }
 impl SrvInputSource {
-    pub fn new(sid:i8, hu_tx: Sender<Packet>, start_adb_server:Arc<Notify>, keys:Vec<i32>,screen_size:ScrcpySize,cfg_screen_off:bool, bt_hid:bool,cancel: CancellationToken) -> Self {
+    pub fn new(sid:i8, hu_tx: Sender<Packet>, start_adb_server:Arc<Notify>, keys:Vec<i32>,screen_size:ScrcpySize,cfg_screen_off:bool, bt_hid:Option<Arc<HidPeripheral>>,cancel: CancellationToken) -> Self {
         let (tx, rx) = mpsc::channel(5);
+        let scrcpy_server = if bt_hid.is_some() {
+            None
+        } else {
+            Some(ControlServerState::Created(
+                crate::scrcpy::ControlServer::new(
+                    sid as u8,
+                    hu_tx.clone(),
+                    screen_size,
+                    cfg_screen_off,
+                    cancel.clone(),
+                ),
+            ))
+        };
+
         Self {
             base: AAService {
                 sid,
@@ -1502,25 +1517,13 @@ impl SrvInputSource {
                 hu_tx: tx,
             },
             rx,
-            hu_tx:hu_tx.clone(),
+            hu_tx: hu_tx.clone(),
             adb_start_server: start_adb_server,
             keys,
             cfg_screen_off,
             bt_hid,
-            cancel:cancel.clone(),
-            scrcpy_server: if bt_hid {
-                None
-            } else {
-                Some(ControlServerState::Created(
-                    crate::scrcpy::ControlServer::new(
-                        sid as u8,
-                        hu_tx.clone(),
-                        screen_size,
-                        cfg_screen_off,
-                        cancel.clone(),
-                    ),
-                ))
-            },
+            cancel,
+            scrcpy_server,
         }
     }
 
@@ -1529,28 +1532,6 @@ impl SrvInputSource {
         let mut hid =None;
         let task =tokio::spawn(async move {
             let mut service = self;
-            if service.bt_hid
-            {
-                let session = bluer::Session::new().await?;
-                let bt_adapter = session.default_adapter().await?;
-                loop {
-                    match start_hid_peripheral(&bt_adapter, 800, 480).await
-                    //match start_hid_peripheral(&bt_adapter, 1080, 2316).await
-                    {
-                        Ok(result) => {
-                            info!("{:?}: Started hid peripheral",service.base.sid);
-                            hid=Some(result);
-                            break;
-                        }
-                        Err(e) => {
-                            error!("{:?}: Failed to start hid peripheral: {:?}", service.base.sid, e);
-                            service.cancel.cancel();
-                            break;
-                        }
-                    }
-                }
-            }
-
             loop {
                 tokio::select! {
                     _ = service.cancel.cancelled() => {
@@ -1561,7 +1542,7 @@ impl SrvInputSource {
                     msg = service.rx.recv() => {
                         match msg {
                             Some(msg) => {
-                                service.handle_message( msg, hid.as_ref()).await?;
+                                service.handle_message( msg, service.bt_hid.as_ref()).await?;
                             }
 
                             None => {
@@ -1579,7 +1560,7 @@ impl SrvInputSource {
         (handle, task)
     }
 
-    async fn handle_message(&mut self, pkt: Packet, hid:Option<&HidPeripheral>) -> Result<()> {
+    async fn handle_message(&mut self, pkt: Packet, hid:Option<&Arc<HidPeripheral>>) -> Result<()> {
 
         let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
         //info!("{:?} Received message id {}", self.base.srv_type, message_id);
@@ -1952,7 +1933,7 @@ impl SrvBluetooth {
 }
 
 impl ServiceManager {
-    pub fn new(hu_rx: Receiver<Packet>, hu_tx: Sender<Packet>, audio_tx: Sender<Packet>, video_tx: Sender<Packet>, start_adb_server: watch::Sender<SCRCPYParams>, config: AppConfig, cancel:CancellationToken) -> Self {
+    pub fn new(hu_rx: Receiver<Packet>, hu_tx: Sender<Packet>, audio_tx: Sender<Packet>, video_tx: Sender<Packet>, start_adb_server: watch::Sender<SCRCPYParams>, config: AppConfig, hid:Option<Arc<HidPeripheral>>, cancel:CancellationToken) -> Self {
         //This service is different, we don't own mspc channels, we use those passed by parameters
         Self {
             srv_type: ServiceType::Control,
@@ -1962,6 +1943,7 @@ impl ServiceManager {
             video_tx,
             start_adb_server,
             config,
+            bt_hid: hid,
             cancel,
             ch_opened:false,
             audio_server_ready: Arc::new(Notify::new()),
@@ -2242,7 +2224,7 @@ impl ServiceManager {
                             let screen_size=ScrcpySize{ width: self.sdr_video_codec_params.res_w as u16, height: self.sdr_video_codec_params.res_h as u16 };
                             self.sdr_keys=proto_srv.input_source_service.keycodes_supported.iter().cloned().collect();
                             self.sdr_control_server_sid= ch_id as u8;
-                            let service = SrvInputSource::new(ch_id as i8, self.hu_tx.clone(),self.control_server_ready.clone(), self.sdr_keys.clone(), screen_size, self.config.scrcpy_screen_off, self.config.bt_hid_control, self.cancel.clone());
+                            let service = SrvInputSource::new(ch_id as i8, self.hu_tx.clone(),self.control_server_ready.clone(), self.sdr_keys.clone(), screen_size, self.config.scrcpy_screen_off, self.bt_hid, self.cancel.clone());
                             let (service_handle, task) = service.start();
                             self.add_service(service_handle);
                             self.srv_tsk_handles.push(task);
