@@ -1541,7 +1541,7 @@ impl SrvInputSource {
                     msg = service.rx.recv() => {
                         match msg {
                             Some(msg) => {
-                                service.handle_message( msg, service.bt_hid.as_ref()).await?;
+                                service.handle_message( msg, service.bt_hid.clone()).await?;
                             }
 
                             None => {
@@ -1559,7 +1559,7 @@ impl SrvInputSource {
         (handle, task)
     }
 
-    async fn handle_message(&mut self, pkt: Packet, hid:Option<&Arc<HidPeripheral>>) -> Result<()> {
+    async fn handle_message(&mut self, pkt: Packet, hid:Option<Arc<HidPeripheral>>) -> Result<()> {
 
         let message_id: i32 = u16::from_be_bytes(pkt.payload[0..=1].try_into()?).into();
         //info!("{:?} Received message id {}", self.base.srv_type, message_id);
@@ -1619,7 +1619,7 @@ impl SrvInputSource {
             }
             else if cmd == CustomCommand::CMD_START_CONTROL_SERVER as i32
             {
-                if !self.bt_hid
+                if self.bt_hid.is_none()
                 {
                     if let Some(ControlServerState::Created(server)) = self.scrcpy_server.take() {
                         self.scrcpy_server = Some(ControlServerState::Running(server.start()));
@@ -1634,7 +1634,7 @@ impl SrvInputSource {
         }
         else if message_id == InputMessageId::INPUT_MESSAGE_INPUT_REPORT  as i32
         {
-            if self.bt_hid
+            if self.bt_hid.is_some()
             {
                 if let Some(hid)=hid
                 {
