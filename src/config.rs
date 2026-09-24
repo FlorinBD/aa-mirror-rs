@@ -111,6 +111,8 @@ pub struct AppConfig {
     pub stats_interval: u16,
     #[serde(default, deserialize_with = "empty_string_as_none")]
     pub udc: Option<String>,
+    #[serde(default, deserialize_with = "empty_string_as_none")]
+    pub touchscreen_id: Option<String>,
     pub iface: String,
     pub ap_ssid: String,
     pub ap_psw: String,
@@ -246,6 +248,7 @@ impl Default for AppConfig {
             logfile: "/var/log/aa-mirror-rs.log".into(),
             stats_interval: 0,
             udc: None,
+            touchscreen_id:None,
             iface: "wlan0".to_string(),
             ap_ssid: "AndroidAP356b".to_string(),
             ap_psw: "florinN9".to_string(),
@@ -336,6 +339,9 @@ impl AppConfig {
         doc["stats_interval"] = value(self.stats_interval as i64);
         if let Some(udc) = &self.udc {
             doc["udc"] = value(udc);
+        }
+        if let Some(touchscreen_id) = &self.touchscreen_id {
+            doc["touchscreen_id"] = value(touchscreen_id);
         }
         doc["iface"] = value(&self.iface);
         doc["ap_ssid"] = value(&self.ap_ssid);

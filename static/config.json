@@ -99,6 +99,10 @@
         "connect": {
           "typ": "string",
           "description": "Auto-connect to phone and initiate connection\nempty string/no value: don't auto-connect,\nzeros: iterate over all connected devices,\nmay be set to a comma seperated list of phone MAC addresses for connecting to a specific list of phones, wildcard may not be used with list"
+        },
+        "touchscreen_id": {
+          "typ": "string",
+          "description": "Touchscreen UID used to assign virtual display (used in Mirror mode with bt_hid_control enabled)"
         }
       }
     },

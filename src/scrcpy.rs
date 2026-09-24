@@ -1212,6 +1212,11 @@ pub(crate) async fn tsk_adb_scrcpy(
             cmd_shell.push("video=true".to_string());
             //cmd_shell.push("control=true".to_string());
             cmd_shell.push(format!("control={:?}",!config.bt_hid_control));
+            if config.bt_hid_control {
+                if let Some(tsid) = config.touchscreen_id.as_ref() {
+                    cmd_shell.push(format!("touchscreen_id={}", tsid));
+                }
+            }
             cmd_shell.push("cleanup=true".to_string());
             cmd_shell.push("display_ime_policy=local".to_string());
             cmd_shell.push("stay_awake=true".to_string());
