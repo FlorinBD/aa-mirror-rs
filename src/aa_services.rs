@@ -1615,17 +1615,13 @@ impl SrvInputSource {
             }
             else if cmd == CustomCommand::CMD_START_CONTROL_SERVER as i32
             {
-                if self.bt_hid.is_none()
-                {
-                    if let Some(ControlServerState::Created(server)) = self.scrcpy_server.take() {
-                        self.scrcpy_server = Some(ControlServerState::Running(server.start()));
-                    }
-                    else {
-                        error!( "{:?} Unable to start control server",self.base.srv_type);
-                        self.cancel.cancel();
-                    }
+                if let Some(ControlServerState::Created(server)) = self.scrcpy_server.take() {
+                    self.scrcpy_server = Some(ControlServerState::Running(server.start()));
                 }
-
+                else {
+                    error!( "{:?} Unable to start control server",self.base.srv_type);
+                    self.cancel.cancel();
+                }
             }
         }
         else if message_id == InputMessageId::INPUT_MESSAGE_INPUT_REPORT  as i32
