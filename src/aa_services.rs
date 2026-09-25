@@ -2422,34 +2422,31 @@ impl ServiceManager {
             self.cancel.cancel();
         }
         tokio::time::sleep(Duration::from_millis(100)).await;//give time to connect
-        if !self.config.bt_hid_control
+        if(self.sdr_control_server_sid > 0)
         {
-            if(self.sdr_control_server_sid > 0)
-            {
-                let mut payload= Vec::new();
-                payload.extend_from_slice(&(ControlMessageType::MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
-                payload.extend_from_slice(&(CustomCommand::CMD_START_CONTROL_SERVER as u16).to_be_bytes());
-                let msg = Packet {
-                    channel: self.sdr_control_server_sid,
-                    flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
-                    final_length: None,
-                    payload,
-                };
-                info!( "{:?} Send custom CMD_START_VIDEO_RECORDING for ch {}",self.srv_type, self.sdr_control_server_sid);
-                if let Some(service) = self.sdr_services.get(self.sdr_control_server_sid as usize).and_then(|s| s.as_ref()) {
-                    service.enqueue_message(msg)?;
-                }
-                else
-                {
-                    error!( "{:?} Invalid channel {} vor video service",self.srv_type, self.sdr_control_server_sid);
-                    self.cancel.cancel();
-                }
+            let mut payload= Vec::new();
+            payload.extend_from_slice(&(ControlMessageType::MESSAGE_CUSTOM_CMD as u16).to_be_bytes());
+            payload.extend_from_slice(&(CustomCommand::CMD_START_CONTROL_SERVER as u16).to_be_bytes());
+            let msg = Packet {
+                channel: self.sdr_control_server_sid,
+                flags: FRAME_TYPE_FIRST | FRAME_TYPE_LAST,
+                final_length: None,
+                payload,
+            };
+            info!( "{:?} Send custom CMD_START_VIDEO_RECORDING for ch {}",self.srv_type, self.sdr_control_server_sid);
+            if let Some(service) = self.sdr_services.get(self.sdr_control_server_sid as usize).and_then(|s| s.as_ref()) {
+                service.enqueue_message(msg)?;
             }
             else
             {
-                error!( "{:?} Invalid channel {} vor control service",self.srv_type, self.sdr_control_server_sid);
+                error!( "{:?} Invalid channel {} vor video service",self.srv_type, self.sdr_control_server_sid);
                 self.cancel.cancel();
             }
+        }
+        else
+        {
+            error!( "{:?} Invalid channel {} vor control service",self.srv_type, self.sdr_control_server_sid);
+            self.cancel.cancel();
         }
         Ok(())
     }

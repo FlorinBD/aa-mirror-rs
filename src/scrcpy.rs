@@ -1210,8 +1210,8 @@ pub(crate) async fn tsk_adb_scrcpy(
             cmd_shell.push("tunnel_forward=true".to_string());
             cmd_shell.push("audio=true".to_string());
             cmd_shell.push("video=true".to_string());
-            //cmd_shell.push("control=true".to_string());
-            cmd_shell.push(format!("control={:?}",!config.bt_hid_control));
+            cmd_shell.push("control=true".to_string());
+            //cmd_shell.push(format!("control={:?}",!config.bt_hid_control)); //we still need control socket for stay_awake and screen_off, also touchscreen is not available without control (why??)
             if config.bt_hid_control {
                 if let Some(tsid) = config.touchscreen_id.as_ref() {
                     cmd_shell.push(format!("touchscreen_id={}", tsid));
@@ -1226,7 +1226,7 @@ pub(crate) async fn tsk_adb_scrcpy(
             {
                 cmd_shell.push("audio_codec_options=aac-profile:int=2".to_string());
             }
-            cmd_shell.push(format!("audio_bit_rate={}", params.audio.bitrate));
+            //cmd_shell.push(format!("audio_bit_rate={}", params.audio.bitrate)); //we use raw audio, bitrate is not used
             cmd_shell.push(format!("max_size={}", params.video.res_w));
             cmd_shell.push("video_codec=h264".to_string());
             cmd_shell.push(format!("video_codec_options={}", video_codec_options.to_string()));
