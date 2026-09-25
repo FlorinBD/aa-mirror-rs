@@ -915,8 +915,9 @@ impl TlsPacketProxy
                                     w_statistics.fetch_add(size, Ordering::Relaxed);
                                     //wait for audio frames to buffer in mpsc channel
                                     let elapsed = start.elapsed();
-                                    if elapsed < Duration::from_millis(16) {
-                                        sleep(Duration::from_millis(10) - elapsed).await;
+                                    let max_wait = Duration::from_millis(10);
+                                    if elapsed < max_wait {
+                                        sleep(max_wait - elapsed).await;
                                     }
                                 }
 
