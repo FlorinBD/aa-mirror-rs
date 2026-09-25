@@ -264,7 +264,7 @@ impl Default for AppConfig {
             webserver: webserver_default_bind(),
             bt_timeout_secs: 30,
             bt_poweroff:false,
-            bt_hid_control:true,
+            bt_hid_control:false,
             action_requested: None,
             res_multiplier: 1.0,
             wired: None,
