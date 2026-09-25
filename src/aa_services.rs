@@ -1496,19 +1496,15 @@ impl SrvMediaSource {
 impl SrvInputSource {
     pub fn new(sid:i8, hu_tx: Sender<Packet>, start_adb_server:Arc<Notify>, keys:Vec<i32>,screen_size:ScrcpySize,cfg_screen_off:bool, bt_hid:Option<Arc<HidPeripheral>>,cancel: CancellationToken) -> Self {
         let (tx, rx) = mpsc::channel(5);
-        let scrcpy_server = if bt_hid.is_some() {
-            None
-        } else {
-            Some(ControlServerState::Created(
-                crate::scrcpy::ControlServer::new(
-                    sid as u8,
-                    hu_tx.clone(),
-                    screen_size,
-                    cfg_screen_off,
-                    cancel.clone(),
-                ),
-            ))
-        };
+        let scrcpy_server = Some(ControlServerState::Created(
+            crate::scrcpy::ControlServer::new(
+                sid as u8,
+                hu_tx.clone(),
+                screen_size,
+                cfg_screen_off,
+                cancel.clone(),
+            ),
+        ));
 
         Self {
             base: AAService {
