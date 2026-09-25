@@ -9,7 +9,7 @@ use std::io::{Read, Write};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use libc::sigdelset;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
@@ -906,13 +906,18 @@ impl TlsPacketProxy
                             }
                         }
                         Some(pkt) = video_rx.recv() => {
+                            let start = Instant::now();
                             if video_rx.capacity() < 50 {
                                 error!("{}: video_rx queue: {}/{}", get_name(), 200 - srv_rx.capacity(), 200);
                             }
                             match Self::encrypt_and_send(pkt, &ssl_tx, &hu_out_tx).await {
                                 Ok(size) => {
                                     w_statistics.fetch_add(size, Ordering::Relaxed);
-                                    sleep(Duration::from_millis(20)).await;//wait for audio frames to buffer in mpsc channel
+                                    //wait for audio frames to buffer in mpsc channel
+                                    let elapsed = start.elapsed();
+                                    if elapsed < Duration::from_millis(16) {
+                                        sleep(Duration::from_millis(10) - elapsed).await;
+                                    }
                                 }
 
                                 Err(e) => {
