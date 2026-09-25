@@ -912,7 +912,7 @@ impl TlsPacketProxy
                             match Self::encrypt_and_send(pkt, &ssl_tx, &hu_out_tx).await {
                                 Ok(size) => {
                                     w_statistics.fetch_add(size, Ordering::Relaxed);
-                                    sleep(Duration::from_millis(10)).await;//wait for audio frames to buffer in mpsc channel
+                                    sleep(Duration::from_millis(20)).await;//wait for audio frames to buffer in mpsc channel
                                 }
 
                                 Err(e) => {
